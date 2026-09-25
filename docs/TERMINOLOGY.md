@@ -34,3 +34,19 @@ Crate folder names stay as-is for now (`superb-*`). Prefer these **common DAW wo
 **Defer:** plugin host depth, VST3, latency compensation polish, tempo ramps, duplex/armed record, streaming players, sidechain.
 
 Written 2026-09-24 for review.
+
+## Plugin formats (short map)
+
+Prefer these common names in docs; backends live under the plugin host.
+
+| Say | Notes |
+|---|---|
+| CLAP | Open MIT API (Bitwig + u-he / free-audio); Superb’s first real backend |
+| VST3 | Steinberg; largest commercial catalog; SDK MIT as of 3.8.0 — hosting still stubbed here |
+| Audio Units (AU) | Apple; macOS/iOS only |
+| LV2 | Open; strong on Linux |
+| AAX | Avid; Pro Tools ecosystem |
+
+Detail and sources: discuss in chat / product docs; do not treat format names as Superb-specific jargon.
+
+Added 2026-09-25.
