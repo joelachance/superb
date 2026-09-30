@@ -9,6 +9,9 @@
 //!   sample-accurately via `superb::primitives::midi::timing::FrameMapper` against the
 //!   engine's stream clock ([`MidiTiming::Stream`], the default) or forced
 //!   to frame 0 ([`MidiTiming::BlockStart`]).
+//! * [`capture`] — a pre-allocated queue of planar blocks for handing
+//!   captured audio from a callback to another thread. Pure Rust; the
+//!   device layer fills it, tests and offline code can too.
 //! * [`live`] — split an engine into a control handle and an audio-side
 //!   loop so play/stop/seek and graph swaps can come from another thread.
 //! * [`offline`] — drive an [`Engine`] as fast as possible into a buffer
@@ -45,6 +48,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod capture;
 #[cfg(feature = "devices")]
 pub mod device;
 mod engine;

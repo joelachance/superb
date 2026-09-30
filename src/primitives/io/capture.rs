@@ -1,4 +1,8 @@
 //! Pre-allocated planar-block SPSC for capture → engine / control thread.
+//!
+//! Independent of any audio backend: `superb::primitives::io::device`
+//! fills it from a real input, and anything else (a test, a file reader, a
+//! network stream) can fill it the same way.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

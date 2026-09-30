@@ -39,6 +39,11 @@
 
 pub mod play;
 pub mod primitives;
+pub mod project;
+pub mod record;
+pub mod rig;
+
+pub use rig::Rig;
 
 /// The most commonly used types and functions, for `use superb::prelude::*`.
 pub mod prelude {
@@ -73,6 +78,7 @@ pub mod prelude {
         BeatPosition, BusId, ClipId, MarkerId, NodeId, Result, SampleRate, SendId, SuperbError,
         TimeDuration, TimePosition, TimeSignature, TrackId,
     };
+    pub use crate::rig::Rig;
 }
 
 #[cfg(test)]

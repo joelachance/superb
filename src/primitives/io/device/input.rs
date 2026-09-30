@@ -9,8 +9,8 @@ use crate::primitives::{Result, SampleRate, SuperbError};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
-use super::capture::CaptureProducer;
 use super::{deinterleave_from_device, stream_instant_us, validate_io_config, DeviceInfo};
+use crate::primitives::io::capture::CaptureProducer;
 
 /// Lists input devices of the default host.
 pub fn input_devices() -> Result<Vec<DeviceInfo>> {

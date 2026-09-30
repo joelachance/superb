@@ -23,11 +23,10 @@ use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::{Result, SuperbError};
 use cpal::{FromSample, Sample};
 
-mod capture;
 mod input;
 mod output;
 
-pub use capture::{capture_queue, CaptureBlock, CaptureConsumer, CaptureProducer};
+pub use super::capture::{capture_queue, CaptureBlock, CaptureConsumer, CaptureProducer};
 pub use input::{input_devices, run_capture, InputConfig, InputStream};
 pub use output::{output_devices, run_engine, OutputConfig, OutputStream};
 
