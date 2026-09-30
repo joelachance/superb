@@ -30,11 +30,11 @@ Re-export table (from the crate doc comment):
 | `mixer` | `superb-mixer` | tracks, buses, sends, pan, mute/solo, meters |
 | `automation` | `superb-automation` | envelopes, read/touch/latch/write, sample-accurate apply |
 | `undo` | `superb-undo` | coalescing undo/redo command stack, groups, clean-state |
-| `session` | `superb-session` | document model: tracks, items, markers, tempo map, JSON snapshots |
+| `session` | `superb-session` | document model: tracks, clips, markers, tempo map, JSON snapshots |
 | `plugins` | `superb-plugins` | plugin instance model, `PluginNode`, CLAP host (`clap-sys`), VST3 stub |
 | `io` | `superb-io` | engine loop, offline render, WAV, file decode/resample/bounce (`files`), cpal input/output |
 | `bridge` | (facade) | session → mixer strip/bus map, strip-param mirror, output/send routing mirror |
-| `playback` | (facade) | session item → strip wiring + offline region render |
+| `playback` | (facade) | session clip → strip wiring + offline region render |
 
 `superb::prelude::*` brings in the day-to-day types from all of them:
 `PlanarBuffer`/`InterleavedBuffer`; `SampleRate`, `TimePosition`,
@@ -45,8 +45,8 @@ fixture nodes `SineNode`/`GainNode`/`MonoSynthNode`/`PassThroughNode`;
 `Engine`/`EngineStats`; `MidiChannel`/`MidiEvent`/`MidiEventBuffer`/
 `MidiMessage`/`TimestampedMessage`; `Mixer`/`PanLaw`/`SendParams`/
 `SendTap`/`StripParams`; `AutomationLane`/`AutomationMode`/`Envelope`/
-`EnvelopePoint`; `Session`/`SessionSnapshot`/`Track`/`TrackKind`/`TrackSend`/`Item`/
-`ItemSource`/`Marker`; `UndoStack`/`Command`/`CoalesceKey`/`PropertyEdit`;
+`EnvelopePoint`; `Session`/`SessionSnapshot`/`Track`/`TrackKind`/`TrackSend`/`Clip`/
+`ClipSource`/`Marker`; `UndoStack`/`Command`/`CoalesceKey`/`PropertyEdit`;
 `PluginNode`/`PluginInstance`/`PluginDescriptor`; `AtomicF32`/`LoadMeter`;
 and `Transport`/`TransportState`/`TempoMap`/`LoopRange`.
 
@@ -99,12 +99,12 @@ bindings, but never removes mixer strips (so live audio is not cut).
 every `TrackSend` (destination, tap, level, enable); a send whose
 destination or tap changed is re-created and mixer sends whose session
 send vanished are removed. It returns the number of structural edits so
-the caller knows a `prepare` is due. Item playback onto strips is handled
+the caller knows a `prepare` is due. Clip playback onto strips is handled
 by `superb::playback` (see below); `SessionPlayer::wire` runs all three
 steps.
 
 
-## Session item playback
+## Session clip playback
 
 ```rust
 use superb::playback::{render_region, AudioCache, RenderOptions, SessionPlayer};
@@ -117,11 +117,11 @@ let mut cache = AudioCache::new();
 let mut buf = PlanarBuffer::new(2, 1000);
 buf.fill(0.2);
 cache.insert("take.wav", buf);
-session.add_item(vox, Item::new(
+session.add_clip(vox, Clip::new(
     "take",
     TimePosition::ZERO,
     TimeDuration::from_samples(1000),
-    ItemSource::Audio { path: PathBuf::from("take.wav"), offset: TimeDuration::ZERO },
+    ClipSource::Audio { path: PathBuf::from("take.wav"), offset: TimeDuration::ZERO },
 ).unwrap()).unwrap();
 
 // One-shot: wire + offline render a region
@@ -138,8 +138,8 @@ assert!(!player.sources().is_empty());
 
 `AudioCache` holds path → `Arc<PlanarBuffer>` entries (tests use synthetic
 buffers; apps can fill via `superb_io::files::decode` / `AudioCache::load`
-behind the `files` feature). `ItemSource::Empty` and missing cache paths
-are silence; MIDI items become `ScheduledSynthNode`s.
+behind the `files` feature). `ClipSource::Empty` and missing cache paths
+are silence; MIDI clips become `ScheduledSynthNode`s.
 
 ## Real-time notes
 

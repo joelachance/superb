@@ -1,4 +1,4 @@
-//! Offline: build a tiny session (cached DC audio item + MIDI note, a "room"
+//! Offline: build a tiny session (cached DC audio clip + MIDI note, a "room"
 //! bus the keys feed and the vox send into), render a region through the
 //! mixer, write `session_playback.wav`.
 //!
@@ -6,7 +6,7 @@
 //! - Session document vs Mixer (arrangement data → render via `render_region`)
 //! - `AudioCache` so we can play without decoding a real file
 //! - Track kinds: Audio / Midi / Bus, plus sends and track outputs
-//! - `Item` + `ItemSource` (Audio path or inline MIDI notes)
+//! - `Clip` + `ClipSource` (Audio path or inline MIDI notes)
 //!
 //! ```text
 //! cargo run -p session_playback
@@ -21,7 +21,7 @@ use superb::session::MidiNote;
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    // Session is the editable document (tracks, items, tempo, routing).
+    // Session is the editable document (tracks, clips, tempo, routing).
     let mut session = Session::new("playback-demo", rate);
 
     // Audio track with a 0.5 s DC tone from a cached buffer (no file decode).
@@ -30,30 +30,30 @@ fn main() -> Result<()> {
     let mut tone = PlanarBuffer::new(2, 24_000);
     tone.fill(0.2);
     let mut cache = AudioCache::new();
-    // Key must match ItemSource::Audio { path } below.
+    // Key must match ClipSource::Audio { path } below.
     cache.insert("tone.wav", tone);
-    // Item = clip on the timeline: name, start, length, source.
+    // Clip = clip on the timeline: name, start, length, source.
     // Starts at 12_000 samples (0.25 s) so there is silence before the take.
-    let take = Item::new(
+    let take = Clip::new(
         "take",
         TimePosition::from_samples(12_000),
         TimeDuration::from_samples(24_000),
-        ItemSource::Audio {
+        ClipSource::Audio {
             path: PathBuf::from("tone.wav"),
             offset: TimeDuration::ZERO,
         },
     )?;
-    session.add_item(vox, take)?;
+    session.add_clip(vox, take)?;
 
     // MIDI track with one A4 quarter-note at the start.
     let keys = session.add_track("keys", TrackKind::Midi);
     // track_mut borrows the track uniquely so we can set its document gain.
     session.track_mut(keys)?.gain_db = -3.0;
-    let note = Item::new(
+    let note = Clip::new(
         "a4",
         TimePosition::ZERO,
         TimeDuration::from_samples(48_000),
-        ItemSource::Midi {
+        ClipSource::Midi {
             // note 69 = A4; length 0.5 beats at session tempo.
             notes: vec![MidiNote {
                 beat: 0.0,
@@ -64,7 +64,7 @@ fn main() -> Result<()> {
             }],
         },
     )?;
-    session.add_item(keys, note)?;
+    session.add_clip(keys, note)?;
 
     // Routing lives in the document: keys → room bus (−6 dB) → master, and a
     // quiet pre-fader send from vox into the same bus. `render_region`

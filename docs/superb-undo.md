@@ -19,7 +19,7 @@ deps.
   one step. Downcasting helpers (`is` / `downcast_ref` / `downcast_mut` /
   `downcast`) live on `dyn Command<T>`.
 * `CoalesceKey { kind, target }` — identifies a mergeable run (e.g. kind =
-  "item move", target = clip raw ID).
+  "clip move", target = clip raw ID).
 * `UndoStack<T>` — history: `push` / `push_boxed` / `push_at`, `undo` /
   `redo`, `seal` (end a coalesce run, e.g. on mouse-up),
   `begin_group` / `end_group` / `cancel_group`, `mark_clean` / `is_clean`,

@@ -4,7 +4,7 @@
 //! What you'll learn:
 //! - `UndoStack<Session>`: push / undo / redo / seal / begin_group / end_group
 //! - Commands as the only way to mutate (so every edit is reversible)
-//! - Coalescing rapid property edits (send level drag, move item drag)
+//! - Coalescing rapid property edits (send level drag, move clip drag)
 //! - `mark_clean` / `is_clean` for "document dirty?" after save
 //!
 //! ```text
@@ -13,20 +13,20 @@
 
 use superb::core::{BeatPosition, Result, SampleRate, TimeDuration, TimePosition};
 use superb::session::commands::{
-    self, AddItem, AddMarker, AddSend, AddTrack, MoveItem, SetTempo, SetTrackOutput,
+    self, AddClip, AddMarker, AddSend, AddTrack, MoveClip, SetTempo, SetTrackOutput,
 };
-use superb::session::{Item, ItemSource, Marker, MidiNote, Session, Track, TrackKind, TrackSend};
+use superb::session::{Clip, ClipSource, Marker, MidiNote, Session, Track, TrackKind, TrackSend};
 use superb::undo::UndoStack;
 
 // Helper: print a one-line snapshot of session + undo/redo tip labels.
 // `&Session` / `&UndoStack` = shared borrows (read-only).
 fn describe(session: &Session, history: &UndoStack<Session>) {
     println!(
-        "  {:<12} rev {:>3}  tracks {}  items {}  sends {}  markers {}  tempo {:.0} bpm  end {} smp  | undo: {:?}  redo: {:?}",
+        "  {:<12} rev {:>3}  tracks {}  clips {}  sends {}  markers {}  tempo {:.0} bpm  end {} smp  | undo: {:?}  redo: {:?}",
         session.name(),
         session.revision(),
         session.track_count(),
-        session.item_count(),
+        session.clip_count(),
         session.send_count(),
         session.markers().len(),
         session.tempo_map().tempo_at(BeatPosition::ZERO),
@@ -62,18 +62,18 @@ fn main() -> Result<()> {
         commands::set_track_color(drums, Some(0xE0_60_30)),
     )?;
     let loop_clip = session.allocate_clip_id();
-    let loop_item = Item::with_id(
+    let loop_clip = Clip::with_id(
         loop_clip,
         "break.wav",
         TimePosition::ZERO,
         TimeDuration::from_seconds(2.0, rate),
         // .into() converts &str → PathBuf for the audio path.
-        ItemSource::Audio {
+        ClipSource::Audio {
             path: "loops/break.wav".into(),
             offset: TimeDuration::ZERO,
         },
     )?;
-    history.push(&mut session, AddItem::new(drums, loop_item))?;
+    history.push(&mut session, AddClip::new(drums, loop_clip))?;
     history.end_group();
     describe(&session, &history);
 
@@ -109,14 +109,14 @@ fn main() -> Result<()> {
     ];
     // TempoMap converts musical beats → sample positions.
     let bar = session.tempo_map().beat_to_samples(BeatPosition::new(4.0));
-    let chord_item = Item::with_id(
+    let chord_clip = Clip::with_id(
         chord,
         "C major",
         bar,
         TimeDuration::from_samples(bar.samples()),
-        ItemSource::Midi { notes },
+        ClipSource::Midi { notes },
     )?;
-    history.push(&mut session, AddItem::new(keys, chord_item))?;
+    history.push(&mut session, AddClip::new(keys, chord_clip))?;
     describe(&session, &history);
 
     // Routing is part of the document: keys feed a reverb bus, drums send
@@ -140,10 +140,10 @@ fn main() -> Result<()> {
     history.seal();
     describe(&session, &history);
 
-    // A drag: several small moves coalesce into a single "Move item" step.
+    // A drag: several small moves coalesce into a single "Move clip" step.
     for beat in [5.0, 6.0, 7.0, 8.0] {
         let pos = session.tempo_map().beat_to_samples(BeatPosition::new(beat));
-        history.push(&mut session, MoveItem::new(chord, pos))?;
+        history.push(&mut session, MoveClip::new(chord, pos))?;
     }
     history.seal();
     let marker = session.allocate_marker_id();

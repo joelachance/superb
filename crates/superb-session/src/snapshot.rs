@@ -14,7 +14,7 @@ use superb_core::{
 };
 use superb_transport::{LoopRange, TempoMap};
 
-use crate::{Item, ItemSource, Marker, Session, Track, TrackKind, TrackSend};
+use crate::{Clip, ClipSource, Marker, Session, Track, TrackKind, TrackSend};
 
 /// Version of the snapshot format written by this crate.
 ///
@@ -73,9 +73,9 @@ pub struct TempoSnapshot {
     pub meters: Vec<MeterSnapshot>,
 }
 
-/// An item.
+/// An clip.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ItemSnapshot {
+pub struct ClipSnapshot {
     /// Raw clip ID.
     pub id: RawId,
     /// Display name.
@@ -85,7 +85,7 @@ pub struct ItemSnapshot {
     /// Length in samples.
     pub length: i64,
     /// Content.
-    pub source: ItemSource,
+    pub source: ClipSource,
     /// Gain in dB.
     pub gain_db: f32,
     /// Mute state.
@@ -140,8 +140,10 @@ pub struct TrackSnapshot {
     /// existed).
     #[serde(default)]
     pub sends: Vec<SendSnapshot>,
-    /// Items in start order.
-    pub items: Vec<ItemSnapshot>,
+    /// Clips in start order. Files written before clips were renamed used
+    /// the key `items`; both spellings load.
+    #[serde(alias = "items")]
+    pub clips: Vec<ClipSnapshot>,
 }
 
 /// A marker.
@@ -178,8 +180,8 @@ pub struct SessionSnapshot {
     pub next_id: RawId,
 }
 
-impl From<&Item> for ItemSnapshot {
-    fn from(i: &Item) -> Self {
+impl From<&Clip> for ClipSnapshot {
+    fn from(i: &Clip) -> Self {
         Self {
             id: i.id.raw(),
             name: i.name.clone(),
@@ -220,7 +222,7 @@ impl From<&Track> for TrackSnapshot {
             armed: t.armed,
             output: t.output.map(TrackId::raw),
             sends: t.sends.iter().map(SendSnapshot::from).collect(),
-            items: t.items.iter().map(ItemSnapshot::from).collect(),
+            clips: t.clips.iter().map(ClipSnapshot::from).collect(),
         }
     }
 }
@@ -347,28 +349,28 @@ impl Session {
             track.muted = t.muted;
             track.soloed = t.soloed;
             track.armed = t.armed;
-            if t.kind == TrackKind::Bus && !t.items.is_empty() {
+            if t.kind == TrackKind::Bus && !t.clips.is_empty() {
                 return Err(SuperbError::InvalidArgument {
-                    what: "bus tracks hold no items",
+                    what: "bus tracks hold no clips",
                 });
             }
-            for i in &t.items {
+            for i in &t.clips {
                 let id = ClipId::from_raw(i.id);
                 if !id.is_valid() {
                     return Err(SuperbError::InvalidArgument { what: "clip id 0" });
                 }
-                let mut item = Item::with_id(
+                let mut clip = Clip::with_id(
                     id,
                     i.name.clone(),
                     TimePosition::from_samples(i.start),
                     TimeDuration::from_samples(i.length),
                     i.source.clone(),
                 )?;
-                item.gain_db = i.gain_db;
-                item.muted = i.muted;
-                item.fade_in = TimeDuration::from_samples(i.fade_in);
-                item.fade_out = TimeDuration::from_samples(i.fade_out);
-                track.items.push(item);
+                clip.gain_db = i.gain_db;
+                clip.muted = i.muted;
+                clip.fade_in = TimeDuration::from_samples(i.fade_in);
+                clip.fade_out = TimeDuration::from_samples(i.fade_out);
+                track.clips.push(clip);
             }
             let index = session.track_count();
             session.insert_track(index, track)?;
@@ -478,11 +480,11 @@ mod tests {
         s.track_mut(drums).unwrap().gain_db = -3.5;
         s.track_mut(keys).unwrap().pan = 0.25;
         s.track_mut(keys).unwrap().soloed = true;
-        let mut audio = Item::new(
+        let mut audio = Clip::new(
             "kick",
             TimePosition::from_samples(100),
             TimeDuration::from_samples(1_000),
-            ItemSource::Audio {
+            ClipSource::Audio {
                 path: "samples/kick.wav".into(),
                 offset: TimeDuration::from_samples(32),
             },
@@ -490,7 +492,7 @@ mod tests {
         .unwrap();
         audio.fade_in = TimeDuration::from_samples(8);
         audio.gain_db = -1.0;
-        s.add_item(drums, audio).unwrap();
+        s.add_clip(drums, audio).unwrap();
         let notes = vec![
             MidiNote {
                 beat: 0.0,
@@ -507,22 +509,22 @@ mod tests {
                 channel: 1,
             },
         ];
-        let mut midi = Item::new(
+        let mut midi = Clip::new(
             "chord",
             TimePosition::ZERO,
             TimeDuration::from_samples(48_000),
-            ItemSource::Midi { notes },
+            ClipSource::Midi { notes },
         )
         .unwrap();
         midi.muted = true;
-        s.add_item(keys, midi).unwrap();
-        s.add_item(
+        s.add_clip(keys, midi).unwrap();
+        s.add_clip(
             keys,
-            Item::new(
+            Clip::new(
                 "empty",
                 TimePosition::from_samples(50_000),
                 TimeDuration::from_samples(1),
-                ItemSource::Empty,
+                ClipSource::Empty,
             )
             .unwrap(),
         )
@@ -555,6 +557,13 @@ mod tests {
         assert!(!legacy.contains("ramp"), "{legacy}");
         let old = Session::from_json(&legacy).unwrap();
         assert!(old.tempo_map().tempo_points().iter().all(|p| !p.ramp));
+        // Files written when clips were still called items load unchanged.
+        let renamed = json.replace("\"clips\":", "\"items\":");
+        assert!(renamed.contains("\"items\":"));
+        assert_eq!(
+            Session::from_json(&renamed).unwrap().snapshot(),
+            s.snapshot()
+        );
         // Routing survives, and files written before routing existed load
         // with master routing and no sends.
         let drums = back.tracks()[0].id();
@@ -640,18 +649,18 @@ mod tests {
         snap.tracks[0].id = 0;
         assert!(Session::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
-        snap.tracks[0].items[0].length = 0;
+        snap.tracks[0].clips[0].length = 0;
         assert!(Session::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
-        snap.tracks[0].items[0].id = 0;
+        snap.tracks[0].clips[0].id = 0;
         assert!(Session::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
-        let dup = snap.tracks[0].items[0].clone();
-        snap.tracks[1].items.push(dup);
+        let dup = snap.tracks[0].clips[0].clone();
+        snap.tracks[1].clips.push(dup);
         assert!(Session::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
-        let item = snap.tracks[0].items[0].clone();
-        snap.tracks[2].items.push(item); // bus
+        let clip = snap.tracks[0].clips[0].clone();
+        snap.tracks[2].clips.push(clip); // bus
         assert!(Session::from_snapshot(&snap).is_err());
 
         // Routing: unknown / non-bus targets, cycles, bad send ids, sends on buses.

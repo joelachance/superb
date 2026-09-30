@@ -15,11 +15,11 @@
 //! | [`mixer`] | `superb-mixer` | tracks, buses, sends, pan, mute/solo, meters |
 //! | [`automation`] | `superb-automation` | envelopes, read/touch/latch/write, sample-accurate apply |
 //! | [`undo`] | `superb-undo` | coalescing undo/redo command stack, groups, clean-state tracking |
-//! | [`session`] | `superb-session` | document model: tracks, items, markers, tempo map, JSON snapshots, undoable commands |
+//! | [`session`] | `superb-session` | document model: tracks, clips, markers, tempo map, JSON snapshots, undoable commands |
 //! | [`plugins`] | `superb-plugins` | plugin instance model, `PluginNode`, CLAP host (`clap-sys`), VST3 stub |
 //! | [`io`] | `superb-io` | engine loop, offline render, WAV, file decode/resample/bounce (`files`), cpal input/output |
 //! | [`bridge`] | (facade) | session → mixer strip/bus map, strip-param mirror, output/send routing mirror |
-//! | [`playback`] | (facade) | session item → strip wiring + offline region render |
+//! | [`playback`] | (facade) | session clip → strip wiring + offline region render |
 //!
 //! Feature flags: `devices` (cpal input/output), `midi-io` (midir input),
 //! `hardware` (both), `files` (symphonia decode + rubato resampling +
@@ -65,7 +65,7 @@ pub use superb_session as session;
 pub use superb_transport as transport;
 pub use superb_undo as undo;
 
-/// The most commonly used items, for `use superb::prelude::*`.
+/// The most commonly used types and functions, for `use superb::prelude::*`.
 pub mod prelude {
     pub use crate::playback::{AudioCache, RenderOptions, SessionPlayer};
     pub use superb_automation::{AutomationLane, AutomationMode, Envelope, EnvelopePoint};
@@ -92,7 +92,7 @@ pub mod prelude {
     pub use superb_plugins::{PluginDescriptor, PluginInstance, PluginNode};
     pub use superb_rt::{AtomicF32, LoadMeter};
     pub use superb_session::{
-        Item, ItemSource, Marker, Session, SessionSnapshot, Track, TrackKind, TrackSend,
+        Clip, ClipSource, Marker, Session, SessionSnapshot, Track, TrackKind, TrackSend,
     };
     pub use superb_transport::{LoopRange, TempoMap, Transport, TransportState};
     pub use superb_undo::{CoalesceKey, Command, PropertyEdit, UndoStack};

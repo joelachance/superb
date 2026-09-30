@@ -1,15 +1,15 @@
-//! Offline playback of session items onto mixer strips.
+//! Offline playback of session clips onto mixer strips.
 //!
 //! Builds on [`crate::bridge::SessionMixerBridge`]: after strips exist,
-//! [`SessionPlayer::wire`] attaches a source node per audible item —
+//! [`SessionPlayer::wire`] attaches a source node per audible clip —
 //! [`superb_graph::nodes::BufferPlayerNode`] for cached
-//! audio (and empty items stay silent), [`ScheduledSynthNode`] for MIDI —
+//! audio (and empty clips stay silent), [`ScheduledSynthNode`] for MIDI —
 //! then [`render_region`] seeks the transport and runs the offline engine.
 //!
 //! Audio files are **not** decoded here by default. Populate an
 //! [`AudioCache`] with planar buffers (tests use synthetic data; apps can
 //! fill via `superb_io::files::decode` behind the `files` feature). Missing
-//! cache entries for `ItemSource::Audio` are skipped (treated as silence)
+//! cache entries for `ClipSource::Audio` are skipped (treated as silence)
 //! so a partial cache still renders.
 
 use std::collections::HashMap;
@@ -23,12 +23,12 @@ use superb_core::{BeatPosition, ClipId, NodeId, Result, SuperbError, TimePositio
 use superb_graph::nodes::{BufferPlayerNode, ScheduledNoteEvent, ScheduledSynthNode};
 use superb_io::{offline, Engine};
 use superb_mixer::Mixer;
-use superb_session::{Item, ItemSource, MidiNote, Session, TrackKind};
+use superb_session::{Clip, ClipSource, MidiNote, Session, TrackKind};
 use superb_transport::{TempoMap, Transport};
 
 use crate::bridge::{MixerBinding, SessionMixerBridge};
 
-/// In-memory path → planar buffer map used by audio item players.
+/// In-memory path → planar buffer map used by audio clip players.
 #[derive(Clone, Debug, Default)]
 pub struct AudioCache {
     entries: HashMap<PathBuf, Arc<PlanarBuffer>>,
@@ -96,7 +96,7 @@ pub struct PlaybackSource {
 /// Wired session → mixer playback graph.
 ///
 /// Owns the [`SessionMixerBridge`] side table plus the list of source nodes
-/// created for items. Structural edits on the session require a fresh
+/// created for clips. Structural edits on the session require a fresh
 /// [`wire`](SessionPlayer::wire) (or a later incremental update).
 #[derive(Clone, Debug)]
 pub struct SessionPlayer {
@@ -107,15 +107,15 @@ pub struct SessionPlayer {
 impl SessionPlayer {
     /// Syncs the mixer to the session, mirrors strip params and routing
     /// (track → bus outputs, sends), and attaches one source node per
-    /// non-muted, non-empty item that can be rendered.
+    /// non-muted, non-empty clip that can be rendered.
     ///
-    /// * [`ItemSource::Empty`] — no node (silence).
-    /// * [`ItemSource::Audio`] — [`BufferPlayerNode`] when `cache` has the
+    /// * [`ClipSource::Empty`] — no node (silence).
+    /// * [`ClipSource::Audio`] — [`BufferPlayerNode`] when `cache` has the
     ///   path; otherwise skipped.
-    /// * [`ItemSource::Midi`] — [`ScheduledSynthNode`] with notes converted
+    /// * [`ClipSource::Midi`] — [`ScheduledSynthNode`] with notes converted
     ///   through the session tempo map.
     ///
-    /// Bus tracks never receive item sources. Returns the player; the mixer
+    /// Bus tracks never receive clip sources. Returns the player; the mixer
     /// must be `prepare`d (via the engine) before rendering.
     pub fn wire(session: &Session, mixer: &mut Mixer, cache: &AudioCache) -> Result<Self> {
         let mut bridge = SessionMixerBridge::new();
@@ -134,28 +134,28 @@ impl SessionPlayer {
             let Some(MixerBinding::Track(mixer_track)) = bridge.binding(track.id()) else {
                 continue;
             };
-            for item in track.items() {
-                if item.muted {
+            for clip in track.clips() {
+                if clip.muted {
                     continue;
                 }
-                let node = match &item.source {
-                    ItemSource::Empty => continue,
-                    ItemSource::Audio { path, offset } => {
+                let node = match &clip.source {
+                    ClipSource::Empty => continue,
+                    ClipSource::Audio { path, offset } => {
                         let Some(buffer) = cache.get(path) else {
                             continue;
                         };
                         let mut player = BufferPlayerNode::new(buffer, channels);
-                        player.set_region(item.start(), item.length(), *offset);
-                        player.set_gain_db(item.gain_db);
-                        player.set_fades(item.fade_in, item.fade_out);
+                        player.set_region(clip.start(), clip.length(), *offset);
+                        player.set_gain_db(clip.gain_db);
+                        player.set_fades(clip.fade_in, clip.fade_out);
                         let id = mixer.graph_mut().add_node(Box::new(player));
                         mixer.connect_source(id, mixer_track)?;
                         id
                     }
-                    ItemSource::Midi { notes } => {
-                        // Item gain scales note velocities inside `schedule_midi_notes`;
+                    ClipSource::Midi { notes } => {
+                        // Clip gain scales note velocities inside `schedule_midi_notes`;
                         // track-level gain/pan/mute stay on the strip.
-                        let events = schedule_midi_notes(item, notes, tempo);
+                        let events = schedule_midi_notes(clip, notes, tempo);
                         let synth = ScheduledSynthNode::new(channels, events);
                         let id = mixer.graph_mut().add_node(Box::new(synth));
                         mixer.connect_source(id, mixer_track)?;
@@ -163,7 +163,7 @@ impl SessionPlayer {
                     }
                 };
                 sources.push(PlaybackSource {
-                    clip: item.id(),
+                    clip: clip.id(),
                     session_track: track.id(),
                     mixer_track,
                     node,
@@ -179,45 +179,45 @@ impl SessionPlayer {
         &self.bridge
     }
 
-    /// Wired item sources.
+    /// Wired clip sources.
     pub fn sources(&self) -> &[PlaybackSource] {
         &self.sources
     }
 }
 
-/// Converts item-relative MIDI notes into absolute-sample
-/// [`ScheduledNoteEvent`]s, clamped to the item's sample range.
+/// Converts clip-relative MIDI notes into absolute-sample
+/// [`ScheduledNoteEvent`]s, clamped to the clip's sample range.
 ///
-/// Note-on/off pairs whose onset falls outside `[item.start, item.end)` are
-/// dropped. Off events are clamped to the item end so notes cannot ring
+/// Note-on/off pairs whose onset falls outside `[clip.start, clip.end)` are
+/// dropped. Off events are clamped to the clip end so notes cannot ring
 /// past the clip.
 pub fn schedule_midi_notes(
-    item: &Item,
+    clip: &Clip,
     notes: &[MidiNote],
     tempo: &TempoMap,
 ) -> Arc<[ScheduledNoteEvent]> {
-    let item_start = item.start();
-    let item_end = item.end();
-    let item_start_beat = tempo.samples_to_beat(item_start).beats();
-    let gain = superb_buffers::gain::db_to_linear(item.gain_db);
+    let clip_start = clip.start();
+    let clip_end = clip.end();
+    let clip_start_beat = tempo.samples_to_beat(clip_start).beats();
+    let gain = superb_buffers::gain::db_to_linear(clip.gain_db);
     let mut events = Vec::with_capacity(notes.len() * 2);
 
     for n in notes {
         if n.length <= 0.0 {
             continue;
         }
-        let on_beat = BeatPosition::new(item_start_beat + n.beat);
-        let off_beat = BeatPosition::new(item_start_beat + n.beat + n.length);
+        let on_beat = BeatPosition::new(clip_start_beat + n.beat);
+        let off_beat = BeatPosition::new(clip_start_beat + n.beat + n.length);
         let mut on_sample = tempo.beat_to_samples(on_beat);
         let mut off_sample = tempo.beat_to_samples(off_beat);
-        if on_sample < item_start {
-            on_sample = item_start;
+        if on_sample < clip_start {
+            on_sample = clip_start;
         }
-        if on_sample >= item_end {
+        if on_sample >= clip_end {
             continue;
         }
-        if off_sample > item_end {
-            off_sample = item_end;
+        if off_sample > clip_end {
+            off_sample = clip_end;
         }
         if off_sample <= on_sample {
             continue;
@@ -276,13 +276,13 @@ impl Default for RenderOptions {
 /// let notes = vec![superb::session::MidiNote {
 ///     beat: 0.0, length: 0.5, note: 69, velocity: 100, channel: 0,
 /// }];
-/// let item = Item::new(
+/// let clip = Clip::new(
 ///     "n",
 ///     TimePosition::ZERO,
 ///     TimeDuration::from_samples(24_000),
-///     ItemSource::Midi { notes },
+///     ClipSource::Midi { notes },
 /// ).unwrap();
-/// session.add_item(track, item).unwrap();
+/// session.add_clip(track, clip).unwrap();
 ///
 /// let audio = render_region(
 ///     &session,
@@ -341,36 +341,36 @@ mod tests {
     fn wire_skips_empty_and_missing_audio_attaches_cached() {
         let mut session = Session::new("demo", SampleRate::HZ_48K);
         let audio = session.add_track("vox", TrackKind::Audio);
-        let empty_item = Item::new(
+        let empty_clip = Clip::new(
             "e",
             TimePosition::ZERO,
             TimeDuration::from_samples(100),
-            ItemSource::Empty,
+            ClipSource::Empty,
         )
         .unwrap();
-        session.add_item(audio, empty_item).unwrap();
-        let missing = Item::new(
+        session.add_clip(audio, empty_clip).unwrap();
+        let missing = Clip::new(
             "m",
             TimePosition::from_samples(100),
             TimeDuration::from_samples(100),
-            ItemSource::Audio {
+            ClipSource::Audio {
                 path: PathBuf::from("missing.wav"),
                 offset: TimeDuration::ZERO,
             },
         )
         .unwrap();
-        session.add_item(audio, missing).unwrap();
-        let present = Item::new(
+        session.add_clip(audio, missing).unwrap();
+        let present = Clip::new(
             "p",
             TimePosition::from_samples(200),
             TimeDuration::from_samples(100),
-            ItemSource::Audio {
+            ClipSource::Audio {
                 path: PathBuf::from("tone.wav"),
                 offset: TimeDuration::ZERO,
             },
         )
         .unwrap();
-        session.add_item(audio, present).unwrap();
+        session.add_clip(audio, present).unwrap();
 
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(100, 0.5));
@@ -382,20 +382,20 @@ mod tests {
     }
 
     #[test]
-    fn render_region_plays_cached_audio_item() {
+    fn render_region_plays_cached_audio_clip() {
         let mut session = Session::new("demo", SampleRate::HZ_48K);
         let track = session.add_track("vox", TrackKind::Audio);
-        let item = Item::new(
+        let clip = Clip::new(
             "take",
             TimePosition::from_samples(100),
             TimeDuration::from_samples(200),
-            ItemSource::Audio {
+            ClipSource::Audio {
                 path: PathBuf::from("tone.wav"),
                 offset: TimeDuration::ZERO,
             },
         )
         .unwrap();
-        session.add_item(track, item).unwrap();
+        session.add_clip(track, clip).unwrap();
 
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(200, 0.25));
@@ -412,20 +412,20 @@ mod tests {
         )
         .unwrap();
         assert_eq!(audio.frames(), 400);
-        // Before the item: silence
+        // Before the clip: silence
         assert!(audio.channel(0)[..100].iter().all(|&s| s == 0.0));
-        // Inside the item the 0.25 tone is audible. The exact level depends on
+        // Inside the clip the 0.25 tone is audible. The exact level depends on
         // the strip's constant-power pan law (−3 dB at centre), so only check
         // that it is clearly non-zero.
         let mid = &audio.channel(0)[100..300];
         let peak = mid.iter().fold(0.0f32, |m, s| m.max(s.abs()));
         assert!(peak > 0.05, "peak {peak}");
-        // After the item: silence
+        // After the clip: silence
         assert!(audio.channel(0)[300..].iter().all(|&s| s.abs() < 1e-6));
     }
 
     #[test]
-    fn render_region_plays_midi_item_through_scheduled_synth() {
+    fn render_region_plays_midi_clip_through_scheduled_synth() {
         let mut session = Session::new("demo", SampleRate::HZ_48K);
         let track = session.add_track("keys", TrackKind::Midi);
         let notes = vec![MidiNote {
@@ -436,14 +436,14 @@ mod tests {
             channel: 0,
         }];
         // 0.25 beat at 120 bpm = 0.125 s = 6000 samples at 48 kHz
-        let item = Item::new(
+        let clip = Clip::new(
             "n",
             TimePosition::ZERO,
             TimeDuration::from_samples(12_000),
-            ItemSource::Midi { notes },
+            ClipSource::Midi { notes },
         )
         .unwrap();
-        session.add_item(track, item).unwrap();
+        session.add_clip(track, clip).unwrap();
 
         let audio = render_region(
             &session,
@@ -465,17 +465,17 @@ mod tests {
     fn tone_session(rate: SampleRate) -> (Session, AudioCache, TrackId) {
         let mut session = Session::new("routing", rate);
         let vox = session.add_track("vox", TrackKind::Audio);
-        let item = Item::new(
+        let clip = Clip::new(
             "take",
             TimePosition::ZERO,
             TimeDuration::from_samples(400),
-            ItemSource::Audio {
+            ClipSource::Audio {
                 path: PathBuf::from("tone.wav"),
                 offset: TimeDuration::ZERO,
             },
         )
         .unwrap();
-        session.add_item(vox, item).unwrap();
+        session.add_clip(vox, clip).unwrap();
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(400, 0.5));
         (session, cache, vox)
@@ -538,16 +538,16 @@ mod tests {
     }
 
     #[test]
-    fn schedule_midi_clamps_to_item_and_sorts() {
-        let item = Item::new(
+    fn schedule_midi_clamps_to_clip_and_sorts() {
+        let clip = Clip::new(
             "n",
             TimePosition::from_samples(1000),
             TimeDuration::from_samples(5000),
-            ItemSource::Empty,
+            ClipSource::Empty,
         )
         .unwrap();
         let tempo = TempoMap::new(SampleRate::HZ_48K, 120.0);
-        // note starts 0 beats into item, length 1 beat (= 24000 samples) → clamped to item end
+        // note starts 0 beats into clip, length 1 beat (= 24000 samples) → clamped to clip end
         let notes = [MidiNote {
             beat: 0.0,
             length: 1.0,
@@ -555,30 +555,30 @@ mod tests {
             velocity: 80,
             channel: 0,
         }];
-        let events = schedule_midi_notes(&item, &notes, &tempo);
+        let events = schedule_midi_notes(&clip, &notes, &tempo);
         assert_eq!(events.len(), 2);
         assert!(events[0].on);
         assert_eq!(events[0].sample, 1000);
         assert!(!events[1].on);
-        assert_eq!(events[1].sample, 6000); // clamped to item end
+        assert_eq!(events[1].sample, 6000); // clamped to clip end
     }
 
     #[test]
-    fn muted_item_is_not_wired() {
+    fn muted_clip_is_not_wired() {
         let mut session = Session::new("demo", SampleRate::HZ_48K);
         let track = session.add_track("vox", TrackKind::Audio);
-        let mut item = Item::new(
+        let mut clip = Clip::new(
             "take",
             TimePosition::ZERO,
             TimeDuration::from_samples(100),
-            ItemSource::Audio {
+            ClipSource::Audio {
                 path: PathBuf::from("tone.wav"),
                 offset: TimeDuration::ZERO,
             },
         )
         .unwrap();
-        item.muted = true;
-        session.add_item(track, item).unwrap();
+        clip.muted = true;
+        session.add_clip(track, clip).unwrap();
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(100, 1.0));
         let mut mixer = Mixer::new(2);

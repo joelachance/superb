@@ -1,4 +1,4 @@
-//! Tracks and the items (clips) they hold.
+//! Tracks and the clips they hold.
 
 use std::path::PathBuf;
 
@@ -8,18 +8,18 @@ use superb_core::{ClipId, Result, SendId, SuperbError, TimeDuration, TimePositio
 /// What a track carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TrackKind {
-    /// Audio items.
+    /// Audio clips.
     Audio,
-    /// MIDI items feeding an instrument.
+    /// MIDI clips feeding an instrument.
     Midi,
-    /// A submix bus; holds no items.
+    /// A submix bus; holds no clips.
     Bus,
 }
 
-/// One note inside a MIDI item. Times are in beats relative to the item start.
+/// One note inside a MIDI clip. Times are in beats relative to the clip start.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MidiNote {
-    /// Onset in beats from the item start.
+    /// Onset in beats from the clip start.
     pub beat: f64,
     /// Duration in beats.
     pub length: f64,
@@ -31,16 +31,16 @@ pub struct MidiNote {
     pub channel: u8,
 }
 
-/// Where an item's content comes from.
+/// Where an clip's content comes from.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum ItemSource {
+pub enum ClipSource {
     /// A placeholder with no content (renders silence).
     Empty,
     /// A region of an audio file starting `offset` into the file.
     Audio {
         /// Path to the file (relative paths are resolved by the application).
         path: PathBuf,
-        /// Where in the file the item starts.
+        /// Where in the file the clip starts.
         #[serde(with = "crate::snapshot::duration_samples")]
         offset: TimeDuration,
     },
@@ -51,19 +51,19 @@ pub enum ItemSource {
     },
 }
 
-/// A clip on a track: a placed region of some [`ItemSource`].
+/// A clip on a track: a placed region of some [`ClipSource`].
 #[derive(Clone, Debug, PartialEq)]
-pub struct Item {
+pub struct Clip {
     pub(crate) id: ClipId,
     /// Display name.
     pub name: String,
     pub(crate) start: TimePosition,
     pub(crate) length: TimeDuration,
     /// Content.
-    pub source: ItemSource,
-    /// Item gain in dB (0 = unity).
+    pub source: ClipSource,
+    /// Clip gain in dB (0 = unity).
     pub gain_db: f32,
-    /// Muted items are not rendered.
+    /// Muted clips are not rendered.
     pub muted: bool,
     /// Fade-in length (`0` for none).
     pub fade_in: TimeDuration,
@@ -71,27 +71,27 @@ pub struct Item {
     pub fade_out: TimeDuration,
 }
 
-impl Item {
-    /// Creates an item with no ID yet (the session assigns one on
-    /// [`Session::add_item`](crate::Session::add_item)). Fails unless
+impl Clip {
+    /// Creates an clip with no ID yet (the session assigns one on
+    /// [`Session::add_clip`](crate::Session::add_clip)). Fails unless
     /// `length > 0`.
     pub fn new(
         name: impl Into<String>,
         start: TimePosition,
         length: TimeDuration,
-        source: ItemSource,
+        source: ClipSource,
     ) -> Result<Self> {
         Self::with_id(ClipId::INVALID, name, start, length, source)
     }
 
-    /// Creates an item with a pre-allocated ID (see
+    /// Creates an clip with a pre-allocated ID (see
     /// [`Session::allocate_clip_id`](crate::Session::allocate_clip_id)).
     pub fn with_id(
         id: ClipId,
         name: impl Into<String>,
         start: TimePosition,
         length: TimeDuration,
-        source: ItemSource,
+        source: ClipSource,
     ) -> Result<Self> {
         check_length(length)?;
         Ok(Self {
@@ -107,12 +107,12 @@ impl Item {
         })
     }
 
-    /// The item's ID (`ClipId::INVALID` until added to a session).
+    /// The clip's ID (`ClipId::INVALID` until added to a session).
     pub fn id(&self) -> ClipId {
         self.id
     }
 
-    /// First frame of the item.
+    /// First frame of the clip.
     pub fn start(&self) -> TimePosition {
         self.start
     }
@@ -127,8 +127,8 @@ impl Item {
         self.start.offset(self.length.samples())
     }
 
-    /// Moves the item (use [`Session::move_item`](crate::Session::move_item)
-    /// once the item lives in a session, so ordering is maintained).
+    /// Moves the clip (use [`Session::move_clip`](crate::Session::move_clip)
+    /// once the clip lives in a session, so ordering is maintained).
     pub fn set_start(&mut self, start: TimePosition) {
         self.start = start;
     }
@@ -145,8 +145,8 @@ impl Item {
         position >= self.start && position < self.end()
     }
 
-    /// `true` if the two items share at least one frame.
-    pub fn overlaps(&self, other: &Item) -> bool {
+    /// `true` if the two clips share at least one frame.
+    pub fn overlaps(&self, other: &Clip) -> bool {
         self.start < other.end() && other.start < self.end()
     }
 }
@@ -154,7 +154,7 @@ impl Item {
 fn check_length(length: TimeDuration) -> Result<()> {
     if length.samples() <= 0 {
         return Err(SuperbError::InvalidArgument {
-            what: "item length (must be > 0)",
+            what: "clip length (must be > 0)",
         });
     }
     Ok(())
@@ -219,9 +219,9 @@ impl TrackSend {
     }
 }
 
-/// A track: an ordered lane of items plus mixer-facing properties.
+/// A track: an ordered lane of clips plus mixer-facing properties.
 ///
-/// Items are kept sorted by start position (ties by ID). Properties are
+/// Clips are kept sorted by start position (ties by ID). Properties are
 /// plain fields; change them through
 /// [`Session::track_mut`](crate::Session::track_mut) so the session's
 /// revision counter moves. Routing (`output`, `sends`) is validated, so it
@@ -248,7 +248,7 @@ pub struct Track {
     pub armed: bool,
     pub(crate) output: Option<TrackId>,
     pub(crate) sends: Vec<TrackSend>,
-    pub(crate) items: Vec<Item>,
+    pub(crate) clips: Vec<Clip>,
 }
 
 impl Track {
@@ -272,7 +272,7 @@ impl Track {
             armed: false,
             output: None,
             sends: Vec::new(),
-            items: Vec::new(),
+            clips: Vec::new(),
         }
     }
 
@@ -296,32 +296,32 @@ impl Track {
         self.sends.iter().find(|s| s.id == id)
     }
 
-    /// Items in start order.
-    pub fn items(&self) -> &[Item] {
-        &self.items
+    /// Clips in start order.
+    pub fn clips(&self) -> &[Clip] {
+        &self.clips
     }
 
-    /// Looks up an item on this track.
-    pub fn item(&self, id: ClipId) -> Option<&Item> {
-        self.items.iter().find(|i| i.id == id)
+    /// Looks up an clip on this track.
+    pub fn clip(&self, id: ClipId) -> Option<&Clip> {
+        self.clips.iter().find(|i| i.id == id)
     }
 
-    /// Items covering `position`.
-    pub fn items_at(&self, position: TimePosition) -> impl Iterator<Item = &Item> + '_ {
-        self.items.iter().filter(move |i| i.contains(position))
+    /// Clips covering `position`.
+    pub fn clips_at(&self, position: TimePosition) -> impl Iterator<Item = &Clip> + '_ {
+        self.clips.iter().filter(move |i| i.contains(position))
     }
 
-    /// End of the last item, or zero for an empty track.
+    /// End of the last clip, or zero for an empty track.
     pub fn end(&self) -> TimePosition {
-        self.items
+        self.clips
             .iter()
-            .map(Item::end)
+            .map(Clip::end)
             .max()
             .unwrap_or(TimePosition::ZERO)
     }
 
-    pub(crate) fn sort_items(&mut self) {
-        self.items
+    pub(crate) fn sort_clips(&mut self) {
+        self.clips
             .sort_by(|a, b| a.start.cmp(&b.start).then(a.id.cmp(&b.id)));
     }
 }
@@ -330,49 +330,49 @@ impl Track {
 mod tests {
     use super::*;
 
-    fn item(start: i64, len: i64) -> Item {
-        Item::new(
+    fn clip(start: i64, len: i64) -> Clip {
+        Clip::new(
             "i",
             TimePosition::from_samples(start),
             TimeDuration::from_samples(len),
-            ItemSource::Empty,
+            ClipSource::Empty,
         )
         .unwrap()
     }
 
     #[test]
-    fn item_geometry() {
-        let a = item(100, 50);
+    fn clip_geometry() {
+        let a = clip(100, 50);
         assert_eq!(a.end().samples(), 150);
         assert!(a.contains(TimePosition::from_samples(100)));
         assert!(a.contains(TimePosition::from_samples(149)));
         assert!(!a.contains(TimePosition::from_samples(150)));
         assert!(!a.contains(TimePosition::from_samples(99)));
-        assert!(a.overlaps(&item(149, 10)));
-        assert!(!a.overlaps(&item(150, 10)));
-        assert!(a.overlaps(&item(0, 101)));
-        assert!(!a.overlaps(&item(0, 100)));
+        assert!(a.overlaps(&clip(149, 10)));
+        assert!(!a.overlaps(&clip(150, 10)));
+        assert!(a.overlaps(&clip(0, 101)));
+        assert!(!a.overlaps(&clip(0, 100)));
         assert_eq!(a.id(), ClipId::INVALID);
         assert_eq!(a.length().samples(), 50);
     }
 
     #[test]
-    fn item_length_is_validated() {
-        assert!(Item::new(
+    fn clip_length_is_validated() {
+        assert!(Clip::new(
             "x",
             TimePosition::ZERO,
             TimeDuration::ZERO,
-            ItemSource::Empty
+            ClipSource::Empty
         )
         .is_err());
-        assert!(Item::new(
+        assert!(Clip::new(
             "x",
             TimePosition::ZERO,
             TimeDuration::from_samples(-5),
-            ItemSource::Empty
+            ClipSource::Empty
         )
         .is_err());
-        let mut a = item(0, 10);
+        let mut a = clip(0, 10);
         assert!(a.set_length(TimeDuration::ZERO).is_err());
         a.set_length(TimeDuration::from_samples(20)).unwrap();
         a.set_start(TimePosition::from_samples(5));
@@ -403,18 +403,18 @@ mod tests {
         assert!(t.sends().is_empty());
         assert!(t.send(SendId::from_raw(1)).is_none());
         assert_eq!(t.end(), TimePosition::ZERO);
-        let mut b = item(50, 10);
+        let mut b = clip(50, 10);
         b.id = ClipId::from_raw(2);
-        let mut a = item(0, 100);
+        let mut a = clip(0, 100);
         a.id = ClipId::from_raw(1);
-        t.items.push(b);
-        t.items.push(a);
-        t.sort_items();
-        assert_eq!(t.items()[0].id(), ClipId::from_raw(1));
-        assert_eq!(t.items_at(TimePosition::from_samples(55)).count(), 2);
-        assert_eq!(t.items_at(TimePosition::from_samples(5)).count(), 1);
+        t.clips.push(b);
+        t.clips.push(a);
+        t.sort_clips();
+        assert_eq!(t.clips()[0].id(), ClipId::from_raw(1));
+        assert_eq!(t.clips_at(TimePosition::from_samples(55)).count(), 2);
+        assert_eq!(t.clips_at(TimePosition::from_samples(5)).count(), 1);
         assert_eq!(t.end().samples(), 100);
-        assert!(t.item(ClipId::from_raw(2)).is_some());
-        assert!(t.item(ClipId::from_raw(3)).is_none());
+        assert!(t.clip(ClipId::from_raw(2)).is_some());
+        assert!(t.clip(ClipId::from_raw(3)).is_none());
     }
 }

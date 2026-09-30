@@ -16,7 +16,7 @@
 //!   the targets of `MidiPort::External` edges receive it.
 //! * [`nodes`] — fixture nodes: sine, gain, pass-through, constant, silence,
 //!   a tiny monophonic MIDI synth, plus timeline-aware `BufferPlayerNode` and
-//!   `ScheduledSynthNode` for session item playback.
+//!   `ScheduledSynthNode` for session clip playback.
 //! * [`live`] — lock-free live editing: [`GraphEditor`] owns a draft graph on
 //!   the control thread, [`LiveGraph`] runs the active graph on the audio
 //!   thread, and [`live_pair`] joins them with SPSC queues so a prepared graph

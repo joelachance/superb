@@ -155,7 +155,7 @@ assert_eq!(converted.frames(), resampled_frames(file.frames(), file.sample_rate,
   aligns with input sample 0 (residual sub-sample phase < 0.1 rad at 1 kHz
   in the tests).
 * **Frame count rule:** `ceil(frames * to / from)`, exposed as
-  `resampled_frames` so callers can pre-compute item lengths. Equal rates
+  `resampled_frames` so callers can pre-compute clip lengths. Equal rates
   return a copy without touching rubato; zero frames in → zero frames out.
 * Allocates and is CPU-heavy: call it from a worker thread, never the
   audio callback. `AudioFile::resampled_to` is the same operation on a

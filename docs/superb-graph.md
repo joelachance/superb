@@ -277,7 +277,7 @@ latency-compensation delay line (ring write + delayed read + mix, and
   (region, offset, gain, fades); silent when the transport is stopped.
 * `ScheduledSynthNode` / `ScheduledNoteEvent` — monophonic sine synth
   driven by absolute-sample note on/off events (built from session MIDI
-  items via `superb::playback::schedule_midi_notes`).
+  clips via `superb::playback::schedule_midi_notes`).
 
 ## Limitations / next
 

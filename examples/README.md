@@ -12,7 +12,7 @@ Each package is a small, commented walkthrough for learning Rust + Superb.
 | `play_sine_device` | Play a sine on the default output device | `cargo run -p play_sine_device --features devices` |
 | `decode_bounce` | Bounce → decode → resample → export (`files`) | `cargo run -p decode_bounce` |
 | `session_undo` | Undoable session edits, save/load JSON | `cargo run -p session_undo` |
-| `session_playback` | Session items + bus/send → offline WAV | `cargo run -p session_playback` |
+| `session_playback` | Session clips + bus/send → offline WAV | `cargo run -p session_playback` |
 | `clap_host_scan` | Scan/instantiate a CLAP plugin, render offline | `cargo run -p clap_host_scan -- [dir ...] [--id …]` |
 
 Open `examples/*/src/main.rs` for line-by-line teaching comments (Rust idioms + DAW concepts).

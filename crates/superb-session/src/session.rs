@@ -6,9 +6,9 @@ use superb_core::{
 };
 use superb_transport::{LoopRange, TempoMap};
 
-use crate::{Item, Marker, Track, TrackKind, TrackSend};
+use crate::{Clip, Marker, Track, TrackKind, TrackSend};
 
-/// A project document: tracks, items, markers, tempo map and loop range.
+/// A project document: tracks, clips, markers, tempo map and loop range.
 ///
 /// All IDs are allocated from one per-session counter and never reused, so
 /// a `TrackId`, `ClipId`, `MarkerId` or `SendId` stays valid for the life
@@ -106,7 +106,7 @@ impl Session {
         self.revision
     }
 
-    /// End of the last item on any track (zero for an empty session).
+    /// End of the last clip on any track (zero for an empty session).
     pub fn end_position(&self) -> TimePosition {
         self.tracks
             .iter()
@@ -115,9 +115,9 @@ impl Session {
             .unwrap_or(TimePosition::ZERO)
     }
 
-    /// Total number of items across all tracks.
-    pub fn item_count(&self) -> usize {
-        self.tracks.iter().map(|t| t.items.len()).sum()
+    /// Total number of clips across all tracks.
+    pub fn clip_count(&self) -> usize {
+        self.tracks.iter().map(|t| t.clips.len()).sum()
     }
 
     // ------------------------------------------------------------------
@@ -129,7 +129,7 @@ impl Session {
         self.allocate()
     }
 
-    /// Reserves a clip ID for a later [`add_item`](Self::add_item).
+    /// Reserves a clip ID for a later [`add_clip`](Self::add_clip).
     pub fn allocate_clip_id(&mut self) -> ClipId {
         self.allocate()
     }
@@ -179,9 +179,9 @@ impl Session {
 
     /// Inserts `track` at `index`. A track without an ID gets a fresh one;
     /// a track with an ID must not collide with an existing track, and its
-    /// items and sends must carry unique IDs as well. The track's
+    /// clips and sends must carry unique IDs as well. The track's
     /// [`output`](Track::output) and send destinations must be existing bus
-    /// tracks (bus tracks carry no items and no sends). Returns the track's
+    /// tracks (bus tracks carry no clips and no sends). Returns the track's
     /// ID.
     pub fn insert_track(&mut self, index: usize, mut track: Track) -> Result<TrackId> {
         if index > self.tracks.len() {
@@ -196,9 +196,9 @@ impl Session {
         }
         // Validate everything before touching the ID counter so a rejected
         // insert leaves the document untouched.
-        if track.kind == TrackKind::Bus && !track.items.is_empty() {
+        if track.kind == TrackKind::Bus && !track.clips.is_empty() {
             return Err(SuperbError::InvalidArgument {
-                what: "bus tracks hold no items",
+                what: "bus tracks hold no clips",
             });
         }
         if track.kind == TrackKind::Bus && !track.sends.is_empty() {
@@ -209,10 +209,10 @@ impl Session {
         if let Some(bus) = track.output {
             self.check_bus(bus)?;
         }
-        for i in 0..track.items.len() {
-            let id = track.items[i].id;
+        for i in 0..track.clips.len() {
+            let id = track.clips[i].id;
             if id.is_valid()
-                && (self.find_item(id).is_some() || track.items[..i].iter().any(|o| o.id == id))
+                && (self.find_clip(id).is_some() || track.clips[..i].iter().any(|o| o.id == id))
             {
                 return Err(SuperbError::InvalidArgument {
                     what: "duplicate clip id",
@@ -236,11 +236,11 @@ impl Session {
         } else {
             track.id = self.allocate_track_id();
         }
-        for item in &mut track.items {
-            if item.id.is_valid() {
-                self.reserve(item.id.raw());
+        for clip in &mut track.clips {
+            if clip.id.is_valid() {
+                self.reserve(clip.id.raw());
             } else {
-                item.id = self.allocate_clip_id();
+                clip.id = self.allocate_clip_id();
             }
         }
         for send in &mut track.sends {
@@ -250,14 +250,14 @@ impl Session {
                 send.id = self.allocate_send_id();
             }
         }
-        track.sort_items();
+        track.sort_clips();
         let id = track.id;
         self.tracks.insert(index, track);
         self.touch();
         Ok(id)
     }
 
-    /// Removes a track (with its items and sends) and returns it.
+    /// Removes a track (with its clips and sends) and returns it.
     ///
     /// Removing a bus detaches its inputs: tracks whose
     /// [`output`](Track::output) was the bus fall back to the master
@@ -477,126 +477,126 @@ impl Session {
     }
 
     // ------------------------------------------------------------------
-    // Items
+    // Clips
     // ------------------------------------------------------------------
 
-    /// Adds an item to a track and returns its ID. An item without an ID
-    /// gets a fresh one; an item with an ID must not collide. Bus tracks
-    /// hold no items.
-    pub fn add_item(&mut self, track: TrackId, mut item: Item) -> Result<ClipId> {
+    /// Adds an clip to a track and returns its ID. An clip without an ID
+    /// gets a fresh one; an clip with an ID must not collide. Bus tracks
+    /// hold no clips.
+    pub fn add_clip(&mut self, track: TrackId, mut clip: Clip) -> Result<ClipId> {
         let ti = self.track_index(track)?;
         if self.tracks[ti].kind == TrackKind::Bus {
             return Err(SuperbError::InvalidArgument {
-                what: "bus tracks hold no items",
+                what: "bus tracks hold no clips",
             });
         }
-        if item.id.is_valid() {
-            if self.find_item(item.id).is_some() {
+        if clip.id.is_valid() {
+            if self.find_clip(clip.id).is_some() {
                 return Err(SuperbError::InvalidArgument {
                     what: "duplicate clip id",
                 });
             }
-            self.reserve(item.id.raw());
+            self.reserve(clip.id.raw());
         } else {
-            item.id = self.allocate_clip_id();
+            clip.id = self.allocate_clip_id();
         }
-        let id = item.id;
+        let id = clip.id;
         let t = &mut self.tracks[ti];
-        t.items.push(item);
-        t.sort_items();
+        t.clips.push(clip);
+        t.sort_clips();
         self.touch();
         Ok(id)
     }
 
-    /// Removes an item, returning the track it was on and the item.
-    pub fn remove_item(&mut self, id: ClipId) -> Result<(TrackId, Item)> {
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+    /// Removes an clip, returning the track it was on and the clip.
+    pub fn remove_clip(&mut self, id: ClipId) -> Result<(TrackId, Clip)> {
+        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
         let track = self.tracks[ti].id;
-        let item = self.tracks[ti].items.remove(ii);
+        let clip = self.tracks[ti].clips.remove(ii);
         self.touch();
-        Ok((track, item))
+        Ok((track, clip))
     }
 
-    /// Moves an item to a new start position on its current track.
-    pub fn move_item(&mut self, id: ClipId, start: TimePosition) -> Result<()> {
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+    /// Moves an clip to a new start position on its current track.
+    pub fn move_clip(&mut self, id: ClipId, start: TimePosition) -> Result<()> {
+        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
         let t = &mut self.tracks[ti];
-        if t.items[ii].start != start {
-            t.items[ii].start = start;
-            t.sort_items();
+        if t.clips[ii].start != start {
+            t.clips[ii].start = start;
+            t.sort_clips();
             self.touch();
         }
         Ok(())
     }
 
-    /// Moves an item to another track, keeping its position.
-    pub fn move_item_to_track(&mut self, id: ClipId, track: TrackId) -> Result<()> {
+    /// Moves an clip to another track, keeping its position.
+    pub fn move_clip_to_track(&mut self, id: ClipId, track: TrackId) -> Result<()> {
         let dest = self.track_index(track)?;
         if self.tracks[dest].kind == TrackKind::Bus {
             return Err(SuperbError::InvalidArgument {
-                what: "bus tracks hold no items",
+                what: "bus tracks hold no clips",
             });
         }
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
         if ti == dest {
             return Ok(());
         }
-        let item = self.tracks[ti].items.remove(ii);
+        let clip = self.tracks[ti].clips.remove(ii);
         let t = &mut self.tracks[dest];
-        t.items.push(item);
-        t.sort_items();
+        t.clips.push(clip);
+        t.sort_clips();
         self.touch();
         Ok(())
     }
 
-    /// Changes an item's length (must be `> 0`).
-    pub fn resize_item(&mut self, id: ClipId, length: TimeDuration) -> Result<()> {
-        self.item_mut(id)?.set_length(length)
+    /// Changes an clip's length (must be `> 0`).
+    pub fn resize_clip(&mut self, id: ClipId, length: TimeDuration) -> Result<()> {
+        self.clip_mut(id)?.set_length(length)
     }
 
-    /// Looks up an item on any track.
-    pub fn item(&self, id: ClipId) -> Result<&Item> {
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+    /// Looks up an clip on any track.
+    pub fn clip(&self, id: ClipId) -> Result<&Clip> {
+        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
-        Ok(&self.tracks[ti].items[ii])
+        Ok(&self.tracks[ti].clips[ii])
     }
 
-    /// Mutable item access (bumps the revision). Use
-    /// [`move_item`](Self::move_item) to change the start so ordering holds.
-    pub fn item_mut(&mut self, id: ClipId) -> Result<&mut Item> {
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+    /// Mutable clip access (bumps the revision). Use
+    /// [`move_clip`](Self::move_clip) to change the start so ordering holds.
+    pub fn clip_mut(&mut self, id: ClipId) -> Result<&mut Clip> {
+        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
         self.touch();
-        Ok(&mut self.tracks[ti].items[ii])
+        Ok(&mut self.tracks[ti].clips[ii])
     }
 
-    /// The track an item lives on.
-    pub fn item_track(&self, id: ClipId) -> Result<TrackId> {
-        let (ti, _) = self.find_item(id).ok_or(SuperbError::NotFound {
+    /// The track an clip lives on.
+    pub fn clip_track(&self, id: ClipId) -> Result<TrackId> {
+        let (ti, _) = self.find_clip(id).ok_or(SuperbError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
         Ok(self.tracks[ti].id)
     }
 
-    fn find_item(&self, id: ClipId) -> Option<(usize, usize)> {
+    fn find_clip(&self, id: ClipId) -> Option<(usize, usize)> {
         self.tracks
             .iter()
             .enumerate()
-            .find_map(|(ti, t)| t.items.iter().position(|i| i.id == id).map(|ii| (ti, ii)))
+            .find_map(|(ti, t)| t.clips.iter().position(|i| i.id == id).map(|ii| (ti, ii)))
     }
 
     // ------------------------------------------------------------------
@@ -695,17 +695,17 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ItemSource;
+    use crate::ClipSource;
     use superb_core::BeatPosition;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
-    fn item(start: i64, len: i64) -> Item {
-        Item::new(
+    fn clip(start: i64, len: i64) -> Clip {
+        Clip::new(
             "i",
             TimePosition::from_samples(start),
             TimeDuration::from_samples(len),
-            ItemSource::Empty,
+            ClipSource::Empty,
         )
         .unwrap()
     }
@@ -728,7 +728,7 @@ mod tests {
         assert_eq!(s.loop_range(), Some(range));
         assert_eq!(s.revision(), 4);
         assert_eq!(s.end_position(), TimePosition::ZERO);
-        assert_eq!(s.item_count(), 0);
+        assert_eq!(s.clip_count(), 0);
     }
 
     #[test]
@@ -777,116 +777,116 @@ mod tests {
     }
 
     #[test]
-    fn items_stay_sorted_and_move_between_tracks() {
+    fn clips_stay_sorted_and_move_between_tracks() {
         let mut s = Session::new("t", R);
         let a = s.add_track("a", TrackKind::Audio);
         let b = s.add_track("b", TrackKind::Audio);
         let bus = s.add_track("bus", TrackKind::Bus);
-        let late = s.add_item(a, item(1_000, 100)).unwrap();
-        let early = s.add_item(a, item(0, 100)).unwrap();
+        let late = s.add_clip(a, clip(1_000, 100)).unwrap();
+        let early = s.add_clip(a, clip(0, 100)).unwrap();
         assert!(late < early);
         assert_eq!(
             s.track(a)
                 .unwrap()
-                .items()
+                .clips()
                 .iter()
-                .map(Item::id)
+                .map(Clip::id)
                 .collect::<Vec<_>>(),
             [early, late]
         );
-        assert_eq!(s.item_track(late).unwrap(), a);
-        assert_eq!(s.item_count(), 2);
+        assert_eq!(s.clip_track(late).unwrap(), a);
+        assert_eq!(s.clip_count(), 2);
         assert_eq!(s.end_position().samples(), 1_100);
 
-        s.move_item(early, TimePosition::from_samples(5_000))
+        s.move_clip(early, TimePosition::from_samples(5_000))
             .unwrap();
-        assert_eq!(s.track(a).unwrap().items()[1].id(), early);
+        assert_eq!(s.track(a).unwrap().clips()[1].id(), early);
         assert_eq!(s.end_position().samples(), 5_100);
 
-        s.move_item_to_track(early, b).unwrap();
-        assert_eq!(s.item_track(early).unwrap(), b);
-        assert_eq!(s.track(a).unwrap().items().len(), 1);
-        s.move_item_to_track(early, b).unwrap(); // same track: no-op
-        assert!(s.move_item_to_track(early, bus).is_err());
-        assert!(s.add_item(bus, item(0, 1)).is_err());
+        s.move_clip_to_track(early, b).unwrap();
+        assert_eq!(s.clip_track(early).unwrap(), b);
+        assert_eq!(s.track(a).unwrap().clips().len(), 1);
+        s.move_clip_to_track(early, b).unwrap(); // same track: no-op
+        assert!(s.move_clip_to_track(early, bus).is_err());
+        assert!(s.add_clip(bus, clip(0, 1)).is_err());
 
-        s.resize_item(late, TimeDuration::from_samples(10)).unwrap();
-        assert_eq!(s.item(late).unwrap().end().samples(), 1_010);
-        assert!(s.resize_item(late, TimeDuration::ZERO).is_err());
-        s.item_mut(late).unwrap().muted = true;
-        assert!(s.item(late).unwrap().muted);
+        s.resize_clip(late, TimeDuration::from_samples(10)).unwrap();
+        assert_eq!(s.clip(late).unwrap().end().samples(), 1_010);
+        assert!(s.resize_clip(late, TimeDuration::ZERO).is_err());
+        s.clip_mut(late).unwrap().muted = true;
+        assert!(s.clip(late).unwrap().muted);
 
-        let (from, removed) = s.remove_item(late).unwrap();
+        let (from, removed) = s.remove_clip(late).unwrap();
         assert_eq!(from, a);
         assert_eq!(removed.id(), late);
-        assert!(s.item(late).is_err());
-        assert!(s.remove_item(late).is_err());
-        assert!(s.move_item(late, TimePosition::ZERO).is_err());
+        assert!(s.clip(late).is_err());
+        assert!(s.remove_clip(late).is_err());
+        assert!(s.move_clip(late, TimePosition::ZERO).is_err());
         // Restore under the same id; duplicates are rejected.
-        s.add_item(a, removed.clone()).unwrap();
-        assert!(s.add_item(b, removed).is_err());
-        // Removing a track takes its items along; their ids stay unique.
+        s.add_clip(a, removed.clone()).unwrap();
+        assert!(s.add_clip(b, removed).is_err());
+        // Removing a track takes its clips along; their ids stay unique.
         let t = s.remove_track(a).unwrap();
-        assert_eq!(t.items().len(), 1);
-        assert!(s.item(late).is_err());
+        assert_eq!(t.clips().len(), 1);
+        assert!(s.clip(late).is_err());
         s.insert_track(0, t).unwrap();
-        assert!(s.item(late).is_ok());
+        assert!(s.clip(late).is_ok());
     }
 
     #[test]
-    fn insert_track_validates_item_ids() {
+    fn insert_track_validates_clip_ids() {
         let mut s = Session::new("t", R);
         let a = s.add_track("a", TrackKind::Audio);
-        let existing = s.add_item(a, item(0, 10)).unwrap();
+        let existing = s.add_clip(a, clip(0, 10)).unwrap();
         let mut t = Track::new("dup", TrackKind::Audio);
-        t.items.push(
-            Item::with_id(
+        t.clips.push(
+            Clip::with_id(
                 existing,
                 "x",
                 TimePosition::ZERO,
                 TimeDuration::from_samples(1),
-                ItemSource::Empty,
+                ClipSource::Empty,
             )
             .unwrap(),
         );
         assert!(s.insert_track(0, t).is_err());
         let mut t = Track::new("dup2", TrackKind::Audio);
         let id = ClipId::from_raw(77);
-        t.items.push(
-            Item::with_id(
+        t.clips.push(
+            Clip::with_id(
                 id,
                 "x",
                 TimePosition::ZERO,
                 TimeDuration::from_samples(1),
-                ItemSource::Empty,
+                ClipSource::Empty,
             )
             .unwrap(),
         );
-        t.items.push(
-            Item::with_id(
+        t.clips.push(
+            Clip::with_id(
                 id,
                 "y",
                 TimePosition::ZERO,
                 TimeDuration::from_samples(1),
-                ItemSource::Empty,
+                ClipSource::Empty,
             )
             .unwrap(),
         );
         assert!(s.insert_track(0, t).is_err());
         let mut t = Track::new("ok", TrackKind::Audio);
-        t.items.push(item(5, 1));
-        t.items.push(
-            Item::with_id(
+        t.clips.push(clip(5, 1));
+        t.clips.push(
+            Clip::with_id(
                 id,
                 "x",
                 TimePosition::ZERO,
                 TimeDuration::from_samples(1),
-                ItemSource::Empty,
+                ClipSource::Empty,
             )
             .unwrap(),
         );
         let tid = s.insert_track(0, t).unwrap();
-        let ids: Vec<_> = s.track(tid).unwrap().items().iter().map(Item::id).collect();
+        let ids: Vec<_> = s.track(tid).unwrap().clips().iter().map(Clip::id).collect();
         assert_eq!(ids[0], id, "sorted by start");
         assert!(ids[1].is_valid() && ids[1] != id);
         assert!(s.next_raw_id() > 77);

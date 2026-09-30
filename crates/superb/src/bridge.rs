@@ -8,7 +8,7 @@
 //! the document onto the atomics, and mirrors the document's routing
 //! (track → bus outputs, sends) onto the mixer topology.
 //!
-//! Item sources (players, synths) stay with [`crate::playback`] — the
+//! Clip sources (players, synths) stay with [`crate::playback`] — the
 //! bridge only deals with strips, buses, outputs and sends.
 
 use superb_core::{BusId, Result, SendId, TrackId};

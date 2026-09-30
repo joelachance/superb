@@ -1,10 +1,10 @@
 //! Undoable edits of a [`Session`], for use with
 //! [`superb_undo::UndoStack<Session>`].
 //!
-//! Structural commands (`AddTrack`, `RemoveItem`, ...) restore removed
+//! Structural commands (`AddTrack`, `RemoveClip`, ...) restore removed
 //! objects under their original IDs and positions, so IDs held by the UI
-//! stay valid across undo/redo. Drag-style commands (`MoveItem`,
-//! `ResizeItem`, `MoveMarker`, `SetTempo`, `SetLoopRange` and the
+//! stay valid across undo/redo. Drag-style commands (`MoveClip`,
+//! `ResizeClip`, `MoveMarker`, `SetTempo`, `SetLoopRange` and the
 //! property helpers) carry a [`CoalesceKey`] and merge into one step.
 //!
 //! Allocate IDs up front so the caller knows them before the command is
@@ -12,8 +12,8 @@
 //!
 //! ```
 //! use superb_core::{SampleRate, TimeDuration, TimePosition};
-//! use superb_session::commands::{AddItem, AddTrack, MoveItem};
-//! use superb_session::{Item, ItemSource, Session, Track, TrackKind};
+//! use superb_session::commands::{AddClip, AddTrack, MoveClip};
+//! use superb_session::{Clip, ClipSource, Session, Track, TrackKind};
 //! use superb_undo::UndoStack;
 //!
 //! let mut session = Session::new("demo", SampleRate::HZ_48K);
@@ -23,23 +23,23 @@
 //! history.push(&mut session, AddTrack::new(Track::with_id(track, "vox", TrackKind::Audio))).unwrap();
 //!
 //! let clip = session.allocate_clip_id();
-//! let item = Item::with_id(clip, "take 1", TimePosition::ZERO, TimeDuration::from_samples(1_000), ItemSource::Empty).unwrap();
-//! history.push(&mut session, AddItem::new(track, item)).unwrap();
+//! let take = Clip::with_id(clip, "take 1", TimePosition::ZERO, TimeDuration::from_samples(1_000), ClipSource::Empty).unwrap();
+//! history.push(&mut session, AddClip::new(track, take)).unwrap();
 //!
 //! // A drag: many small moves, one undo step.
 //! for x in [100, 200, 300] {
-//!     history.push(&mut session, MoveItem::new(clip, TimePosition::from_samples(x))).unwrap();
+//!     history.push(&mut session, MoveClip::new(clip, TimePosition::from_samples(x))).unwrap();
 //! }
 //! history.seal();
 //! assert_eq!(history.undo_len(), 3);
-//! assert_eq!(session.item(clip).unwrap().start().samples(), 300);
+//! assert_eq!(session.clip(clip).unwrap().start().samples(), 300);
 //!
 //! history.undo(&mut session).unwrap();
-//! assert_eq!(session.item(clip).unwrap().start().samples(), 0);
+//! assert_eq!(session.clip(clip).unwrap().start().samples(), 0);
 //! history.undo(&mut session).unwrap();
-//! assert!(session.item(clip).is_err());
+//! assert!(session.clip(clip).is_err());
 //! history.redo(&mut session).unwrap();
-//! assert!(session.item(clip).is_ok(), "restored under the same id");
+//! assert!(session.clip(clip).is_ok(), "restored under the same id");
 //! ```
 
 use superb_core::{
@@ -49,7 +49,7 @@ use superb_core::{
 use superb_transport::LoopRange;
 use superb_undo::{CoalesceKey, Command, PropertyEdit};
 
-use crate::{Item, Marker, Session, Track, TrackKind, TrackSend};
+use crate::{Clip, Marker, Session, Track, TrackKind, TrackSend};
 
 /// `kind` values of the [`CoalesceKey`]s used by this module.
 pub mod keys {
@@ -69,16 +69,16 @@ pub mod keys {
     pub const TRACK_ARMED: u64 = 15;
     /// [`set_track_color`](super::set_track_color).
     pub const TRACK_COLOR: u64 = 16;
-    /// [`MoveItem`](super::MoveItem).
-    pub const ITEM_MOVE: u64 = 20;
-    /// [`ResizeItem`](super::ResizeItem).
-    pub const ITEM_RESIZE: u64 = 21;
-    /// [`set_item_name`](super::set_item_name).
-    pub const ITEM_NAME: u64 = 22;
-    /// [`set_item_gain_db`](super::set_item_gain_db).
-    pub const ITEM_GAIN: u64 = 23;
-    /// [`set_item_mute`](super::set_item_mute).
-    pub const ITEM_MUTE: u64 = 24;
+    /// [`MoveClip`](super::MoveClip).
+    pub const CLIP_MOVE: u64 = 20;
+    /// [`ResizeClip`](super::ResizeClip).
+    pub const CLIP_RESIZE: u64 = 21;
+    /// [`set_clip_name`](super::set_clip_name).
+    pub const CLIP_NAME: u64 = 22;
+    /// [`set_clip_gain_db`](super::set_clip_gain_db).
+    pub const CLIP_GAIN: u64 = 23;
+    /// [`set_clip_mute`](super::set_clip_mute).
+    pub const CLIP_MUTE: u64 = 24;
     /// [`MoveMarker`](super::MoveMarker).
     pub const MARKER_MOVE: u64 = 30;
     /// [`set_marker_name`](super::set_marker_name).
@@ -159,7 +159,7 @@ impl Command<Session> for AddTrack {
     }
 }
 
-/// Removes a track with its items and sends; undo restores it at its old
+/// Removes a track with its clips and sends; undo restores it at its old
 /// position. Removing a bus also detaches the tracks and sends routed into
 /// it (see [`Session::remove_track`]); undo re-attaches them.
 pub struct RemoveTrack {
@@ -356,93 +356,93 @@ impl Command<Session> for RemoveSend {
 }
 
 // ---------------------------------------------------------------------------
-// Items
+// Clips
 // ---------------------------------------------------------------------------
 
-/// Adds an item to a track.
-pub struct AddItem {
+/// Adds an clip to a track.
+pub struct AddClip {
     track: TrackId,
-    item: Option<Item>,
+    clip: Option<Clip>,
     id: ClipId,
 }
 
-impl AddItem {
-    /// Creates the command. Give the item a pre-allocated ID
+impl AddClip {
+    /// Creates the command. Give the clip a pre-allocated ID
     /// (`Session::allocate_clip_id`) to know it before pushing.
-    pub fn new(track: TrackId, item: Item) -> Self {
+    pub fn new(track: TrackId, clip: Clip) -> Self {
         Self {
             track,
-            id: item.id(),
-            item: Some(item),
+            id: clip.id(),
+            clip: Some(clip),
         }
     }
 
-    /// The item's ID (valid once applied, or from the start if pre-allocated).
+    /// The clip's ID (valid once applied, or from the start if pre-allocated).
     pub fn id(&self) -> ClipId {
         self.id
     }
 }
 
-impl Command<Session> for AddItem {
+impl Command<Session> for AddClip {
     fn label(&self) -> &str {
-        "Add item"
+        "Add clip"
     }
 
     fn apply(&mut self, session: &mut Session) -> Result<()> {
-        let item = self.item.as_ref().ok_or_else(not_applied)?.clone();
-        self.id = session.add_item(self.track, item)?;
-        self.item = None;
+        let clip = self.clip.as_ref().ok_or_else(not_applied)?.clone();
+        self.id = session.add_clip(self.track, clip)?;
+        self.clip = None;
         Ok(())
     }
 
     fn revert(&mut self, session: &mut Session) -> Result<()> {
-        let (track, item) = session.remove_item(self.id)?;
+        let (track, clip) = session.remove_clip(self.id)?;
         self.track = track;
-        self.item = Some(item);
+        self.clip = Some(clip);
         Ok(())
     }
 }
 
-/// Removes an item; undo puts it back on its track.
-pub struct RemoveItem {
+/// Removes an clip; undo puts it back on its track.
+pub struct RemoveClip {
     id: ClipId,
-    removed: Option<(TrackId, Item)>,
+    removed: Option<(TrackId, Clip)>,
 }
 
-impl RemoveItem {
+impl RemoveClip {
     /// Creates the command.
     pub fn new(id: ClipId) -> Self {
         Self { id, removed: None }
     }
 }
 
-impl Command<Session> for RemoveItem {
+impl Command<Session> for RemoveClip {
     fn label(&self) -> &str {
-        "Remove item"
+        "Remove clip"
     }
 
     fn apply(&mut self, session: &mut Session) -> Result<()> {
-        self.removed = Some(session.remove_item(self.id)?);
+        self.removed = Some(session.remove_clip(self.id)?);
         Ok(())
     }
 
     fn revert(&mut self, session: &mut Session) -> Result<()> {
-        let (track, item) = self.removed.take().ok_or_else(not_applied)?;
-        session.add_item(track, item)?;
+        let (track, clip) = self.removed.take().ok_or_else(not_applied)?;
+        session.add_clip(track, clip)?;
         Ok(())
     }
 }
 
-/// Moves an item in time and optionally to another track. Coalesces.
-pub struct MoveItem {
+/// Moves an clip in time and optionally to another track. Coalesces.
+pub struct MoveClip {
     id: ClipId,
     start: TimePosition,
     track: Option<TrackId>,
     from: Option<(TrackId, TimePosition)>,
 }
 
-impl MoveItem {
-    /// Moves the item so it starts at `start`.
+impl MoveClip {
+    /// Moves the clip so it starts at `start`.
     pub fn new(id: ClipId, start: TimePosition) -> Self {
         Self {
             id,
@@ -452,37 +452,37 @@ impl MoveItem {
         }
     }
 
-    /// Also moves the item to `track`.
+    /// Also moves the clip to `track`.
     pub fn to_track(mut self, track: TrackId) -> Self {
         self.track = Some(track);
         self
     }
 }
 
-impl Command<Session> for MoveItem {
+impl Command<Session> for MoveClip {
     fn label(&self) -> &str {
-        "Move item"
+        "Move clip"
     }
 
     fn apply(&mut self, session: &mut Session) -> Result<()> {
-        let track = session.item_track(self.id)?;
-        let start = session.item(self.id)?.start();
+        let track = session.clip_track(self.id)?;
+        let start = session.clip(self.id)?.start();
         if let Some(t) = self.track {
-            session.move_item_to_track(self.id, t)?;
+            session.move_clip_to_track(self.id, t)?;
         }
-        session.move_item(self.id, self.start)?;
+        session.move_clip(self.id, self.start)?;
         self.from = Some((track, start));
         Ok(())
     }
 
     fn revert(&mut self, session: &mut Session) -> Result<()> {
         let (track, start) = self.from.ok_or_else(not_applied)?;
-        session.move_item_to_track(self.id, track)?;
-        session.move_item(self.id, start)
+        session.move_clip_to_track(self.id, track)?;
+        session.move_clip(self.id, start)
     }
 
     fn coalesce_key(&self) -> Option<CoalesceKey> {
-        Some(CoalesceKey::new(keys::ITEM_MOVE, self.id.raw()))
+        Some(CoalesceKey::new(keys::CLIP_MOVE, self.id.raw()))
     }
 
     fn merge(
@@ -498,14 +498,14 @@ impl Command<Session> for MoveItem {
     }
 }
 
-/// Changes an item's length. Coalesces.
-pub struct ResizeItem {
+/// Changes an clip's length. Coalesces.
+pub struct ResizeClip {
     id: ClipId,
     length: TimeDuration,
     from: Option<TimeDuration>,
 }
 
-impl ResizeItem {
+impl ResizeClip {
     /// Creates the command.
     pub fn new(id: ClipId, length: TimeDuration) -> Self {
         Self {
@@ -516,24 +516,24 @@ impl ResizeItem {
     }
 }
 
-impl Command<Session> for ResizeItem {
+impl Command<Session> for ResizeClip {
     fn label(&self) -> &str {
-        "Resize item"
+        "Resize clip"
     }
 
     fn apply(&mut self, session: &mut Session) -> Result<()> {
-        let before = session.item(self.id)?.length();
-        session.resize_item(self.id, self.length)?;
+        let before = session.clip(self.id)?.length();
+        session.resize_clip(self.id, self.length)?;
         self.from = Some(before);
         Ok(())
     }
 
     fn revert(&mut self, session: &mut Session) -> Result<()> {
-        session.resize_item(self.id, self.from.ok_or_else(not_applied)?)
+        session.resize_clip(self.id, self.from.ok_or_else(not_applied)?)
     }
 
     fn coalesce_key(&self) -> Option<CoalesceKey> {
-        Some(CoalesceKey::new(keys::ITEM_RESIZE, self.id.raw()))
+        Some(CoalesceKey::new(keys::CLIP_RESIZE, self.id.raw()))
     }
 
     fn merge(
@@ -813,22 +813,22 @@ fn track_property<V: Clone + Send + Sync + 'static>(
     )
 }
 
-fn item_property<V: Clone + Send + Sync + 'static>(
+fn clip_property<V: Clone + Send + Sync + 'static>(
     label: &'static str,
     kind: u64,
     id: ClipId,
     value: V,
-    get: impl Fn(&Item) -> V + Send + Sync + 'static,
-    set: impl Fn(&mut Item, V) + Send + Sync + 'static,
+    get: impl Fn(&Clip) -> V + Send + Sync + 'static,
+    set: impl Fn(&mut Clip, V) + Send + Sync + 'static,
 ) -> PropertyEdit<Session, V> {
     let fallback = value.clone();
     PropertyEdit::new(
         label,
         Some(CoalesceKey::new(kind, id.raw())),
         value,
-        move |s: &Session| s.item(id).map(&get).unwrap_or_else(|_| fallback.clone()),
+        move |s: &Session| s.clip(id).map(&get).unwrap_or_else(|_| fallback.clone()),
         move |s: &mut Session, v| {
-            set(s.item_mut(id)?, v);
+            set(s.clip_mut(id)?, v);
             Ok(())
         },
     )
@@ -1025,11 +1025,11 @@ pub fn set_send_pre_fader(id: SendId, pre_fader: bool) -> PropertyEdit<Session, 
     )
 }
 
-/// Renames an item.
-pub fn set_item_name(id: ClipId, name: impl Into<String>) -> PropertyEdit<Session, String> {
-    item_property(
-        "Rename item",
-        keys::ITEM_NAME,
+/// Renames an clip.
+pub fn set_clip_name(id: ClipId, name: impl Into<String>) -> PropertyEdit<Session, String> {
+    clip_property(
+        "Rename clip",
+        keys::CLIP_NAME,
         id,
         name.into(),
         |i| i.name.clone(),
@@ -1037,11 +1037,11 @@ pub fn set_item_name(id: ClipId, name: impl Into<String>) -> PropertyEdit<Sessio
     )
 }
 
-/// Sets an item's gain in dB.
-pub fn set_item_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Session, f32> {
-    item_property(
-        "Set item gain",
-        keys::ITEM_GAIN,
+/// Sets an clip's gain in dB.
+pub fn set_clip_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Session, f32> {
+    clip_property(
+        "Set clip gain",
+        keys::CLIP_GAIN,
         id,
         gain_db,
         |i| i.gain_db,
@@ -1049,11 +1049,11 @@ pub fn set_item_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Session, f32> 
     )
 }
 
-/// Mutes or unmutes an item.
-pub fn set_item_mute(id: ClipId, muted: bool) -> PropertyEdit<Session, bool> {
-    item_property(
-        "Mute item",
-        keys::ITEM_MUTE,
+/// Mutes or unmutes an clip.
+pub fn set_clip_mute(id: ClipId, muted: bool) -> PropertyEdit<Session, bool> {
+    clip_property(
+        "Mute clip",
+        keys::CLIP_MUTE,
         id,
         muted,
         |i| i.muted,
@@ -1084,19 +1084,19 @@ pub fn set_marker_name(id: MarkerId, name: impl Into<String>) -> PropertyEdit<Se
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ItemSource, TrackKind};
+    use crate::{ClipSource, TrackKind};
     use superb_core::SampleRate;
     use superb_undo::UndoStack;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
-    fn item(id: ClipId, start: i64, len: i64) -> Item {
-        Item::with_id(
+    fn make_clip(id: ClipId, start: i64, len: i64) -> Clip {
+        Clip::with_id(
             id,
             "i",
             TimePosition::from_samples(start),
             TimeDuration::from_samples(len),
-            ItemSource::Empty,
+            ClipSource::Empty,
         )
         .unwrap()
     }
@@ -1105,7 +1105,7 @@ mod tests {
         let mut s = Session::new("t", R);
         let t = s.add_track("a", TrackKind::Audio);
         let c = s.allocate_clip_id();
-        s.add_item(t, item(c, 100, 50)).unwrap();
+        s.add_clip(t, make_clip(c, 100, 50)).unwrap();
         (s, UndoStack::new(), t, c)
     }
 
@@ -1139,13 +1139,13 @@ mod tests {
         .unwrap();
         assert_eq!(s.tracks().last().unwrap().name, "d");
 
-        // Remove restores the track with its items at the same index.
+        // Remove restores the track with its clips at the same index.
         h.push(&mut s, RemoveTrack::new(a)).unwrap();
-        assert!(s.item(clip).is_err());
+        assert!(s.clip(clip).is_err());
         assert_eq!(h.undo_label(), Some("Remove track"));
         h.undo(&mut s).unwrap();
         assert_eq!(s.track_index(a).unwrap(), 1);
-        assert_eq!(s.item_track(clip).unwrap(), a);
+        assert_eq!(s.clip_track(clip).unwrap(), a);
         h.redo(&mut s).unwrap();
         assert!(s.track(a).is_err());
 
@@ -1184,77 +1184,77 @@ mod tests {
     }
 
     #[test]
-    fn add_remove_move_resize_items() {
+    fn add_remove_move_resize_clips() {
         let (mut s, mut h, a, clip) = base();
         let b = s.add_track("b", TrackKind::Audio);
         let c2 = s.allocate_clip_id();
-        let cmd = AddItem::new(b, item(c2, 0, 10));
+        let cmd = AddClip::new(b, make_clip(c2, 0, 10));
         assert_eq!(cmd.id(), c2);
         h.push(&mut s, cmd).unwrap();
-        assert_eq!(s.item_track(c2).unwrap(), b);
+        assert_eq!(s.clip_track(c2).unwrap(), b);
         h.undo(&mut s).unwrap();
-        assert!(s.item(c2).is_err());
+        assert!(s.clip(c2).is_err());
         h.redo(&mut s).unwrap();
-        assert_eq!(s.item_track(c2).unwrap(), b);
+        assert_eq!(s.clip_track(c2).unwrap(), b);
 
         // Move coalesces; track change is remembered through the merge.
-        h.push(&mut s, MoveItem::new(clip, TimePosition::from_samples(200)))
+        h.push(&mut s, MoveClip::new(clip, TimePosition::from_samples(200)))
             .unwrap();
         h.push(
             &mut s,
-            MoveItem::new(clip, TimePosition::from_samples(300)).to_track(b),
+            MoveClip::new(clip, TimePosition::from_samples(300)).to_track(b),
         )
         .unwrap();
-        h.push(&mut s, MoveItem::new(clip, TimePosition::from_samples(400)))
+        h.push(&mut s, MoveClip::new(clip, TimePosition::from_samples(400)))
             .unwrap();
-        assert_eq!(h.undo_label(), Some("Move item"));
-        assert_eq!(s.item_track(clip).unwrap(), b);
-        assert_eq!(s.item(clip).unwrap().start().samples(), 400);
+        assert_eq!(h.undo_label(), Some("Move clip"));
+        assert_eq!(s.clip_track(clip).unwrap(), b);
+        assert_eq!(s.clip(clip).unwrap().start().samples(), 400);
         assert_eq!(
             s.track(b)
                 .unwrap()
-                .items()
+                .clips()
                 .iter()
-                .map(Item::id)
+                .map(Clip::id)
                 .collect::<Vec<_>>(),
             [c2, clip]
         );
         h.undo(&mut s).unwrap();
-        assert_eq!(s.item_track(clip).unwrap(), a);
-        assert_eq!(s.item(clip).unwrap().start().samples(), 100);
+        assert_eq!(s.clip_track(clip).unwrap(), a);
+        assert_eq!(s.clip(clip).unwrap().start().samples(), 100);
         h.redo(&mut s).unwrap();
-        assert_eq!(s.item_track(clip).unwrap(), b);
-        assert_eq!(s.item(clip).unwrap().start().samples(), 400);
+        assert_eq!(s.clip_track(clip).unwrap(), b);
+        assert_eq!(s.clip(clip).unwrap().start().samples(), 400);
         h.seal();
 
         h.push(
             &mut s,
-            ResizeItem::new(clip, TimeDuration::from_samples(60)),
+            ResizeClip::new(clip, TimeDuration::from_samples(60)),
         )
         .unwrap();
         h.push(
             &mut s,
-            ResizeItem::new(clip, TimeDuration::from_samples(70)),
+            ResizeClip::new(clip, TimeDuration::from_samples(70)),
         )
         .unwrap();
         assert!(h
-            .push(&mut s, ResizeItem::new(clip, TimeDuration::ZERO))
+            .push(&mut s, ResizeClip::new(clip, TimeDuration::ZERO))
             .is_err());
-        assert_eq!(s.item(clip).unwrap().length().samples(), 70);
+        assert_eq!(s.clip(clip).unwrap().length().samples(), 70);
         h.undo(&mut s).unwrap();
-        assert_eq!(s.item(clip).unwrap().length().samples(), 50);
+        assert_eq!(s.clip(clip).unwrap().length().samples(), 50);
         h.redo(&mut s).unwrap();
-        assert_eq!(s.item(clip).unwrap().length().samples(), 70);
+        assert_eq!(s.clip(clip).unwrap().length().samples(), 70);
 
-        h.push(&mut s, RemoveItem::new(clip)).unwrap();
-        assert!(s.item(clip).is_err());
+        h.push(&mut s, RemoveClip::new(clip)).unwrap();
+        assert!(s.clip(clip).is_err());
         h.undo(&mut s).unwrap();
-        assert_eq!(s.item_track(clip).unwrap(), b);
-        assert_eq!(s.item(clip).unwrap().length().samples(), 70);
+        assert_eq!(s.clip_track(clip).unwrap(), b);
+        assert_eq!(s.clip(clip).unwrap().length().samples(), 70);
         assert!(h
             .push(
                 &mut s,
-                MoveItem::new(ClipId::from_raw(999), TimePosition::ZERO)
+                MoveClip::new(ClipId::from_raw(999), TimePosition::ZERO)
             )
             .is_err());
     }
@@ -1365,9 +1365,9 @@ mod tests {
         h.push(&mut s, set_track_solo(a, true)).unwrap();
         h.push(&mut s, set_track_armed(a, true)).unwrap();
         h.push(&mut s, set_track_color(a, Some(0x123456))).unwrap();
-        h.push(&mut s, set_item_name(clip, "take")).unwrap();
-        h.push(&mut s, set_item_gain_db(clip, -2.0)).unwrap();
-        h.push(&mut s, set_item_mute(clip, true)).unwrap();
+        h.push(&mut s, set_clip_name(clip, "take")).unwrap();
+        h.push(&mut s, set_clip_gain_db(clip, -2.0)).unwrap();
+        h.push(&mut s, set_clip_mute(clip, true)).unwrap();
         let t = s.track(a).unwrap();
         assert_eq!(
             (
@@ -1381,7 +1381,7 @@ mod tests {
             ),
             ("vox", -6.0, -0.5, true, true, true, Some(0x123456))
         );
-        let i = s.item(clip).unwrap();
+        let i = s.clip(clip).unwrap();
         assert_eq!((i.name.as_str(), i.gain_db, i.muted), ("take", -2.0, true));
         assert_eq!(s.name(), "song");
         while h.undo(&mut s).unwrap() {}
@@ -1398,7 +1398,7 @@ mod tests {
             ),
             ("a", 0.0, 0.0, false, false, false, None)
         );
-        let i = s.item(clip).unwrap();
+        let i = s.clip(clip).unwrap();
         assert_eq!((i.name.as_str(), i.gain_db, i.muted), ("i", 0.0, false));
         assert_eq!(s.name(), "t");
         while h.redo(&mut s).unwrap() {}
@@ -1408,7 +1408,7 @@ mod tests {
             .push(&mut s, set_track_name(TrackId::from_raw(999), "x"))
             .is_err());
         assert!(h
-            .push(&mut s, set_item_mute(ClipId::from_raw(999), true))
+            .push(&mut s, set_clip_mute(ClipId::from_raw(999), true))
             .is_err());
         assert!(h
             .push(&mut s, set_marker_name(MarkerId::from_raw(999), "x"))
@@ -1522,18 +1522,19 @@ mod tests {
         )
         .unwrap();
         let c = s.allocate_clip_id();
-        h.push(&mut s, AddItem::new(b, item(c, 100, 50))).unwrap();
+        h.push(&mut s, AddClip::new(b, make_clip(c, 100, 50)))
+            .unwrap();
         h.push(&mut s, set_track_color(b, Some(1))).unwrap();
         assert!(h.end_group());
         assert_eq!(h.undo_len(), 1);
         assert_eq!(h.undo_label(), Some("Duplicate track"));
         h.undo(&mut s).unwrap();
         assert_eq!(s.track_count(), 1);
-        assert!(s.item(c).is_err());
-        assert!(s.item(clip).is_ok());
+        assert!(s.clip(c).is_err());
+        assert!(s.clip(clip).is_ok());
         h.redo(&mut s).unwrap();
         assert_eq!(s.track(b).unwrap().color, Some(1));
-        assert_eq!(s.item_track(c).unwrap(), b);
+        assert_eq!(s.clip_track(c).unwrap(), b);
         let _ = a;
     }
 }

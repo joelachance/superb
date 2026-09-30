@@ -7,7 +7,7 @@ The document model: what a project *is*.
 `superb-session` depends on `superb-core`, `superb-transport` (for
 `TempoMap` and `LoopRange`), `superb-undo`, and `serde` + `serde_json` for
 snapshots. It holds the editable description of a
-project — tracks, items (clips), markers, tempo map, loop range — and
+project — tracks, clips, markers, tempo map, loop range — and
 nothing about rendering. Turning a `Session` into a `superb-mixer` /
 `superb-graph` topology is the application's (or a later crate's) job; the
 session is deliberately free of `Arc<AtomicF32>` handles and audio-thread
@@ -21,7 +21,7 @@ concerns, so it can be cloned, diffed, serialised and undone freely.
   objects can be re-inserted under their original IDs (that is how undo
   works).
 * `Track` — `TrackKind::{Audio, Midi, Bus}`, name, colour, gain/pan,
-  mute/solo/arm, start-sorted `Item`s (`Bus` tracks hold no items), an
+  mute/solo/arm, start-sorted `Clip`s (`Bus` tracks hold no clips), an
   `output()` (the bus track it feeds, `None` = master) and `sends()`.
 * `TrackSend` — `SendId`, destination bus track (fixed at creation),
   `level_db`, `pre_fader`, `enabled`. Only audio/MIDI tracks send; only
@@ -29,28 +29,28 @@ concerns, so it can be cloned, diffed, serialised and undone freely.
   the target kind and reject bus → bus cycles; removing a bus detaches
   everything routed into it (`tracks_routed_to` / `sends_to` let you
   capture that first — `commands::RemoveTrack` does).
-* `Item` — a `ClipId`, `start: TimePosition`, `length: TimeDuration` (> 0),
-  an `ItemSource::{Empty, Audio { path, offset }, Midi { notes }}`, gain,
-  mute, fades. `MidiNote` content is in beats relative to the item start.
+* `Clip` — a `ClipId`, `start: TimePosition`, `length: TimeDuration` (> 0),
+  an `ClipSource::{Empty, Audio { path, offset }, Midi { notes }}`, gain,
+  mute, fades. `MidiNote` content is in beats relative to the clip start.
 * `Marker` — `MarkerId`, name, position, colour.
-* `SessionSnapshot` (+ `TrackSnapshot`, `ItemSnapshot`, `MarkerSnapshot`,
+* `SessionSnapshot` (+ `TrackSnapshot`, `ClipSnapshot`, `MarkerSnapshot`,
   `TempoSnapshot`) — primitive-only, `serde` types with a `format_version`.
   `Session::snapshot` / `from_snapshot` / `to_json` / `from_json` /
   `save` / `load`.
 * `commands` — `superb_undo::Command<Session>` implementations: `AddTrack`,
   `RemoveTrack`, `MoveTrack`, `SetTrackOutput`, `AddSend`, `RemoveSend`,
-  `AddItem`, `RemoveItem`, `MoveItem`, `ResizeItem`, `AddMarker`,
+  `AddClip`, `RemoveClip`, `MoveClip`, `ResizeClip`, `AddMarker`,
   `RemoveMarker`, `MoveMarker`, `SetTempo`, `SetLoopRange`, plus
   `PropertyEdit` helpers (`set_track_gain_db`, `set_track_pan`,
-  `set_item_name`, `set_send_level_db`, `set_send_enabled`,
+  `set_clip_name`, `set_send_level_db`, `set_send_enabled`,
   `set_send_pre_fader`, ...). Drag-style commands coalesce.
 
 ## Usage
 
 ```rust
 use superb_core::{SampleRate, TimeDuration, TimePosition};
-use superb_session::commands::{AddItem, AddTrack, MoveItem};
-use superb_session::{Item, ItemSource, Session, Track, TrackKind};
+use superb_session::commands::{AddClip, AddTrack, MoveClip};
+use superb_session::{Clip, ClipSource, Session, Track, TrackKind};
 use superb_undo::UndoStack;
 
 let mut session = Session::new("demo", SampleRate::HZ_48K);
@@ -61,20 +61,20 @@ let track = session.allocate_track_id();
 history.push(&mut session, AddTrack::new(Track::with_id(track, "vox", TrackKind::Audio))).unwrap();
 
 let clip = session.allocate_clip_id();
-let item = Item::with_id(clip, "take 1", TimePosition::ZERO, TimeDuration::from_samples(1_000), ItemSource::Empty).unwrap();
-history.push(&mut session, AddItem::new(track, item)).unwrap();
+let take = Clip::with_id(clip, "take 1", TimePosition::ZERO, TimeDuration::from_samples(1_000), ClipSource::Empty).unwrap();
+history.push(&mut session, AddClip::new(track, take)).unwrap();
 
 // A drag: many small moves, one undo step.
 for x in [100, 200, 300] {
-    history.push(&mut session, MoveItem::new(clip, TimePosition::from_samples(x))).unwrap();
+    history.push(&mut session, MoveClip::new(clip, TimePosition::from_samples(x))).unwrap();
 }
 history.seal();
 assert_eq!(history.undo_len(), 3);
 
 history.undo(&mut session).unwrap();                 // back to 0
-history.undo(&mut session).unwrap();                 // item gone
+history.undo(&mut session).unwrap();                 // clip gone
 history.redo(&mut session).unwrap();                 // back under the same ClipId
-assert!(session.item(clip).is_ok());
+assert!(session.clip(clip).is_ok());
 
 let json = session.to_json().unwrap();
 let copy = Session::from_json(&json).unwrap();
@@ -82,8 +82,8 @@ assert_eq!(copy.snapshot(), session.snapshot());
 ```
 
 Direct (non-undoable) editing uses the same verbs on `Session`:
-`add_track`, `remove_track`, `move_track`, `track_mut`, `add_item`,
-`move_item`, `move_item_to_track`, `resize_item`, `item_mut`,
+`add_track`, `remove_track`, `move_track`, `track_mut`, `add_clip`,
+`move_clip`, `move_clip_to_track`, `resize_clip`, `clip_mut`,
 `add_marker`, `move_marker`, `tempo_map_mut`, `set_loop_range`,
 `set_track_output`, `add_send`, `remove_send`, `send_mut`.
 
@@ -123,12 +123,12 @@ assert_eq!(session.send_track(send).unwrap(), vox);
 `sample_rate_hz`, tempo points (`beat`, `bpm`, `ramp` — the ramp flag is
 optional on read and defaults to `false`) and meters (`bar`,
 `numerator`, `denominator`), loop range as `[start, end)` samples, tracks
-with their items, `output` (raw bus track ID or `null`) and `sends`
+with their clips, `output` (raw bus track ID or `null`) and `sends`
 (`id`, `bus`, `level_db`, `pre_fader`, `enabled`), markers, and `next_id`.
 `output` and `sends` are optional on read (files written before routing
 existed load with master routing and no sends). Loading validates the
-sample rate, tempo/meter values, item lengths, ID uniqueness (IDs of 0
-are rejected), that bus tracks carry no items or sends, that routing
+sample rate, tempo/meter values, clip lengths, ID uniqueness (IDs of 0
+are rejected), that bus tracks carry no clips or sends, that routing
 targets are bus tracks with no bus → bus cycle (routing is applied after
 every track exists, so a track may feed a bus listed later), and refuses
 files with a newer `format_version`. A stale `next_id` is corrected from
@@ -143,14 +143,14 @@ or `superb_graph::live`.
 
 ## Limitations / next
 
-* Items are positioned in samples; there is no "beat-locked" item mode
+* Clips are positioned in samples; there is no "beat-locked" clip mode
   that follows tempo changes (convert through `Session::tempo_map()`).
-* No per-item automation lanes yet (`superb-automation` lanes are not
+* No per-clip automation lanes yet (`superb-automation` lanes are not
   owned by the session).
 * Routing is one output per track plus sends to buses; there are no
   sidechain inputs, no per-send pan, and a send's destination cannot be
   changed in place (remove + add).
-* No project-relative path resolution for `ItemSource::Audio`.
+* No project-relative path resolution for `ClipSource::Audio`.
 
 See `examples/session_undo` for the stack driving a session document,
 saving it as JSON and reloading it.
@@ -159,7 +159,7 @@ saving it as JSON and reloading it.
 
 Mirroring a session into a live [`Mixer`](superb-mixer.md) is handled by
 `superb::bridge::SessionMixerBridge` (separate `TrackId` namespaces,
-`sync` + `apply_routing` + `apply_strip_params`). Playing items onto those strips is
+`sync` + `apply_routing` + `apply_strip_params`). Playing clips onto those strips is
 `superb::playback::{SessionPlayer, render_region, AudioCache}` — offline
 region render first; see `docs/superb.md` and `examples/session_playback`.
 

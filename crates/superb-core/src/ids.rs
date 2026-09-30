@@ -130,7 +130,7 @@ define_id!(
     PortId, "port"
 );
 define_id!(
-    /// Identifies a clip/item on a track.
+    /// Identifies a clip (a placed region of audio or MIDI) on a track.
     ClipId, "clip"
 );
 define_id!(
