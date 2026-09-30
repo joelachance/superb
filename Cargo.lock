@@ -77,13 +77,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
-name = "automation_gain_ramp"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
-
-[[package]]
 name = "bitflags"
 version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -143,13 +136,6 @@ name = "clap-sys"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a76abbdb2907f6fd97fb6bc0b7be96b77d328f2dd9669d1075cc03369ed22154"
-
-[[package]]
-name = "clap_host_scan"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
 
 [[package]]
 name = "combine"
@@ -247,13 +233,6 @@ name = "dasp_sample"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
-
-[[package]]
-name = "decode_bounce"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
 
 [[package]]
 name = "dispatch2"
@@ -479,13 +458,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "live_graph_edit"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
-
-[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -511,20 +483,6 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
-
-[[package]]
-name = "midi_monitor"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
-
-[[package]]
-name = "midi_route"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
 
 [[package]]
 name = "midir"
@@ -768,13 +726,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
-name = "play_sine_device"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
-
-[[package]]
 name = "primal-check"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -954,20 +905,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "session_playback"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
-
-[[package]]
-name = "session_undo"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
-
-[[package]]
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -988,13 +925,6 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
-
-[[package]]
-name = "sine_through_graph"
-version = "0.1.0"
-dependencies = [
- "superb",
-]
 
 [[package]]
 name = "slab"
@@ -1018,129 +948,15 @@ checksum = "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82"
 name = "superb"
 version = "0.1.0"
 dependencies = [
- "superb-automation",
- "superb-buffers",
- "superb-core",
- "superb-graph",
- "superb-io",
- "superb-midi",
- "superb-mixer",
- "superb-plugins",
- "superb-rt",
- "superb-session",
- "superb-transport",
- "superb-undo",
-]
-
-[[package]]
-name = "superb-automation"
-version = "0.1.0"
-dependencies = [
- "superb-core",
- "superb-rt",
-]
-
-[[package]]
-name = "superb-buffers"
-version = "0.1.0"
-dependencies = [
- "dasp_sample",
- "superb-core",
-]
-
-[[package]]
-name = "superb-core"
-version = "0.1.0"
-
-[[package]]
-name = "superb-graph"
-version = "0.1.0"
-dependencies = [
- "superb-buffers",
- "superb-core",
- "superb-midi",
- "superb-rt",
- "superb-transport",
-]
-
-[[package]]
-name = "superb-io"
-version = "0.1.0"
-dependencies = [
- "cpal",
- "rubato",
- "superb-buffers",
- "superb-core",
- "superb-graph",
- "superb-midi",
- "superb-rt",
- "superb-transport",
- "symphonia",
-]
-
-[[package]]
-name = "superb-midi"
-version = "0.1.0"
-dependencies = [
- "midir",
- "superb-core",
- "superb-rt",
-]
-
-[[package]]
-name = "superb-mixer"
-version = "0.1.0"
-dependencies = [
- "superb-buffers",
- "superb-core",
- "superb-graph",
- "superb-midi",
- "superb-rt",
-]
-
-[[package]]
-name = "superb-plugins"
-version = "0.1.0"
-dependencies = [
  "clap-sys",
+ "cpal",
+ "dasp_sample",
  "libloading",
- "superb-buffers",
- "superb-core",
- "superb-graph",
- "superb-midi",
- "superb-rt",
-]
-
-[[package]]
-name = "superb-rt"
-version = "0.1.0"
-dependencies = [
- "superb-core",
-]
-
-[[package]]
-name = "superb-session"
-version = "0.1.0"
-dependencies = [
+ "midir",
+ "rubato",
  "serde",
  "serde_json",
- "superb-core",
- "superb-transport",
- "superb-undo",
-]
-
-[[package]]
-name = "superb-transport"
-version = "0.1.0"
-dependencies = [
- "superb-core",
-]
-
-[[package]]
-name = "superb-undo"
-version = "0.1.0"
-dependencies = [
- "superb-core",
+ "symphonia",
 ]
 
 [[package]]
