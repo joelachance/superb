@@ -412,9 +412,9 @@ mod tests {
         target.set(0.33);
         lane.set_mode(AutomationMode::Write);
         assert_eq!(lane.apply_block(TimePosition::ZERO, 64, false, None), 0);
-        assert!(lane.envelope().is_empty() || lane.envelope().len() == 2); // ramp points only
-                                                                           // Write should not have added a 0.33 point at 0 — wait, envelope already has ramp.
-                                                                           // Ensure no point with value 0.33:
+        // The envelope still holds only the two ramp points: nothing with the
+        // live value 0.33 was recorded while stopped.
+        assert_eq!(lane.envelope().len(), 2);
         assert!(lane
             .envelope()
             .points()

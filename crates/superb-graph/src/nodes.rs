@@ -1076,7 +1076,8 @@ impl Node for ScheduledSynthNode {
             if self.amplitude == 0.0 {
                 return ProcessStatus::Silent;
             }
-            // Stopped but still decaying: silence immediately for v0.
+            // The transport stopped while a note was sounding: cut it rather
+            // than let it ring, so stop always means silence.
             self.reset();
             return ProcessStatus::Silent;
         }

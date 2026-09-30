@@ -9,9 +9,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::entry::clap_plugin_entry;
 use clap_sys::events::{
-    clap_event_header, clap_event_note, clap_event_param_value, clap_input_events,
-    clap_output_events, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_ON, CLAP_EVENT_PARAM_VALUE,
-    CLAP_TRANSPORT_IS_PLAYING,
+    clap_event_note, clap_event_param_value, clap_input_events, clap_output_events,
+    CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_ON, CLAP_EVENT_PARAM_VALUE, CLAP_TRANSPORT_IS_PLAYING,
 };
 use clap_sys::ext::audio_ports::{
     clap_audio_port_info, clap_plugin_audio_ports, CLAP_AUDIO_PORT_IS_MAIN, CLAP_EXT_AUDIO_PORTS,
@@ -509,9 +508,3 @@ pub static TEST_ENTRY: clap_plugin_entry = clap_plugin_entry {
     deinit: Some(entry_deinit),
     get_factory: Some(entry_get_factory),
 };
-
-/// Keeps the unused-header import meaningful for readers of the ABI layout.
-#[allow(dead_code)]
-fn _header_size() -> usize {
-    size_of::<clap_event_header>()
-}

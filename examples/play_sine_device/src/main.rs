@@ -28,13 +28,6 @@ fn main() -> Result<()> {
     let gain = graph.add_node(Box::new(GainNode::new(1.0, 2)));
     graph.connect(osc, gain)?;
     graph.set_output(gain)?;
-    // Placeholder match kept for API exploration (node_mut returns Result).
-    // Behavior unchanged: we discard the Ok arm and never use gain_param.
-    let gain_param = match graph.node_mut(gain) {
-        Ok(_) => None::<()>,
-        Err(e) => return Err(e),
-    };
-    let _ = gain_param;
 
     let mut engine = Engine::new(graph, Transport::new(SampleRate::HZ_48K, 120.0));
     engine.transport_mut().play();

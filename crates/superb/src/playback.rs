@@ -434,11 +434,9 @@ mod tests {
         assert_eq!(audio.frames(), 400);
         // Before the item: silence
         assert!(audio.channel(0)[..100].iter().all(|&s| s == 0.0));
-        // Inside the item: constant 0.25 (centre pan, unity fader, constant-power
-        // pan at centre is -3 dB ≈ 0.707 per side for a mono-style... wait,
-        // buffer is stereo 0.25 both channels; strip constant-power at centre
-        // scales each by cos(0)*0.707... actually ConstantPower at pan 0 applies
-        // equal gain. Peak should be clearly audible and below 0.25 * small headroom.
+        // Inside the item the 0.25 tone is audible. The exact level depends on
+        // the strip's constant-power pan law (−3 dB at centre), so only check
+        // that it is clearly non-zero.
         let mid = &audio.channel(0)[100..300];
         let peak = mid.iter().fold(0.0f32, |m, s| m.max(s.abs()));
         assert!(peak > 0.05, "peak {peak}");

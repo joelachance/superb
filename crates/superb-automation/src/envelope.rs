@@ -220,33 +220,22 @@ impl Envelope {
         true
     }
 
-    /// Builds an envelope from an unsorted list of points (sorted + deduped by time).
-    pub fn from_points(default_value: f32, mut points: Vec<EnvelopePoint>) -> Result<Self> {
-        points.sort_by_key(|p| p.time);
-        // Reject NaN values.
-        for p in &points {
-            if !p.value.is_finite() {
-                return Err(SuperbError::InvalidArgument {
-                    what: "envelope point value",
-                });
-            }
+    /// Builds an envelope from points in any order.
+    ///
+    /// Points are sorted by time. When several points share a time, the one
+    /// that appears last in `points` wins, matching [`upsert`](Self::upsert).
+    /// Fails if any value is NaN or infinite.
+    pub fn from_points(default_value: f32, points: Vec<EnvelopePoint>) -> Result<Self> {
+        if points.iter().any(|p| !p.value.is_finite()) {
+            return Err(SuperbError::InvalidArgument {
+                what: "envelope point value",
+            });
         }
-        // Dedup identical times: keep last.
-        points.dedup_by(|a, b| {
-            if a.time == b.time {
-                // `dedup_by` removes `a` when true; keep later (= b after swap semantics).
-                // Actually dedup_by removes the *first* of the equal pair when the
-                // closure returns true comparing consecutive elements after sort.
-                // We want to keep the last → compare and drop earlier:
-                true
-            } else {
-                false
-            }
-        });
-        Ok(Self {
-            points,
-            default_value,
-        })
+        let mut envelope = Self::new(default_value);
+        for point in points {
+            envelope.upsert(point);
+        }
+        Ok(envelope)
     }
 }
 
@@ -421,6 +410,23 @@ mod tests {
         assert!(env.remove_at(pos(5)));
         assert!(!env.remove_at(pos(5)));
         assert!(env.is_empty());
+    }
+
+    #[test]
+    fn from_points_sorts_and_keeps_the_last_duplicate() {
+        let env = Envelope::from_points(
+            0.0,
+            vec![
+                EnvelopePoint::linear(pos(20), 0.2),
+                EnvelopePoint::linear(pos(10), 0.1),
+                EnvelopePoint::linear(pos(20), 0.9),
+            ],
+        )
+        .unwrap();
+        let times: Vec<_> = env.points().iter().map(|p| p.time.samples()).collect();
+        assert_eq!(times, vec![10, 20]);
+        assert_eq!(env.evaluate(pos(20)), 0.9, "last duplicate wins");
+        assert!(Envelope::from_points(0.0, vec![EnvelopePoint::linear(pos(0), f32::NAN)]).is_err());
     }
 
     #[test]

@@ -4,9 +4,9 @@ use core::fmt;
 
 /// Errors produced by Superb SDK crates.
 ///
-/// The enum is intentionally small and `Copy`-free of heap data except for
-/// the [`SuperbError::Message`] variant, which is only constructed off the
-/// audio thread.
+/// The enum is intentionally small. No variant owns heap data except
+/// [`SuperbError::Message`], which is only ever constructed off the audio
+/// thread.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SuperbError {

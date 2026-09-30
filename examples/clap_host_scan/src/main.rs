@@ -123,7 +123,6 @@ fn main() -> Result<()> {
 
     // Offline graph: sine → plugin → output, then render 1 second at 48 kHz.
     let rate = SampleRate::HZ_48K;
-    let channels = plugin.ports().outputs.max(1);
     let mut graph = AudioGraph::new();
     // Box::new(...) heap-allocates a concrete node so the graph can store dyn Node.
     let osc = graph.add_node(Box::new(SineNode::new(
@@ -149,7 +148,5 @@ fn main() -> Result<()> {
         audio.peak(),
         latency
     );
-    // Silence the unused-variable warning without changing behavior.
-    let _ = channels;
     Ok(())
 }

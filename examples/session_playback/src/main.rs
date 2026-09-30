@@ -83,8 +83,8 @@ fn main() -> Result<()> {
         session.send(send)?.level_db
     );
 
-    let frames = 48_000; // 1 second
-                         // render_region wires session → mixer offline and returns PlanarBuffer.
+    // One second. render_region wires session → mixer offline and returns a PlanarBuffer.
+    let frames = 48_000;
     let audio = render_region(
         &session,
         &cache,
