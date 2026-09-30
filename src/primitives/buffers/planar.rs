@@ -267,6 +267,8 @@ impl PlanarBuffer {
     /// to every destination channel, otherwise the first `min` channels are
     /// copied and any extra destination channels are zeroed.
     ///
+    /// A source with no channels counts as silence whatever its frame count,
+    /// so an unwired graph output can be copied without a special case.
     /// Fails if either buffer is too short. Never allocates.
     pub fn copy_block_from(
         &mut self,
@@ -274,6 +276,18 @@ impl PlanarBuffer {
         src: &PlanarBuffer,
         len: usize,
     ) -> Result<()> {
+        if src.channels == 0 {
+            if self.frames < dst_offset + len {
+                return Err(SuperbError::FrameMismatch {
+                    expected: dst_offset + len,
+                    actual: self.frames,
+                });
+            }
+            for ch in 0..self.channels {
+                self.channel_mut(ch)[dst_offset..dst_offset + len].fill(0.0);
+            }
+            return Ok(());
+        }
         if src.frames < len {
             return Err(SuperbError::FrameMismatch {
                 expected: len,
@@ -465,6 +479,14 @@ mod tests {
         let empty = PlanarBuffer::new(0, 4);
         quad.copy_block_from(0, &empty, 4).unwrap();
         assert!(quad.is_silent());
+        // No channels means silence even when the source reports no frames.
+        quad.fill(3.0);
+        quad.copy_block_from(1, &PlanarBuffer::new(0, 0), 2)
+            .unwrap();
+        assert_eq!(quad.channel(2), &[3.0, 0.0, 0.0, 3.0]);
+        assert!(quad
+            .copy_block_from(3, &PlanarBuffer::new(0, 0), 2)
+            .is_err());
     }
 
     #[test]

@@ -9,6 +9,8 @@
 //!   sample-accurately via `superb::primitives::midi::timing::FrameMapper` against the
 //!   engine's stream clock ([`MidiTiming::Stream`], the default) or forced
 //!   to frame 0 ([`MidiTiming::BlockStart`]).
+//! * [`live`] — split an engine into a control handle and an audio-side
+//!   loop so play/stop/seek and graph swaps can come from another thread.
 //! * [`offline`] — drive an [`Engine`] as fast as possible into a buffer
 //!   (bounce / test rendering).
 //! * [`wav`] — minimal RIFF/WAVE writer and reader (PCM16 and float32).
@@ -48,6 +50,7 @@ pub mod device;
 mod engine;
 #[cfg(feature = "files")]
 pub mod files;
+pub mod live;
 pub mod offline;
 pub mod wav;
 

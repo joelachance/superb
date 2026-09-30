@@ -98,7 +98,7 @@ impl OutputStream {
         Self::open_with_meter(config, render, load)
     }
 
-    pub(super) fn open_with_meter<F>(
+    pub(crate) fn open_with_meter<F>(
         config: &OutputConfig,
         render: F,
         load: Arc<LoadMeter>,
