@@ -5,10 +5,11 @@
 //! played (`superb-transport`/`superb-io`).
 //!
 //! * [`Session`] — name, sample rate, the [`TempoMap`](crate::primitives::transport::TempoMap),
-//!   an optional loop range, ordered [`Track`]s holding [`Clip`]s
-//!   and [`TrackSend`]s, track → bus output routing, and timeline
-//!   [`Marker`]s. Every object has a stable ID from `superb-core`; IDs are
-//!   allocated by the session and never reused.
+//!   an optional loop range, ordered [`Track`]s holding [`Clip`]s,
+//!   [`TrackSend`]s and [`Insert`]s (the effects on the track), track → bus
+//!   output routing, and timeline [`Marker`]s. Every object has a stable ID
+//!   from the primitives root; IDs are allocated by the session and never
+//!   reused.
 //! * [`SessionSnapshot`] — a versioned, `serde`-serialisable copy of the
 //!   whole document. `Session::to_json` / `Session::from_json` and
 //!   `save` / `load` go through it, so the file format is decoupled from
@@ -49,14 +50,16 @@
 
 pub mod commands;
 mod document;
+mod insert;
 mod marker;
 mod snapshot;
 mod track;
 
 pub use document::Session;
+pub use insert::{Insert, PluginRef};
 pub use marker::Marker;
 pub use snapshot::{
-    ClipSnapshot, MarkerSnapshot, MeterSnapshot, SendSnapshot, SessionSnapshot, TempoPointSnapshot,
-    TempoSnapshot, TrackSnapshot, FORMAT_VERSION,
+    ClipSnapshot, InsertSnapshot, MarkerSnapshot, MeterSnapshot, SendSnapshot, SessionSnapshot,
+    TempoPointSnapshot, TempoSnapshot, TrackSnapshot, FORMAT_VERSION,
 };
 pub use track::{Clip, ClipSource, MidiNote, Track, TrackKind, TrackSend};

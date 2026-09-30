@@ -2,7 +2,10 @@
 
 use std::path::PathBuf;
 
-use crate::primitives::{ClipId, Result, SendId, SuperbError, TimeDuration, TimePosition, TrackId};
+use super::insert::Insert;
+use crate::primitives::{
+    ClipId, InsertId, Result, SendId, SuperbError, TimeDuration, TimePosition, TrackId,
+};
 use serde::{Deserialize, Serialize};
 
 /// What a track carries.
@@ -31,7 +34,7 @@ pub struct MidiNote {
     pub channel: u8,
 }
 
-/// Where an clip's content comes from.
+/// Where a clip's content comes from.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ClipSource {
     /// A placeholder with no content (renders silence).
@@ -72,7 +75,7 @@ pub struct Clip {
 }
 
 impl Clip {
-    /// Creates an clip with no ID yet (the session assigns one on
+    /// Creates a clip with no ID yet (the session assigns one on
     /// [`Session::add_clip`](crate::primitives::session::Session::add_clip)). Fails unless
     /// `length > 0`.
     pub fn new(
@@ -84,7 +87,7 @@ impl Clip {
         Self::with_id(ClipId::INVALID, name, start, length, source)
     }
 
-    /// Creates an clip with a pre-allocated ID (see
+    /// Creates a clip with a pre-allocated ID (see
     /// [`Session::allocate_clip_id`](crate::primitives::session::Session::allocate_clip_id)).
     pub fn with_id(
         id: ClipId,
@@ -248,6 +251,7 @@ pub struct Track {
     pub armed: bool,
     pub(crate) output: Option<TrackId>,
     pub(crate) sends: Vec<TrackSend>,
+    pub(crate) inserts: Vec<Insert>,
     pub(crate) clips: Vec<Clip>,
 }
 
@@ -272,6 +276,7 @@ impl Track {
             armed: false,
             output: None,
             sends: Vec::new(),
+            inserts: Vec::new(),
             clips: Vec::new(),
         }
     }
@@ -284,6 +289,16 @@ impl Track {
     /// The bus track this track's output feeds, or `None` for the master.
     pub fn output(&self) -> Option<TrackId> {
         self.output
+    }
+
+    /// The insert chain, in signal order (first effect first).
+    pub fn inserts(&self) -> &[Insert] {
+        &self.inserts
+    }
+
+    /// Looks up an insert on this track.
+    pub fn insert(&self, id: InsertId) -> Option<&Insert> {
+        self.inserts.iter().find(|i| i.id == id)
     }
 
     /// Sends in creation order (always empty on bus tracks).
@@ -301,7 +316,7 @@ impl Track {
         &self.clips
     }
 
-    /// Looks up an clip on this track.
+    /// Looks up a clip on this track.
     pub fn clip(&self, id: ClipId) -> Option<&Clip> {
         self.clips.iter().find(|i| i.id == id)
     }

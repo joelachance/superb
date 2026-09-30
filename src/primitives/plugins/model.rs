@@ -2,12 +2,14 @@
 
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
+
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::{ProcessContext, ProcessStatus};
 use crate::primitives::{Result, SampleRate};
 
 /// A plugin API.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PluginFormat {
     /// CLAP (`.clap` bundles).
     Clap,

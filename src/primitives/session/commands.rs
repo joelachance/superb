@@ -45,11 +45,11 @@
 use crate::primitives::transport::LoopRange;
 use crate::primitives::undo::{CoalesceKey, Command, PropertyEdit};
 use crate::primitives::{
-    BeatPosition, ClipId, MarkerId, Result, SendId, SuperbError, TimeDuration, TimePosition,
-    TrackId,
+    BeatPosition, ClipId, InsertId, MarkerId, Result, SendId, SuperbError, TimeDuration,
+    TimePosition, TrackId,
 };
 
-use crate::primitives::session::{Clip, Marker, Session, Track, TrackKind, TrackSend};
+use crate::primitives::session::{Clip, Insert, Marker, Session, Track, TrackKind, TrackSend};
 
 /// `kind` values of the [`CoalesceKey`]s used by this module.
 pub mod keys {
@@ -93,6 +93,11 @@ pub mod keys {
     pub const SEND_ENABLED: u64 = 51;
     /// [`set_send_pre_fader`](super::set_send_pre_fader).
     pub const SEND_PRE_FADER: u64 = 52;
+    /// [`set_insert_bypassed`](super::set_insert_bypassed).
+    pub const INSERT_BYPASS: u64 = 60;
+    /// [`set_insert_param`](super::set_insert_param): the key's `kind` is
+    /// this base plus the parameter id, so different parameters never merge.
+    pub const INSERT_PARAM_BASE: u64 = 1 << 32;
 }
 
 fn not_applied() -> SuperbError {
@@ -356,10 +361,142 @@ impl Command<Session> for RemoveSend {
 }
 
 // ---------------------------------------------------------------------------
+// Inserts
+// ---------------------------------------------------------------------------
+
+/// Adds an effect to a track's insert chain (at the end, or at
+/// [`at`](AddInsert::at)). Undo removes it again.
+pub struct AddInsert {
+    track: TrackId,
+    insert: Option<Insert>,
+    index: Option<usize>,
+    id: InsertId,
+}
+
+impl AddInsert {
+    /// Creates the command. Give the insert a pre-allocated ID
+    /// (`Session::allocate_insert_id`) to know it before pushing.
+    pub fn new(track: TrackId, insert: Insert) -> Self {
+        Self {
+            track,
+            id: insert.id(),
+            insert: Some(insert),
+            index: None,
+        }
+    }
+
+    /// Places the insert at `index` in the chain instead of the end.
+    pub fn at(mut self, index: usize) -> Self {
+        self.index = Some(index);
+        self
+    }
+
+    /// The insert's ID (valid once applied, or from the start if pre-allocated).
+    pub fn id(&self) -> InsertId {
+        self.id
+    }
+}
+
+impl Command<Session> for AddInsert {
+    fn label(&self) -> &str {
+        "Add insert"
+    }
+
+    fn apply(&mut self, session: &mut Session) -> Result<()> {
+        let insert = self.insert.as_ref().ok_or_else(not_applied)?.clone();
+        self.id = match self.index {
+            Some(index) => session.add_insert_at(self.track, index, insert)?,
+            None => session.add_insert(self.track, insert)?,
+        };
+        self.insert = None;
+        Ok(())
+    }
+
+    fn revert(&mut self, session: &mut Session) -> Result<()> {
+        let (track, index, insert) = session.remove_insert(self.id)?;
+        self.track = track;
+        self.index = Some(index);
+        self.insert = Some(insert);
+        Ok(())
+    }
+}
+
+/// Removes an insert; undo puts it back at the same position.
+pub struct RemoveInsert {
+    id: InsertId,
+    removed: Option<(TrackId, usize, Insert)>,
+}
+
+impl RemoveInsert {
+    /// Creates the command.
+    pub fn new(id: InsertId) -> Self {
+        Self { id, removed: None }
+    }
+}
+
+impl Command<Session> for RemoveInsert {
+    fn label(&self) -> &str {
+        "Remove insert"
+    }
+
+    fn apply(&mut self, session: &mut Session) -> Result<()> {
+        self.removed = Some(session.remove_insert(self.id)?);
+        Ok(())
+    }
+
+    fn revert(&mut self, session: &mut Session) -> Result<()> {
+        let (track, index, insert) = self.removed.take().ok_or_else(not_applied)?;
+        session.add_insert_at(
+            track,
+            index.min(session.track(track)?.inserts().len()),
+            insert,
+        )?;
+        Ok(())
+    }
+}
+
+/// Reorders an insert within its chain.
+pub struct MoveInsert {
+    id: InsertId,
+    to: usize,
+    from: Option<usize>,
+}
+
+impl MoveInsert {
+    /// Creates the command.
+    pub fn new(id: InsertId, to: usize) -> Self {
+        Self { id, to, from: None }
+    }
+}
+
+impl Command<Session> for MoveInsert {
+    fn label(&self) -> &str {
+        "Move insert"
+    }
+
+    fn apply(&mut self, session: &mut Session) -> Result<()> {
+        let track = session.insert_owner(self.id)?;
+        let from = session
+            .track(track)?
+            .inserts()
+            .iter()
+            .position(|i| i.id() == self.id)
+            .ok_or_else(not_applied)?;
+        session.move_insert(self.id, self.to)?;
+        self.from = Some(from);
+        Ok(())
+    }
+
+    fn revert(&mut self, session: &mut Session) -> Result<()> {
+        session.move_insert(self.id, self.from.ok_or_else(not_applied)?)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Clips
 // ---------------------------------------------------------------------------
 
-/// Adds an clip to a track.
+/// Adds a clip to a track.
 pub struct AddClip {
     track: TrackId,
     clip: Option<Clip>,
@@ -403,7 +540,7 @@ impl Command<Session> for AddClip {
     }
 }
 
-/// Removes an clip; undo puts it back on its track.
+/// Removes a clip; undo puts it back on its track.
 pub struct RemoveClip {
     id: ClipId,
     removed: Option<(TrackId, Clip)>,
@@ -433,7 +570,7 @@ impl Command<Session> for RemoveClip {
     }
 }
 
-/// Moves an clip in time and optionally to another track. Coalesces.
+/// Moves a clip in time and optionally to another track. Coalesces.
 pub struct MoveClip {
     id: ClipId,
     start: TimePosition,
@@ -498,7 +635,7 @@ impl Command<Session> for MoveClip {
     }
 }
 
-/// Changes an clip's length. Coalesces.
+/// Changes a clip's length. Coalesces.
 pub struct ResizeClip {
     id: ClipId,
     length: TimeDuration,
@@ -1025,7 +1162,63 @@ pub fn set_send_pre_fader(id: SendId, pre_fader: bool) -> PropertyEdit<Session, 
     )
 }
 
-/// Renames an clip.
+fn insert_property<V: Clone + Send + Sync + 'static>(
+    label: &'static str,
+    kind: u64,
+    id: InsertId,
+    value: V,
+    get: impl Fn(&Insert) -> V + Send + Sync + 'static,
+    set: impl Fn(&mut Insert, V) + Send + Sync + 'static,
+) -> PropertyEdit<Session, V> {
+    let fallback = value.clone();
+    PropertyEdit::new(
+        label,
+        Some(CoalesceKey::new(kind, id.raw())),
+        value,
+        move |s: &Session| s.insert(id).map(&get).unwrap_or_else(|_| fallback.clone()),
+        move |s: &mut Session, v| {
+            set(s.insert_mut(id)?, v);
+            Ok(())
+        },
+    )
+}
+
+/// Bypasses or re-enables an insert.
+pub fn set_insert_bypassed(id: InsertId, bypassed: bool) -> PropertyEdit<Session, bool> {
+    insert_property(
+        "Bypass insert",
+        keys::INSERT_BYPASS,
+        id,
+        bypassed,
+        |i| i.bypassed,
+        |i, v| i.bypassed = v,
+    )
+}
+
+/// Sets one plugin parameter on an insert. Consecutive edits of the same
+/// parameter coalesce (a knob drag is one undo step); undoing an edit of a
+/// parameter that had no stored value clears it again.
+pub fn set_insert_param(
+    id: InsertId,
+    param: u32,
+    value: f64,
+) -> PropertyEdit<Session, Option<f64>> {
+    insert_property(
+        "Set plugin parameter",
+        keys::INSERT_PARAM_BASE + param as u64,
+        id,
+        Some(value),
+        move |i| i.param(param),
+        move |i, v| match v {
+            Some(value) => i.set_param(param, value),
+            None => {
+                i.clear_param(param);
+            }
+        },
+    )
+}
+
+/// Renames a clip.
 pub fn set_clip_name(id: ClipId, name: impl Into<String>) -> PropertyEdit<Session, String> {
     clip_property(
         "Rename clip",
@@ -1037,7 +1230,7 @@ pub fn set_clip_name(id: ClipId, name: impl Into<String>) -> PropertyEdit<Sessio
     )
 }
 
-/// Sets an clip's gain in dB.
+/// Sets a clip's gain in dB.
 pub fn set_clip_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Session, f32> {
     clip_property(
         "Set clip gain",
@@ -1049,7 +1242,7 @@ pub fn set_clip_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Session, f32> 
     )
 }
 
-/// Mutes or unmutes an clip.
+/// Mutes or unmutes a clip.
 pub fn set_clip_mute(id: ClipId, muted: bool) -> PropertyEdit<Session, bool> {
     clip_property(
         "Mute clip",
@@ -1509,6 +1702,89 @@ mod tests {
         assert!(fresh.revert(&mut s).is_err());
         let mut fresh = RemoveSend::new(id);
         assert!(fresh.revert(&mut s).is_err());
+    }
+
+    #[test]
+    fn insert_commands_round_trip_and_params_coalesce_per_parameter() {
+        use crate::primitives::plugins::PluginFormat;
+        use crate::primitives::session::PluginRef;
+        let plugin = |id: &str| PluginRef {
+            format: PluginFormat::Clap,
+            path: "/plugins/fx.clap".into(),
+            id: id.into(),
+        };
+        let (mut s, mut h, a, _) = base();
+        let eq = s.allocate_insert_id();
+        let cmd = AddInsert::new(a, Insert::with_id(eq, plugin("eq")));
+        assert_eq!(cmd.id(), eq);
+        h.push(&mut s, cmd).unwrap();
+        h.push(&mut s, AddInsert::new(a, Insert::new(plugin("comp"))))
+            .unwrap();
+        let comp = s.track(a).unwrap().inserts()[1].id();
+        h.push(&mut s, AddInsert::new(a, Insert::new(plugin("gate"))).at(0))
+            .unwrap();
+        let gate = s.track(a).unwrap().inserts()[0].id();
+        let chain = |s: &Session| -> Vec<InsertId> {
+            s.track(a)
+                .unwrap()
+                .inserts()
+                .iter()
+                .map(Insert::id)
+                .collect()
+        };
+        assert_eq!(chain(&s), [gate, eq, comp]);
+        h.undo(&mut s).unwrap();
+        assert_eq!(chain(&s), [eq, comp]);
+        h.redo(&mut s).unwrap();
+        assert_eq!(
+            chain(&s),
+            [gate, eq, comp],
+            "redo keeps the position and id"
+        );
+
+        h.push(&mut s, MoveInsert::new(comp, 0)).unwrap();
+        assert_eq!(chain(&s), [comp, gate, eq]);
+        h.undo(&mut s).unwrap();
+        assert_eq!(chain(&s), [gate, eq, comp]);
+        h.redo(&mut s).unwrap();
+        h.seal();
+
+        // Two parameters edited in turn are two steps; a drag on one is one.
+        h.push(&mut s, set_insert_param(eq, 1, 0.1)).unwrap();
+        h.push(&mut s, set_insert_param(eq, 1, 0.2)).unwrap();
+        h.push(&mut s, set_insert_param(eq, 2, 0.9)).unwrap();
+        assert_eq!(s.insert(eq).unwrap().param(1), Some(0.2));
+        assert_eq!(s.insert(eq).unwrap().param(2), Some(0.9));
+        h.undo(&mut s).unwrap();
+        assert_eq!(
+            s.insert(eq).unwrap().param(2),
+            None,
+            "cleared, not defaulted"
+        );
+        assert_eq!(s.insert(eq).unwrap().param(1), Some(0.2));
+        h.undo(&mut s).unwrap();
+        assert_eq!(s.insert(eq).unwrap().param(1), None);
+        while h.redo(&mut s).unwrap() {}
+        assert_eq!(s.insert(eq).unwrap().param(1), Some(0.2));
+
+        h.push(&mut s, set_insert_bypassed(eq, true)).unwrap();
+        assert!(s.insert(eq).unwrap().bypassed);
+        h.push(&mut s, RemoveInsert::new(gate)).unwrap();
+        assert_eq!(chain(&s), [comp, eq]);
+        h.undo(&mut s).unwrap();
+        assert_eq!(chain(&s), [comp, gate, eq], "restored at its old position");
+        assert!(s.insert(eq).unwrap().bypassed);
+        assert!(h
+            .push(&mut s, RemoveInsert::new(InsertId::from_raw(999)))
+            .is_err());
+        assert!(h
+            .push(&mut s, set_insert_param(InsertId::from_raw(999), 1, 0.5))
+            .is_err());
+        // Removing the track takes the chain along; undo brings it back.
+        h.push(&mut s, RemoveTrack::new(a)).unwrap();
+        assert_eq!(s.insert_count(), 0);
+        h.undo(&mut s).unwrap();
+        assert_eq!(chain(&s), [comp, gate, eq]);
     }
 
     #[test]

@@ -33,7 +33,7 @@ mod time;
 
 pub use error::{Result, SuperbError};
 pub use ids::{
-    BusId, ClipId, IdGenerator, MarkerId, NodeId, ParamId, PortId, RawId, SendId, TrackId,
+    BusId, ClipId, IdGenerator, InsertId, MarkerId, NodeId, ParamId, PortId, RawId, SendId, TrackId,
 };
 pub use rate::SampleRate;
 pub use time::{BeatDuration, BeatPosition, TimeDuration, TimePosition, TimeSignature};

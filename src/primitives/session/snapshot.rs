@@ -9,12 +9,15 @@ use std::path::Path;
 
 use crate::primitives::transport::{LoopRange, TempoMap};
 use crate::primitives::{
-    BeatPosition, ClipId, MarkerId, RawId, Result, SampleRate, SendId, SuperbError, TimeDuration,
-    TimePosition, TimeSignature, TrackId,
+    BeatPosition, ClipId, InsertId, MarkerId, RawId, Result, SampleRate, SendId, SuperbError,
+    TimeDuration, TimePosition, TimeSignature, TrackId,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::primitives::session::{Clip, ClipSource, Marker, Session, Track, TrackKind, TrackSend};
+use crate::primitives::plugins::PluginFormat;
+use crate::primitives::session::{
+    Clip, ClipSource, Insert, Marker, PluginRef, Session, Track, TrackKind, TrackSend,
+};
 
 /// Version of the snapshot format written by this crate.
 ///
@@ -73,7 +76,7 @@ pub struct TempoSnapshot {
     pub meters: Vec<MeterSnapshot>,
 }
 
-/// An clip.
+/// A clip.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ClipSnapshot {
     /// Raw clip ID.
@@ -111,6 +114,25 @@ pub struct SendSnapshot {
     pub enabled: bool,
 }
 
+/// An effect in a track's insert chain.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct InsertSnapshot {
+    /// Raw insert ID.
+    pub id: RawId,
+    /// Plugin API.
+    pub format: PluginFormat,
+    /// Bundle path.
+    pub path: std::path::PathBuf,
+    /// The plugin's ID inside the bundle.
+    pub plugin: String,
+    /// Bypassed.
+    pub bypassed: bool,
+    /// `(parameter id, value)` pairs the user has set.
+    pub params: Vec<(u32, f64)>,
+    /// Opaque plugin state, or empty.
+    pub state: Vec<u8>,
+}
+
 /// A track.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TrackSnapshot {
@@ -140,6 +162,10 @@ pub struct TrackSnapshot {
     /// existed).
     #[serde(default)]
     pub sends: Vec<SendSnapshot>,
+    /// Insert chain in signal order (absent in files written before inserts
+    /// existed).
+    #[serde(default)]
+    pub inserts: Vec<InsertSnapshot>,
     /// Clips in start order. Files written before clips were renamed used
     /// the key `items`; both spellings load.
     #[serde(alias = "items")]
@@ -208,6 +234,20 @@ impl From<&TrackSend> for SendSnapshot {
     }
 }
 
+impl From<&Insert> for InsertSnapshot {
+    fn from(i: &Insert) -> Self {
+        Self {
+            id: i.id.raw(),
+            format: i.plugin.format,
+            path: i.plugin.path.clone(),
+            plugin: i.plugin.id.clone(),
+            bypassed: i.bypassed,
+            params: i.params.clone(),
+            state: i.state.clone(),
+        }
+    }
+}
+
 impl From<&Track> for TrackSnapshot {
     fn from(t: &Track) -> Self {
         Self {
@@ -222,6 +262,7 @@ impl From<&Track> for TrackSnapshot {
             armed: t.armed,
             output: t.output.map(TrackId::raw),
             sends: t.sends.iter().map(SendSnapshot::from).collect(),
+            inserts: t.inserts.iter().map(InsertSnapshot::from).collect(),
             clips: t.clips.iter().map(ClipSnapshot::from).collect(),
         }
     }
@@ -372,6 +413,26 @@ impl Session {
                 clip.fade_out = TimeDuration::from_samples(i.fade_out);
                 track.clips.push(clip);
             }
+            for i in &t.inserts {
+                let insert_id = InsertId::from_raw(i.id);
+                if !insert_id.is_valid() {
+                    return Err(SuperbError::InvalidArgument {
+                        what: "insert id 0",
+                    });
+                }
+                let mut insert = Insert::with_id(
+                    insert_id,
+                    PluginRef {
+                        format: i.format,
+                        path: i.path.clone(),
+                        id: i.plugin.clone(),
+                    },
+                );
+                insert.bypassed = i.bypassed;
+                insert.params = i.params.clone();
+                insert.state = i.state.clone();
+                track.inserts.push(insert);
+            }
             let index = session.track_count();
             session.insert_track(index, track)?;
         }
@@ -476,6 +537,24 @@ mod tests {
             .unwrap();
         let disabled = s.add_send(drums, TrackSend::new(room)).unwrap();
         s.send_mut(disabled).unwrap().enabled = false;
+        let mut verb = Insert::new(PluginRef {
+            format: PluginFormat::Clap,
+            path: "/plugins/verb.clap".into(),
+            id: "com.example.verb".into(),
+        });
+        verb.bypassed = true;
+        verb.set_param(3, 0.25);
+        verb.state = vec![1, 2, 3];
+        s.add_insert(room, verb).unwrap();
+        s.add_insert(
+            drums,
+            Insert::new(PluginRef {
+                format: PluginFormat::Clap,
+                path: "/plugins/comp.clap".into(),
+                id: "com.example.comp".into(),
+            }),
+        )
+        .unwrap();
         s.track_mut(drums).unwrap().color = Some(0xFF8800);
         s.track_mut(drums).unwrap().gain_db = -3.5;
         s.track_mut(keys).unwrap().pan = 0.25;
@@ -572,17 +651,24 @@ mod tests {
         assert_eq!(back.send_count(), 2);
         assert!(back.tracks()[1].sends()[0].pre_fader);
         assert!(!back.track(drums).unwrap().sends()[0].enabled);
+        let verb = &back.track(room).unwrap().inserts()[0];
+        assert_eq!(verb.plugin.id, "com.example.verb");
+        assert!(verb.bypassed);
+        assert_eq!(verb.param(3), Some(0.25));
+        assert_eq!(verb.state, [1, 2, 3]);
+        assert_eq!(back.insert_count(), 2);
         let mut pre_routing: serde_json::Value = serde_json::from_str(&json).unwrap();
         for t in pre_routing["tracks"].as_array_mut().unwrap() {
             let t = t.as_object_mut().unwrap();
             t.remove("output");
             t.remove("sends");
+            t.remove("inserts");
         }
         let old = Session::from_json(&pre_routing.to_string()).unwrap();
         assert!(old
             .tracks()
             .iter()
-            .all(|t| t.output().is_none() && t.sends().is_empty()));
+            .all(|t| t.output().is_none() && t.sends().is_empty() && t.inserts().is_empty()));
         assert_eq!(
             back.tempo_map().meter_at(BeatPosition::new(20.0)),
             TimeSignature::new(7, 8).unwrap()
@@ -689,6 +775,15 @@ mod tests {
 
         let mut snap = good.clone();
         snap.markers[1].id = snap.markers[0].id;
+        assert!(Session::from_snapshot(&snap).is_err());
+
+        // Inserts: id 0 and duplicate ids are rejected.
+        let mut snap = good.clone();
+        snap.tracks[3].inserts[0].id = 0;
+        assert!(Session::from_snapshot(&snap).is_err());
+        let mut snap = good.clone();
+        let dup = snap.tracks[3].inserts[0].clone();
+        snap.tracks[0].inserts.push(dup);
         assert!(Session::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.markers[0].id = 0;

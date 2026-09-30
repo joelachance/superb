@@ -141,6 +141,10 @@ define_id!(
     /// Identifies a timeline marker in a session.
     MarkerId, "marker"
 );
+define_id!(
+    /// Identifies an insert (an effect in a track's chain).
+    InsertId, "insert"
+);
 
 #[cfg(test)]
 mod tests {
