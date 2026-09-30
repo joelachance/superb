@@ -72,5 +72,7 @@ mod node;
 pub mod scan;
 pub mod vst3;
 
-pub use model::{AudioPortLayout, ParamChange, ParamInfo, PluginDescriptor, PluginFormat, PluginInstance};
+pub use model::{
+    AudioPortLayout, ParamChange, ParamInfo, PluginDescriptor, PluginFormat, PluginInstance,
+};
 pub use node::PluginNode;

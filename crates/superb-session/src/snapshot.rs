@@ -9,8 +9,8 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use superb_core::{
-    BeatPosition, ClipId, MarkerId, RawId, Result, SampleRate, SendId, SuperbError, TimeDuration, TimePosition,
-    TimeSignature, TrackId,
+    BeatPosition, ClipId, MarkerId, RawId, Result, SampleRate, SendId, SuperbError, TimeDuration,
+    TimePosition, TimeSignature, TrackId,
 };
 use superb_transport::{LoopRange, TempoMap};
 
@@ -27,11 +27,16 @@ pub(crate) mod duration_samples {
     use serde::{Deserialize, Deserializer, Serializer};
     use superb_core::TimeDuration;
 
-    pub fn serialize<S: Serializer>(d: &TimeDuration, s: S) -> core::result::Result<S::Ok, S::Error> {
+    pub fn serialize<S: Serializer>(
+        d: &TimeDuration,
+        s: S,
+    ) -> core::result::Result<S::Ok, S::Error> {
         s.serialize_i64(d.samples())
     }
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> core::result::Result<TimeDuration, D::Error> {
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> core::result::Result<TimeDuration, D::Error> {
         i64::deserialize(d).map(TimeDuration::from_samples)
     }
 }
@@ -191,7 +196,13 @@ impl From<&Item> for ItemSnapshot {
 
 impl From<&TrackSend> for SendSnapshot {
     fn from(s: &TrackSend) -> Self {
-        Self { id: s.id.raw(), bus: s.bus.raw(), level_db: s.level_db, pre_fader: s.pre_fader, enabled: s.enabled }
+        Self {
+            id: s.id.raw(),
+            bus: s.bus.raw(),
+            level_db: s.level_db,
+            pre_fader: s.pre_fader,
+            enabled: s.enabled,
+        }
     }
 }
 
@@ -216,7 +227,12 @@ impl From<&Track> for TrackSnapshot {
 
 impl From<&Marker> for MarkerSnapshot {
     fn from(m: &Marker) -> Self {
-        Self { id: m.id.raw(), name: m.name.clone(), position: m.position.samples(), color: m.color }
+        Self {
+            id: m.id.raw(),
+            name: m.name.clone(),
+            position: m.position.samples(),
+            color: m.color,
+        }
     }
 }
 
@@ -226,12 +242,20 @@ impl From<&TempoMap> for TempoSnapshot {
             points: map
                 .tempo_points()
                 .iter()
-                .map(|p| TempoPointSnapshot { beat: p.beat.beats(), bpm: p.bpm, ramp: p.ramp })
+                .map(|p| TempoPointSnapshot {
+                    beat: p.beat.beats(),
+                    bpm: p.bpm,
+                    ramp: p.ramp,
+                })
                 .collect(),
             meters: map
                 .meter_points()
                 .iter()
-                .map(|m| MeterSnapshot { bar: m.bar, numerator: m.signature.numerator(), denominator: m.signature.denominator() })
+                .map(|m| MeterSnapshot {
+                    bar: m.bar,
+                    numerator: m.signature.numerator(),
+                    denominator: m.signature.denominator(),
+                })
                 .collect(),
         }
     }
@@ -255,7 +279,9 @@ impl Session {
             name: self.name().to_owned(),
             sample_rate_hz: self.sample_rate().hz(),
             tempo: TempoSnapshot::from(self.tempo_map()),
-            loop_range: self.loop_range().map(|r| (r.start().samples(), r.end().samples())),
+            loop_range: self
+                .loop_range()
+                .map(|r| (r.start().samples(), r.end().samples())),
             tracks: self.tracks().iter().map(TrackSnapshot::from).collect(),
             markers: self.markers().iter().map(MarkerSnapshot::from).collect(),
             next_id: self.next_raw_id(),
@@ -275,9 +301,17 @@ impl Session {
         let mut session = Session::new(snap.name.clone(), rate);
 
         // Tempo map.
-        let first = snap.tempo.points.first().ok_or(SuperbError::InvalidArgument { what: "tempo points (empty)" })?;
+        let first = snap
+            .tempo
+            .points
+            .first()
+            .ok_or(SuperbError::InvalidArgument {
+                what: "tempo points (empty)",
+            })?;
         if first.beat != 0.0 {
-            return Err(SuperbError::InvalidArgument { what: "first tempo point must be at beat 0" });
+            return Err(SuperbError::InvalidArgument {
+                what: "first tempo point must be at beat 0",
+            });
         }
         {
             let map = session.tempo_map_mut();
@@ -296,7 +330,10 @@ impl Session {
         }
 
         if let Some((start, end)) = snap.loop_range {
-            session.set_loop_range(Some(LoopRange::new(TimePosition::from_samples(start), TimePosition::from_samples(end))?));
+            session.set_loop_range(Some(LoopRange::new(
+                TimePosition::from_samples(start),
+                TimePosition::from_samples(end),
+            )?));
         }
 
         for t in &snap.tracks {
@@ -311,7 +348,9 @@ impl Session {
             track.soloed = t.soloed;
             track.armed = t.armed;
             if t.kind == TrackKind::Bus && !t.items.is_empty() {
-                return Err(SuperbError::InvalidArgument { what: "bus tracks hold no items" });
+                return Err(SuperbError::InvalidArgument {
+                    what: "bus tracks hold no items",
+                });
             }
             for i in &t.items {
                 let id = ClipId::from_raw(i.id);
@@ -358,9 +397,12 @@ impl Session {
         for m in &snap.markers {
             let id = MarkerId::from_raw(m.id);
             if !id.is_valid() {
-                return Err(SuperbError::InvalidArgument { what: "marker id 0" });
+                return Err(SuperbError::InvalidArgument {
+                    what: "marker id 0",
+                });
             }
-            let mut marker = Marker::with_id(id, m.name.clone(), TimePosition::from_samples(m.position));
+            let mut marker =
+                Marker::with_id(id, m.name.clone(), TimePosition::from_samples(m.position));
             marker.color = m.color;
             session.insert_marker(marker)?;
         }
@@ -376,20 +418,23 @@ impl Session {
 
     /// Parses a session from JSON produced by [`to_json`](Self::to_json).
     pub fn from_json(json: &str) -> Result<Session> {
-        let snap: SessionSnapshot = serde_json::from_str(json).map_err(|e| io_err("parse session", e))?;
+        let snap: SessionSnapshot =
+            serde_json::from_str(json).map_err(|e| io_err("parse session", e))?;
         Session::from_snapshot(&snap)
     }
 
     /// Writes the session as JSON to `path`.
     pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
-        std::fs::write(path, self.to_json()?).map_err(|e| io_err(&format!("write {}", path.display()), e))
+        std::fs::write(path, self.to_json()?)
+            .map_err(|e| io_err(&format!("write {}", path.display()), e))
     }
 
     /// Reads a session written by [`save`](Self::save).
     pub fn load(path: impl AsRef<Path>) -> Result<Session> {
         let path = path.as_ref();
-        let text = std::fs::read_to_string(path).map_err(|e| io_err(&format!("read {}", path.display()), e))?;
+        let text = std::fs::read_to_string(path)
+            .map_err(|e| io_err(&format!("read {}", path.display()), e))?;
         Session::from_json(&text)
     }
 }
@@ -410,7 +455,13 @@ mod tests {
             map.add_tempo(BeatPosition::new(16.0), 90.0).unwrap();
             map.add_meter(3, TimeSignature::new(7, 8).unwrap()).unwrap();
         }
-        s.set_loop_range(Some(LoopRange::new(TimePosition::from_samples(10), TimePosition::from_samples(500)).unwrap()));
+        s.set_loop_range(Some(
+            LoopRange::new(
+                TimePosition::from_samples(10),
+                TimePosition::from_samples(500),
+            )
+            .unwrap(),
+        ));
         let drums = s.add_track("drums", TrackKind::Audio);
         let keys = s.add_track("keys", TrackKind::Midi);
         let bus = s.add_track("fx", TrackKind::Bus);
@@ -419,7 +470,8 @@ mod tests {
         let room = s.add_track("room", TrackKind::Bus);
         s.set_track_output(drums, Some(room)).unwrap();
         s.set_track_output(bus, Some(room)).unwrap();
-        s.add_send(keys, TrackSend::new(bus).level_db(-9.0).pre_fader()).unwrap();
+        s.add_send(keys, TrackSend::new(bus).level_db(-9.0).pre_fader())
+            .unwrap();
         let disabled = s.add_send(drums, TrackSend::new(room)).unwrap();
         s.send_mut(disabled).unwrap().enabled = false;
         s.track_mut(drums).unwrap().color = Some(0xFF8800);
@@ -430,17 +482,51 @@ mod tests {
             "kick",
             TimePosition::from_samples(100),
             TimeDuration::from_samples(1_000),
-            ItemSource::Audio { path: "samples/kick.wav".into(), offset: TimeDuration::from_samples(32) },
+            ItemSource::Audio {
+                path: "samples/kick.wav".into(),
+                offset: TimeDuration::from_samples(32),
+            },
         )
         .unwrap();
         audio.fade_in = TimeDuration::from_samples(8);
         audio.gain_db = -1.0;
         s.add_item(drums, audio).unwrap();
-        let notes = vec![MidiNote { beat: 0.0, length: 0.5, note: 60, velocity: 100, channel: 0 }, MidiNote { beat: 1.0, length: 1.0, note: 64, velocity: 90, channel: 1 }];
-        let mut midi = Item::new("chord", TimePosition::ZERO, TimeDuration::from_samples(48_000), ItemSource::Midi { notes }).unwrap();
+        let notes = vec![
+            MidiNote {
+                beat: 0.0,
+                length: 0.5,
+                note: 60,
+                velocity: 100,
+                channel: 0,
+            },
+            MidiNote {
+                beat: 1.0,
+                length: 1.0,
+                note: 64,
+                velocity: 90,
+                channel: 1,
+            },
+        ];
+        let mut midi = Item::new(
+            "chord",
+            TimePosition::ZERO,
+            TimeDuration::from_samples(48_000),
+            ItemSource::Midi { notes },
+        )
+        .unwrap();
         midi.muted = true;
         s.add_item(keys, midi).unwrap();
-        s.add_item(keys, Item::new("empty", TimePosition::from_samples(50_000), TimeDuration::from_samples(1), ItemSource::Empty).unwrap()).unwrap();
+        s.add_item(
+            keys,
+            Item::new(
+                "empty",
+                TimePosition::from_samples(50_000),
+                TimeDuration::from_samples(1),
+                ItemSource::Empty,
+            )
+            .unwrap(),
+        )
+        .unwrap();
         let m = s.add_marker("drop", TimePosition::from_samples(48_000));
         s.marker_mut(m).unwrap().color = Some(0x00FF00);
         s.add_marker("start", TimePosition::ZERO);
@@ -456,10 +542,16 @@ mod tests {
         let back = Session::from_json(&json).unwrap();
         assert_eq!(back.snapshot(), s.snapshot());
         assert_eq!(back.name(), "rich");
-        assert_eq!(back.tempo_map().tempo_at(BeatPosition::new(12.0)), 115.0, "ramp survives the round trip");
+        assert_eq!(
+            back.tempo_map().tempo_at(BeatPosition::new(12.0)),
+            115.0,
+            "ramp survives the round trip"
+        );
         assert!(back.tempo_map().tempo_points()[1].ramp);
         // Files written before ramps existed have no `ramp` field.
-        let legacy = json.replace(",\n        \"ramp\": true", "").replace(",\n        \"ramp\": false", "");
+        let legacy = json
+            .replace(",\n        \"ramp\": true", "")
+            .replace(",\n        \"ramp\": false", "");
         assert!(!legacy.contains("ramp"), "{legacy}");
         let old = Session::from_json(&legacy).unwrap();
         assert!(old.tempo_map().tempo_points().iter().all(|p| !p.ramp));
@@ -478,8 +570,14 @@ mod tests {
             t.remove("sends");
         }
         let old = Session::from_json(&pre_routing.to_string()).unwrap();
-        assert!(old.tracks().iter().all(|t| t.output().is_none() && t.sends().is_empty()));
-        assert_eq!(back.tempo_map().meter_at(BeatPosition::new(20.0)), TimeSignature::new(7, 8).unwrap());
+        assert!(old
+            .tracks()
+            .iter()
+            .all(|t| t.output().is_none() && t.sends().is_empty()));
+        assert_eq!(
+            back.tempo_map().meter_at(BeatPosition::new(20.0)),
+            TimeSignature::new(7, 8).unwrap()
+        );
         assert_eq!(back.loop_range(), s.loop_range());
         assert_eq!(back.next_raw_id(), s.next_raw_id());
         // Fresh ids keep being unique after a reload.

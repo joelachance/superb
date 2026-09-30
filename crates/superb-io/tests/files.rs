@@ -9,7 +9,9 @@ use superb_buffers::PlanarBuffer;
 use superb_core::SampleRate;
 use superb_graph::nodes::SineNode;
 use superb_graph::AudioGraph;
-use superb_io::files::{self, bounce_wav, decode, decode_at_rate, decode_bytes, decode_from, export_wav, AudioFile};
+use superb_io::files::{
+    self, bounce_wav, decode, decode_at_rate, decode_bytes, decode_from, export_wav, AudioFile,
+};
 use superb_io::wav::{self, WavFormat};
 use superb_io::Engine;
 use superb_transport::Transport;
@@ -45,11 +47,16 @@ fn ramp_fixture(channels: usize, frames: usize) -> PlanarBuffer {
 }
 
 fn zero_crossings(x: &[f32]) -> usize {
-    x.windows(2).filter(|w| (w[0] < 0.0) != (w[1] < 0.0)).count()
+    x.windows(2)
+        .filter(|w| (w[0] < 0.0) != (w[1] < 0.0))
+        .count()
 }
 
 fn fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(name)
 }
 
 #[test]
@@ -115,7 +122,11 @@ fn flac_fixture_decodes() {
     assert_eq!(file.sample_rate, SampleRate::CD);
     assert_eq!(file.channels(), 2);
     assert_eq!(file.frames(), 8_820); // 0.2 s
-    assert!((file.buffer.peak() - 0.5).abs() < 0.01, "peak {}", file.buffer.peak());
+    assert!(
+        (file.buffer.peak() - 0.5).abs() < 0.01,
+        "peak {}",
+        file.buffer.peak()
+    );
     // 440 Hz left / 880 Hz right over 0.2 s: 88 and 176 cycles.
     let left = zero_crossings(file.buffer.channel(0));
     let right = zero_crossings(file.buffer.channel(1));
@@ -149,7 +160,15 @@ fn bounce_wav_then_decode_matches_render() {
     engine.transport_mut().play();
 
     let path = dir.path("bounce.wav");
-    let rendered = bounce_wav(&mut engine, SampleRate::HZ_48K, 128, 12_000, &path, WavFormat::Float32).unwrap();
+    let rendered = bounce_wav(
+        &mut engine,
+        SampleRate::HZ_48K,
+        128,
+        12_000,
+        &path,
+        WavFormat::Float32,
+    )
+    .unwrap();
     assert_eq!((rendered.channels(), rendered.frames()), (2, 12_000));
     assert!((rendered.peak() - 0.8).abs() < 1e-3);
 
@@ -174,7 +193,10 @@ fn bounce_wav_then_decode_matches_render() {
 #[test]
 fn audio_file_helpers() {
     let dir = TempDir::new("helpers");
-    let file = AudioFile { buffer: ramp_fixture(2, 4_800), sample_rate: SampleRate::HZ_48K };
+    let file = AudioFile {
+        buffer: ramp_fixture(2, 4_800),
+        sample_rate: SampleRate::HZ_48K,
+    };
     let same = file.resampled_to(SampleRate::HZ_48K).unwrap();
     assert_eq!(same.buffer.channel(0), file.buffer.channel(0));
     let cd = file.resampled_to(SampleRate::CD).unwrap();
@@ -189,7 +211,9 @@ fn audio_file_helpers() {
 fn rejects_garbage_and_missing_files() {
     let dir = TempDir::new("garbage");
     let path = dir.path("noise.wav");
-    let junk: Vec<u8> = (0..4_096u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8).collect();
+    let junk: Vec<u8> = (0..4_096u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 13) as u8)
+        .collect();
     std::fs::write(&path, &junk).unwrap();
     assert!(decode(&path).is_err());
     assert!(decode_bytes(junk.clone(), Some("flac")).is_err());
@@ -209,6 +233,10 @@ fn truncated_wav_yields_the_frames_present() {
     bytes.truncate(44 + 10_000 * 2 * 4 / 2); // header + half the data
     let file = decode_bytes(bytes, Some("wav")).unwrap();
     assert_eq!(file.channels(), 2);
-    assert!(file.frames() >= 4_000 && file.frames() <= 5_000, "frames {}", file.frames());
+    assert!(
+        file.frames() >= 4_000 && file.frames() <= 5_000,
+        "frames {}",
+        file.frames()
+    );
     assert_eq!(&file.buffer.channel(0)[..4_000], &src.channel(0)[..4_000]);
 }

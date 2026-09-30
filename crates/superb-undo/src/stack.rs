@@ -78,7 +78,15 @@ impl<T: 'static> UndoStack<T> {
     /// Creates an empty, clean history with [`DEFAULT_LIMIT`](Self::DEFAULT_LIMIT)
     /// and no time window (same-key edits coalesce until sealed).
     pub fn new() -> Self {
-        Self { undo: Vec::new(), redo: Vec::new(), limit: Self::DEFAULT_LIMIT, window: None, open: None, depth: 0, clean: Some(0) }
+        Self {
+            undo: Vec::new(),
+            redo: Vec::new(),
+            limit: Self::DEFAULT_LIMIT,
+            window: None,
+            open: None,
+            depth: 0,
+            clean: Some(0),
+        }
     }
 
     /// Creates a history holding at most `limit` undo steps.
@@ -127,7 +135,12 @@ impl<T: 'static> UndoStack<T> {
 
     /// [`push_boxed`](Self::push_boxed) with an explicit timestamp for the
     /// coalescing window (useful for deterministic tests and replays).
-    pub fn push_at(&mut self, target: &mut T, mut command: Box<dyn Command<T>>, at: Instant) -> Result<()> {
+    pub fn push_at(
+        &mut self,
+        target: &mut T,
+        mut command: Box<dyn Command<T>>,
+        at: Instant,
+    ) -> Result<()> {
         command.apply(target)?;
         let key = command.coalesce_key();
 
@@ -145,7 +158,9 @@ impl<T: 'static> UndoStack<T> {
 
         self.clear_redo();
         if let (Some(k), Some(last)) = (key, self.undo.last_mut()) {
-            let in_window = self.window.map_or(true, |w| at.saturating_duration_since(last.at) <= w);
+            let in_window = self
+                .window
+                .map_or(true, |w| at.saturating_duration_since(last.at) <= w);
             if !last.sealed && last.key == Some(k) && in_window {
                 let tail = last.steps.last_mut().expect("entries are never empty");
                 if let Err(refused) = tail.merge(command) {
@@ -162,7 +177,13 @@ impl<T: 'static> UndoStack<T> {
         }
 
         let label = command.label().to_owned();
-        self.undo.push(Entry { steps: vec![command], label, key, at, sealed: false });
+        self.undo.push(Entry {
+            steps: vec![command],
+            label,
+            key,
+            at,
+            sealed: false,
+        });
         self.trim();
         Ok(())
     }
@@ -181,7 +202,10 @@ impl<T: 'static> UndoStack<T> {
     pub fn begin_group(&mut self, label: impl Into<String>) {
         self.depth += 1;
         if self.depth == 1 {
-            self.open = Some(OpenGroup { label: label.into(), steps: Vec::new() });
+            self.open = Some(OpenGroup {
+                label: label.into(),
+                steps: Vec::new(),
+            });
         }
     }
 
@@ -201,7 +225,13 @@ impl<T: 'static> UndoStack<T> {
             return false;
         }
         self.clear_redo();
-        self.undo.push(Entry { steps: group.steps, label: group.label, key: None, at: Instant::now(), sealed: true });
+        self.undo.push(Entry {
+            steps: group.steps,
+            label: group.label,
+            key: None,
+            at: Instant::now(),
+            sealed: true,
+        });
         self.trim();
         true
     }
@@ -212,7 +242,11 @@ impl<T: 'static> UndoStack<T> {
         self.depth = 0;
         match self.open.take() {
             Some(mut group) => {
-                let result = group.steps.iter_mut().rev().try_for_each(|s| s.revert(target));
+                let result = group
+                    .steps
+                    .iter_mut()
+                    .rev()
+                    .try_for_each(|s| s.revert(target));
                 if result.is_err() {
                     self.clear();
                 }
@@ -339,7 +373,9 @@ impl<T: 'static> UndoStack<T> {
 
     fn ensure_no_group(&self, what: &'static str) -> Result<()> {
         if self.depth > 0 {
-            return Err(SuperbError::Message(format!("cannot {what} while an undo group is open")));
+            return Err(SuperbError::Message(format!(
+                "cannot {what} while an undo group is open"
+            )));
         }
         Ok(())
     }
@@ -441,17 +477,29 @@ mod tests {
     const N_KEY: CoalesceKey = CoalesceKey::new(1, 0);
 
     fn set_n(v: i32) -> PropertyEdit<Doc, i32> {
-        PropertyEdit::new("Set n", Some(N_KEY), v, |d: &Doc| d.n, |d: &mut Doc, v| {
-            d.n = v;
-            Ok(())
-        })
+        PropertyEdit::new(
+            "Set n",
+            Some(N_KEY),
+            v,
+            |d: &Doc| d.n,
+            |d: &mut Doc, v| {
+                d.n = v;
+                Ok(())
+            },
+        )
     }
 
     fn set_name(v: &str) -> PropertyEdit<Doc, String> {
-        PropertyEdit::new("Set name", Some(CoalesceKey::new(2, 0)), v.to_owned(), |d: &Doc| d.name.clone(), |d: &mut Doc, v| {
-            d.name = v;
-            Ok(())
-        })
+        PropertyEdit::new(
+            "Set name",
+            Some(CoalesceKey::new(2, 0)),
+            v.to_owned(),
+            |d: &Doc| d.name.clone(),
+            |d: &mut Doc, v| {
+                d.name = v;
+                Ok(())
+            },
+        )
     }
 
     #[test]
@@ -465,7 +513,13 @@ mod tests {
 
         h.push(&mut doc, Add(5)).unwrap();
         h.push(&mut doc, set_name("lead")).unwrap();
-        assert_eq!(doc, Doc { n: 5, name: "lead".into() });
+        assert_eq!(
+            doc,
+            Doc {
+                n: 5,
+                name: "lead".into()
+            }
+        );
         assert_eq!(h.undo_len(), 2);
         assert_eq!(h.undo_label(), Some("Set name"));
         assert_eq!(h.undo_labels().collect::<Vec<_>>(), ["Set name", "Add"]);
@@ -482,8 +536,17 @@ mod tests {
         assert!(h.redo(&mut doc).unwrap());
         assert!(h.redo(&mut doc).unwrap());
         assert!(!h.redo(&mut doc).unwrap());
-        assert_eq!(doc, Doc { n: 5, name: "lead".into() });
-        assert_eq!(format!("{h:?}"), "UndoStack { undo: 2, redo: 0, limit: 1000, group_depth: 0, clean: false }");
+        assert_eq!(
+            doc,
+            Doc {
+                n: 5,
+                name: "lead".into()
+            }
+        );
+        assert_eq!(
+            format!("{h:?}"),
+            "UndoStack { undo: 2, redo: 0, limit: 1000, group_depth: 0, clean: false }"
+        );
     }
 
     #[test]
@@ -545,12 +608,27 @@ mod tests {
         assert_eq!(h.coalesce_window(), Some(Duration::from_millis(500)));
         let t0 = Instant::now();
         h.push_at(&mut doc, Box::new(set_n(1)), t0).unwrap();
-        h.push_at(&mut doc, Box::new(set_n(2)), t0 + Duration::from_millis(400)).unwrap();
+        h.push_at(
+            &mut doc,
+            Box::new(set_n(2)),
+            t0 + Duration::from_millis(400),
+        )
+        .unwrap();
         assert_eq!(h.undo_len(), 1);
         // Measured from the previous push, not the first.
-        h.push_at(&mut doc, Box::new(set_n(3)), t0 + Duration::from_millis(800)).unwrap();
+        h.push_at(
+            &mut doc,
+            Box::new(set_n(3)),
+            t0 + Duration::from_millis(800),
+        )
+        .unwrap();
         assert_eq!(h.undo_len(), 1);
-        h.push_at(&mut doc, Box::new(set_n(4)), t0 + Duration::from_millis(1400)).unwrap();
+        h.push_at(
+            &mut doc,
+            Box::new(set_n(4)),
+            t0 + Duration::from_millis(1400),
+        )
+        .unwrap();
         assert_eq!(h.undo_len(), 2);
         // Timestamps in the past never panic.
         h.push_at(&mut doc, Box::new(set_n(5)), t0).unwrap();
@@ -596,11 +674,23 @@ mod tests {
         assert!(!h.in_group());
         assert_eq!(h.undo_len(), 1);
         assert_eq!(h.undo_label(), Some("Import"));
-        assert_eq!(doc, Doc { n: 1, name: "xy".into() });
+        assert_eq!(
+            doc,
+            Doc {
+                n: 1,
+                name: "xy".into()
+            }
+        );
         h.undo(&mut doc).unwrap();
         assert_eq!(doc, Doc::default());
         h.redo(&mut doc).unwrap();
-        assert_eq!(doc, Doc { n: 1, name: "xy".into() });
+        assert_eq!(
+            doc,
+            Doc {
+                n: 1,
+                name: "xy".into()
+            }
+        );
 
         // Empty groups record nothing; stray end_group is harmless.
         h.begin_group("nothing");
@@ -638,7 +728,13 @@ mod tests {
         h.begin_group("inner");
         h.push(&mut doc, set_name("z")).unwrap();
         h.cancel_group(&mut doc).unwrap();
-        assert_eq!(doc, Doc { n: 1, name: String::new() });
+        assert_eq!(
+            doc,
+            Doc {
+                n: 1,
+                name: String::new()
+            }
+        );
         assert!(!h.in_group());
         assert_eq!(h.undo_len(), 1);
         h.cancel_group(&mut doc).unwrap(); // nothing open
@@ -696,7 +792,10 @@ mod tests {
         h.push(&mut doc, Add(3)).unwrap(); // diverges: clean state is in the discarded redo
         assert!(!h.is_clean());
         h.undo(&mut doc).unwrap();
-        assert!(!h.is_clean(), "same depth as the saved state but different content");
+        assert!(
+            !h.is_clean(),
+            "same depth as the saved state but different content"
+        );
         h.mark_clean();
         assert!(h.is_clean());
 

@@ -32,7 +32,10 @@ fn main() -> Result<()> {
     // nth(1) = first CLI arg after the binary name.
     // and_then(|s| s.parse().ok()) tries to parse as usize; invalid → None.
     // unwrap_or(0) picks port 0 when no valid index was given.
-    let index = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let index = std::env::args()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
 
     // connect opens the port; callbacks push TimestampedMessage into an SPSC.
     // We get (bridge metadata, rx consumer). Capacity 1024 messages.
@@ -42,7 +45,11 @@ fn main() -> Result<()> {
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(10) {
         // Drain everything currently in the queue (non-blocking pop).
-        while let Some(TimestampedMessage { timestamp_us, message }) = rx.pop() {
+        while let Some(TimestampedMessage {
+            timestamp_us,
+            message,
+        }) = rx.pop()
+        {
             // Destructure the struct in the pattern; {:?} debug-prints the message.
             println!("{timestamp_us:>12} us  {message:?}");
         }

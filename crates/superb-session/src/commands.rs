@@ -42,7 +42,10 @@
 //! assert!(session.item(clip).is_ok(), "restored under the same id");
 //! ```
 
-use superb_core::{BeatPosition, ClipId, MarkerId, Result, SendId, SuperbError, TimeDuration, TimePosition, TrackId};
+use superb_core::{
+    BeatPosition, ClipId, MarkerId, Result, SendId, SuperbError, TimeDuration, TimePosition,
+    TrackId,
+};
 use superb_transport::LoopRange;
 use superb_undo::{CoalesceKey, Command, PropertyEdit};
 
@@ -114,7 +117,11 @@ pub struct AddTrack {
 impl AddTrack {
     /// Creates the command.
     pub fn new(track: Track) -> Self {
-        Self { id: track.id(), track: Some(track), index: None }
+        Self {
+            id: track.id(),
+            track: Some(track),
+            index: None,
+        }
     }
 
     /// Inserts at `index` instead of appending.
@@ -136,7 +143,10 @@ impl Command<Session> for AddTrack {
 
     fn apply(&mut self, session: &mut Session) -> Result<()> {
         let track = self.track.as_ref().ok_or_else(not_applied)?.clone();
-        let index = self.index.unwrap_or(session.track_count()).min(session.track_count());
+        let index = self
+            .index
+            .unwrap_or(session.track_count())
+            .min(session.track_count());
         self.id = session.insert_track(index, track)?;
         self.track = None;
         Ok(())
@@ -162,7 +172,12 @@ pub struct RemoveTrack {
 impl RemoveTrack {
     /// Creates the command.
     pub fn new(id: TrackId) -> Self {
-        Self { id, removed: None, routed: Vec::new(), sends: Vec::new() }
+        Self {
+            id,
+            removed: None,
+            routed: Vec::new(),
+            sends: Vec::new(),
+        }
     }
 }
 
@@ -175,7 +190,10 @@ impl Command<Session> for RemoveTrack {
         let index = session.track_index(self.id)?;
         if session.track(self.id)?.kind == TrackKind::Bus {
             self.routed = session.tracks_routed_to(self.id).collect();
-            self.sends = session.sends_to(self.id).map(|(t, s)| (t, s.clone())).collect();
+            self.sends = session
+                .sends_to(self.id)
+                .map(|(t, s)| (t, s.clone()))
+                .collect();
         }
         self.removed = Some((index, session.remove_track(self.id)?));
         Ok(())
@@ -238,7 +256,11 @@ pub struct SetTrackOutput {
 impl SetTrackOutput {
     /// Creates the command.
     pub fn new(track: TrackId, output: Option<TrackId>) -> Self {
-        Self { track, output, previous: None }
+        Self {
+            track,
+            output,
+            previous: None,
+        }
     }
 }
 
@@ -270,7 +292,11 @@ impl AddSend {
     /// Creates the command. Give the send a pre-allocated ID
     /// (`Session::allocate_send_id`) to know it before pushing.
     pub fn new(track: TrackId, send: TrackSend) -> Self {
-        Self { track, id: send.id(), send: Some(send) }
+        Self {
+            track,
+            id: send.id(),
+            send: Some(send),
+        }
     }
 
     /// The send's ID (valid once applied, or from the start if pre-allocated).
@@ -344,7 +370,11 @@ impl AddItem {
     /// Creates the command. Give the item a pre-allocated ID
     /// (`Session::allocate_clip_id`) to know it before pushing.
     pub fn new(track: TrackId, item: Item) -> Self {
-        Self { track, id: item.id(), item: Some(item) }
+        Self {
+            track,
+            id: item.id(),
+            item: Some(item),
+        }
     }
 
     /// The item's ID (valid once applied, or from the start if pre-allocated).
@@ -414,7 +444,12 @@ pub struct MoveItem {
 impl MoveItem {
     /// Moves the item so it starts at `start`.
     pub fn new(id: ClipId, start: TimePosition) -> Self {
-        Self { id, start, track: None, from: None }
+        Self {
+            id,
+            start,
+            track: None,
+            from: None,
+        }
     }
 
     /// Also moves the item to `track`.
@@ -450,7 +485,10 @@ impl Command<Session> for MoveItem {
         Some(CoalesceKey::new(keys::ITEM_MOVE, self.id.raw()))
     }
 
-    fn merge(&mut self, next: Box<dyn Command<Session>>) -> core::result::Result<(), Box<dyn Command<Session>>> {
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<Session>>,
+    ) -> core::result::Result<(), Box<dyn Command<Session>>> {
         let next = next.downcast::<Self>()?;
         self.start = next.start;
         if next.track.is_some() {
@@ -470,7 +508,11 @@ pub struct ResizeItem {
 impl ResizeItem {
     /// Creates the command.
     pub fn new(id: ClipId, length: TimeDuration) -> Self {
-        Self { id, length, from: None }
+        Self {
+            id,
+            length,
+            from: None,
+        }
     }
 }
 
@@ -494,7 +536,10 @@ impl Command<Session> for ResizeItem {
         Some(CoalesceKey::new(keys::ITEM_RESIZE, self.id.raw()))
     }
 
-    fn merge(&mut self, next: Box<dyn Command<Session>>) -> core::result::Result<(), Box<dyn Command<Session>>> {
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<Session>>,
+    ) -> core::result::Result<(), Box<dyn Command<Session>>> {
         let next = next.downcast::<Self>()?;
         self.length = next.length;
         Ok(())
@@ -515,7 +560,10 @@ impl AddMarker {
     /// Creates the command. Give the marker a pre-allocated ID
     /// (`Session::allocate_marker_id`) to know it before pushing.
     pub fn new(marker: Marker) -> Self {
-        Self { id: marker.id(), marker: Some(marker) }
+        Self {
+            id: marker.id(),
+            marker: Some(marker),
+        }
     }
 
     /// The marker's ID (valid once applied, or from the start if pre-allocated).
@@ -581,7 +629,11 @@ pub struct MoveMarker {
 impl MoveMarker {
     /// Creates the command.
     pub fn new(id: MarkerId, position: TimePosition) -> Self {
-        Self { id, position, from: None }
+        Self {
+            id,
+            position,
+            from: None,
+        }
     }
 }
 
@@ -605,7 +657,10 @@ impl Command<Session> for MoveMarker {
         Some(CoalesceKey::new(keys::MARKER_MOVE, self.id.raw()))
     }
 
-    fn merge(&mut self, next: Box<dyn Command<Session>>) -> core::result::Result<(), Box<dyn Command<Session>>> {
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<Session>>,
+    ) -> core::result::Result<(), Box<dyn Command<Session>>> {
         let next = next.downcast::<Self>()?;
         self.position = next.position;
         Ok(())
@@ -629,7 +684,12 @@ pub struct SetTempo {
 impl SetTempo {
     /// Creates the command. Use `BeatPosition::ZERO` for the initial tempo.
     pub fn new(beat: BeatPosition, bpm: f64) -> Self {
-        Self { beat, bpm, ramp: false, previous: None }
+        Self {
+            beat,
+            bpm,
+            ramp: false,
+            previous: None,
+        }
     }
 
     /// Makes the point ramp linearly to the next tempo point.
@@ -645,7 +705,12 @@ impl Command<Session> for SetTempo {
     }
 
     fn apply(&mut self, session: &mut Session) -> Result<()> {
-        let before = session.tempo_map().tempo_points().iter().find(|p| p.beat == self.beat).map(|p| (p.bpm, p.ramp));
+        let before = session
+            .tempo_map()
+            .tempo_points()
+            .iter()
+            .find(|p| p.beat == self.beat)
+            .map(|p| (p.bpm, p.ramp));
         let map = session.tempo_map_mut();
         if self.ramp {
             map.add_tempo_ramp(self.beat, self.bpm)?;
@@ -669,7 +734,10 @@ impl Command<Session> for SetTempo {
         Some(CoalesceKey::new(keys::TEMPO, self.beat.beats().to_bits()))
     }
 
-    fn merge(&mut self, next: Box<dyn Command<Session>>) -> core::result::Result<(), Box<dyn Command<Session>>> {
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<Session>>,
+    ) -> core::result::Result<(), Box<dyn Command<Session>>> {
         let next = next.downcast::<Self>()?;
         self.bpm = next.bpm;
         self.ramp = next.ramp;
@@ -686,7 +754,10 @@ pub struct SetLoopRange {
 impl SetLoopRange {
     /// Creates the command.
     pub fn new(range: Option<LoopRange>) -> Self {
-        Self { range, previous: None }
+        Self {
+            range,
+            previous: None,
+        }
     }
 }
 
@@ -710,7 +781,10 @@ impl Command<Session> for SetLoopRange {
         Some(CoalesceKey::new(keys::LOOP, 0))
     }
 
-    fn merge(&mut self, next: Box<dyn Command<Session>>) -> core::result::Result<(), Box<dyn Command<Session>>> {
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<Session>>,
+    ) -> core::result::Result<(), Box<dyn Command<Session>>> {
         let next = next.downcast::<Self>()?;
         self.range = next.range;
         Ok(())
@@ -776,64 +850,113 @@ pub fn set_session_name(name: impl Into<String>) -> PropertyEdit<Session, String
 
 /// Renames a track.
 pub fn set_track_name(id: TrackId, name: impl Into<String>) -> PropertyEdit<Session, String> {
-    track_property("Rename track", keys::TRACK_NAME, id, name.into(), |t| t.name.clone(), |t, v| {
-        t.name = v;
-        Ok(())
-    })
+    track_property(
+        "Rename track",
+        keys::TRACK_NAME,
+        id,
+        name.into(),
+        |t| t.name.clone(),
+        |t, v| {
+            t.name = v;
+            Ok(())
+        },
+    )
 }
 
 /// Sets a track's fader gain in dB. Rejects non-finite values.
 pub fn set_track_gain_db(id: TrackId, gain_db: f32) -> PropertyEdit<Session, f32> {
-    track_property("Set track gain", keys::TRACK_GAIN, id, gain_db, |t| t.gain_db, |t, v| {
-        if !v.is_finite() {
-            return Err(SuperbError::InvalidArgument { what: "gain_db" });
-        }
-        t.gain_db = v;
-        Ok(())
-    })
+    track_property(
+        "Set track gain",
+        keys::TRACK_GAIN,
+        id,
+        gain_db,
+        |t| t.gain_db,
+        |t, v| {
+            if !v.is_finite() {
+                return Err(SuperbError::InvalidArgument { what: "gain_db" });
+            }
+            t.gain_db = v;
+            Ok(())
+        },
+    )
 }
 
 /// Sets a track's pan (`-1.0..=1.0`).
 pub fn set_track_pan(id: TrackId, pan: f32) -> PropertyEdit<Session, f32> {
-    track_property("Set track pan", keys::TRACK_PAN, id, pan, |t| t.pan, |t, v| {
-        if !(-1.0..=1.0).contains(&v) {
-            return Err(SuperbError::InvalidArgument { what: "pan" });
-        }
-        t.pan = v;
-        Ok(())
-    })
+    track_property(
+        "Set track pan",
+        keys::TRACK_PAN,
+        id,
+        pan,
+        |t| t.pan,
+        |t, v| {
+            if !(-1.0..=1.0).contains(&v) {
+                return Err(SuperbError::InvalidArgument { what: "pan" });
+            }
+            t.pan = v;
+            Ok(())
+        },
+    )
 }
 
 /// Mutes or unmutes a track.
 pub fn set_track_mute(id: TrackId, muted: bool) -> PropertyEdit<Session, bool> {
-    track_property("Mute track", keys::TRACK_MUTE, id, muted, |t| t.muted, |t, v| {
-        t.muted = v;
-        Ok(())
-    })
+    track_property(
+        "Mute track",
+        keys::TRACK_MUTE,
+        id,
+        muted,
+        |t| t.muted,
+        |t, v| {
+            t.muted = v;
+            Ok(())
+        },
+    )
 }
 
 /// Solos or unsolos a track.
 pub fn set_track_solo(id: TrackId, soloed: bool) -> PropertyEdit<Session, bool> {
-    track_property("Solo track", keys::TRACK_SOLO, id, soloed, |t| t.soloed, |t, v| {
-        t.soloed = v;
-        Ok(())
-    })
+    track_property(
+        "Solo track",
+        keys::TRACK_SOLO,
+        id,
+        soloed,
+        |t| t.soloed,
+        |t, v| {
+            t.soloed = v;
+            Ok(())
+        },
+    )
 }
 
 /// Arms or disarms a track for recording.
 pub fn set_track_armed(id: TrackId, armed: bool) -> PropertyEdit<Session, bool> {
-    track_property("Arm track", keys::TRACK_ARMED, id, armed, |t| t.armed, |t, v| {
-        t.armed = v;
-        Ok(())
-    })
+    track_property(
+        "Arm track",
+        keys::TRACK_ARMED,
+        id,
+        armed,
+        |t| t.armed,
+        |t, v| {
+            t.armed = v;
+            Ok(())
+        },
+    )
 }
 
 /// Sets a track's colour.
 pub fn set_track_color(id: TrackId, color: Option<u32>) -> PropertyEdit<Session, Option<u32>> {
-    track_property("Set track colour", keys::TRACK_COLOR, id, color, |t| t.color, |t, v| {
-        t.color = v;
-        Ok(())
-    })
+    track_property(
+        "Set track colour",
+        keys::TRACK_COLOR,
+        id,
+        color,
+        |t| t.color,
+        |t, v| {
+            t.color = v;
+            Ok(())
+        },
+    )
 }
 
 fn send_property<V: Clone + Send + Sync + 'static>(
@@ -856,44 +979,86 @@ fn send_property<V: Clone + Send + Sync + 'static>(
 
 /// Sets a send's level in dB. Rejects non-finite values. Coalesces.
 pub fn set_send_level_db(id: SendId, level_db: f32) -> PropertyEdit<Session, f32> {
-    send_property("Set send level", keys::SEND_LEVEL, id, level_db, |s| s.level_db, |s, v| {
-        if !v.is_finite() {
-            return Err(SuperbError::InvalidArgument { what: "level_db" });
-        }
-        s.level_db = v;
-        Ok(())
-    })
+    send_property(
+        "Set send level",
+        keys::SEND_LEVEL,
+        id,
+        level_db,
+        |s| s.level_db,
+        |s, v| {
+            if !v.is_finite() {
+                return Err(SuperbError::InvalidArgument { what: "level_db" });
+            }
+            s.level_db = v;
+            Ok(())
+        },
+    )
 }
 
 /// Enables or disables a send.
 pub fn set_send_enabled(id: SendId, enabled: bool) -> PropertyEdit<Session, bool> {
-    send_property("Enable send", keys::SEND_ENABLED, id, enabled, |s| s.enabled, |s, v| {
-        s.enabled = v;
-        Ok(())
-    })
+    send_property(
+        "Enable send",
+        keys::SEND_ENABLED,
+        id,
+        enabled,
+        |s| s.enabled,
+        |s, v| {
+            s.enabled = v;
+            Ok(())
+        },
+    )
 }
 
 /// Switches a send between pre-fader (`true`) and post-fader.
 pub fn set_send_pre_fader(id: SendId, pre_fader: bool) -> PropertyEdit<Session, bool> {
-    send_property("Set send tap", keys::SEND_PRE_FADER, id, pre_fader, |s| s.pre_fader, |s, v| {
-        s.pre_fader = v;
-        Ok(())
-    })
+    send_property(
+        "Set send tap",
+        keys::SEND_PRE_FADER,
+        id,
+        pre_fader,
+        |s| s.pre_fader,
+        |s, v| {
+            s.pre_fader = v;
+            Ok(())
+        },
+    )
 }
 
 /// Renames an item.
 pub fn set_item_name(id: ClipId, name: impl Into<String>) -> PropertyEdit<Session, String> {
-    item_property("Rename item", keys::ITEM_NAME, id, name.into(), |i| i.name.clone(), |i, v| i.name = v)
+    item_property(
+        "Rename item",
+        keys::ITEM_NAME,
+        id,
+        name.into(),
+        |i| i.name.clone(),
+        |i, v| i.name = v,
+    )
 }
 
 /// Sets an item's gain in dB.
 pub fn set_item_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Session, f32> {
-    item_property("Set item gain", keys::ITEM_GAIN, id, gain_db, |i| i.gain_db, |i, v| i.gain_db = v)
+    item_property(
+        "Set item gain",
+        keys::ITEM_GAIN,
+        id,
+        gain_db,
+        |i| i.gain_db,
+        |i, v| i.gain_db = v,
+    )
 }
 
 /// Mutes or unmutes an item.
 pub fn set_item_mute(id: ClipId, muted: bool) -> PropertyEdit<Session, bool> {
-    item_property("Mute item", keys::ITEM_MUTE, id, muted, |i| i.muted, |i, v| i.muted = v)
+    item_property(
+        "Mute item",
+        keys::ITEM_MUTE,
+        id,
+        muted,
+        |i| i.muted,
+        |i, v| i.muted = v,
+    )
 }
 
 /// Renames a marker.
@@ -904,7 +1069,11 @@ pub fn set_marker_name(id: MarkerId, name: impl Into<String>) -> PropertyEdit<Se
         "Rename marker",
         Some(CoalesceKey::new(keys::MARKER_NAME, id.raw())),
         name,
-        move |s: &Session| s.marker(id).map(|m| m.name.clone()).unwrap_or_else(|_| fallback.clone()),
+        move |s: &Session| {
+            s.marker(id)
+                .map(|m| m.name.clone())
+                .unwrap_or_else(|_| fallback.clone())
+        },
         move |s: &mut Session, v| {
             s.marker_mut(id)?.name = v;
             Ok(())
@@ -922,7 +1091,14 @@ mod tests {
     const R: SampleRate = SampleRate::HZ_48K;
 
     fn item(id: ClipId, start: i64, len: i64) -> Item {
-        Item::with_id(id, "i", TimePosition::from_samples(start), TimeDuration::from_samples(len), ItemSource::Empty).unwrap()
+        Item::with_id(
+            id,
+            "i",
+            TimePosition::from_samples(start),
+            TimeDuration::from_samples(len),
+            ItemSource::Empty,
+        )
+        .unwrap()
     }
 
     fn base() -> (Session, UndoStack<Session>, TrackId, ClipId) {
@@ -948,14 +1124,19 @@ mod tests {
         assert_eq!(s.track(b).unwrap().name, "b");
 
         // Without a pre-allocated id the session assigns one; redo keeps it.
-        h.push(&mut s, AddTrack::new(Track::new("c", TrackKind::Bus))).unwrap();
+        h.push(&mut s, AddTrack::new(Track::new("c", TrackKind::Bus)))
+            .unwrap();
         let c = s.tracks().last().unwrap().id();
         assert!(c.is_valid());
         h.undo(&mut s).unwrap();
         h.redo(&mut s).unwrap();
         assert_eq!(s.tracks().last().unwrap().id(), c);
         // Out-of-range insert index is clamped to the end.
-        h.push(&mut s, AddTrack::new(Track::new("d", TrackKind::Audio)).at(99)).unwrap();
+        h.push(
+            &mut s,
+            AddTrack::new(Track::new("d", TrackKind::Audio)).at(99),
+        )
+        .unwrap();
         assert_eq!(s.tracks().last().unwrap().name, "d");
 
         // Remove restores the track with its items at the same index.
@@ -972,7 +1153,12 @@ mod tests {
         let before = h.undo_len();
         assert!(h.push(&mut s, RemoveTrack::new(a)).is_err());
         assert_eq!(h.undo_len(), before);
-        assert!(h.push(&mut s, AddTrack::new(Track::with_id(b, "dup", TrackKind::Audio))).is_err());
+        assert!(h
+            .push(
+                &mut s,
+                AddTrack::new(Track::with_id(b, "dup", TrackKind::Audio))
+            )
+            .is_err());
         assert_eq!(h.undo_len(), before);
     }
 
@@ -982,9 +1168,15 @@ mod tests {
         let b = s.add_track("b", TrackKind::Audio);
         let c = s.add_track("c", TrackKind::Audio);
         h.push(&mut s, MoveTrack::new(a, 2)).unwrap();
-        assert_eq!(s.tracks().iter().map(Track::id).collect::<Vec<_>>(), [b, c, a]);
+        assert_eq!(
+            s.tracks().iter().map(Track::id).collect::<Vec<_>>(),
+            [b, c, a]
+        );
         h.undo(&mut s).unwrap();
-        assert_eq!(s.tracks().iter().map(Track::id).collect::<Vec<_>>(), [a, b, c]);
+        assert_eq!(
+            s.tracks().iter().map(Track::id).collect::<Vec<_>>(),
+            [a, b, c]
+        );
         h.redo(&mut s).unwrap();
         assert_eq!(s.track_index(a).unwrap(), 2);
         assert!(h.push(&mut s, MoveTrack::new(a, 7)).is_err());
@@ -1006,13 +1198,27 @@ mod tests {
         assert_eq!(s.item_track(c2).unwrap(), b);
 
         // Move coalesces; track change is remembered through the merge.
-        h.push(&mut s, MoveItem::new(clip, TimePosition::from_samples(200))).unwrap();
-        h.push(&mut s, MoveItem::new(clip, TimePosition::from_samples(300)).to_track(b)).unwrap();
-        h.push(&mut s, MoveItem::new(clip, TimePosition::from_samples(400))).unwrap();
+        h.push(&mut s, MoveItem::new(clip, TimePosition::from_samples(200)))
+            .unwrap();
+        h.push(
+            &mut s,
+            MoveItem::new(clip, TimePosition::from_samples(300)).to_track(b),
+        )
+        .unwrap();
+        h.push(&mut s, MoveItem::new(clip, TimePosition::from_samples(400)))
+            .unwrap();
         assert_eq!(h.undo_label(), Some("Move item"));
         assert_eq!(s.item_track(clip).unwrap(), b);
         assert_eq!(s.item(clip).unwrap().start().samples(), 400);
-        assert_eq!(s.track(b).unwrap().items().iter().map(Item::id).collect::<Vec<_>>(), [c2, clip]);
+        assert_eq!(
+            s.track(b)
+                .unwrap()
+                .items()
+                .iter()
+                .map(Item::id)
+                .collect::<Vec<_>>(),
+            [c2, clip]
+        );
         h.undo(&mut s).unwrap();
         assert_eq!(s.item_track(clip).unwrap(), a);
         assert_eq!(s.item(clip).unwrap().start().samples(), 100);
@@ -1021,9 +1227,19 @@ mod tests {
         assert_eq!(s.item(clip).unwrap().start().samples(), 400);
         h.seal();
 
-        h.push(&mut s, ResizeItem::new(clip, TimeDuration::from_samples(60))).unwrap();
-        h.push(&mut s, ResizeItem::new(clip, TimeDuration::from_samples(70))).unwrap();
-        assert!(h.push(&mut s, ResizeItem::new(clip, TimeDuration::ZERO)).is_err());
+        h.push(
+            &mut s,
+            ResizeItem::new(clip, TimeDuration::from_samples(60)),
+        )
+        .unwrap();
+        h.push(
+            &mut s,
+            ResizeItem::new(clip, TimeDuration::from_samples(70)),
+        )
+        .unwrap();
+        assert!(h
+            .push(&mut s, ResizeItem::new(clip, TimeDuration::ZERO))
+            .is_err());
         assert_eq!(s.item(clip).unwrap().length().samples(), 70);
         h.undo(&mut s).unwrap();
         assert_eq!(s.item(clip).unwrap().length().samples(), 50);
@@ -1035,7 +1251,12 @@ mod tests {
         h.undo(&mut s).unwrap();
         assert_eq!(s.item_track(clip).unwrap(), b);
         assert_eq!(s.item(clip).unwrap().length().samples(), 70);
-        assert!(h.push(&mut s, MoveItem::new(ClipId::from_raw(999), TimePosition::ZERO)).is_err());
+        assert!(h
+            .push(
+                &mut s,
+                MoveItem::new(ClipId::from_raw(999), TimePosition::ZERO)
+            )
+            .is_err());
     }
 
     #[test]
@@ -1045,8 +1266,10 @@ mod tests {
         let cmd = AddMarker::new(Marker::with_id(m, "verse", TimePosition::from_samples(10)));
         assert_eq!(cmd.id(), m);
         h.push(&mut s, cmd).unwrap();
-        h.push(&mut s, MoveMarker::new(m, TimePosition::from_samples(20))).unwrap();
-        h.push(&mut s, MoveMarker::new(m, TimePosition::from_samples(30))).unwrap();
+        h.push(&mut s, MoveMarker::new(m, TimePosition::from_samples(20)))
+            .unwrap();
+        h.push(&mut s, MoveMarker::new(m, TimePosition::from_samples(30)))
+            .unwrap();
         assert_eq!(h.undo_len(), 2);
         h.push(&mut s, set_marker_name(m, "chorus")).unwrap();
         assert_eq!(s.marker(m).unwrap().name, "chorus");
@@ -1079,22 +1302,33 @@ mod tests {
         assert_eq!(h.undo_len(), 1);
         assert_eq!(s.tempo_map().tempo_at(beat), 135.0);
         h.undo(&mut s).unwrap();
-        assert_eq!(s.tempo_map().tempo_points().len(), 1, "point removed on undo");
+        assert_eq!(
+            s.tempo_map().tempo_points().len(),
+            1,
+            "point removed on undo"
+        );
         h.redo(&mut s).unwrap();
         assert_eq!(s.tempo_map().tempo_at(beat), 135.0);
         h.seal();
         // Existing point: undo restores the old bpm.
-        h.push(&mut s, SetTempo::new(BeatPosition::ZERO, 90.0)).unwrap();
+        h.push(&mut s, SetTempo::new(BeatPosition::ZERO, 90.0))
+            .unwrap();
         assert_eq!(s.tempo_map().tempo_at(BeatPosition::ZERO), 90.0);
         h.undo(&mut s).unwrap();
         assert_eq!(s.tempo_map().tempo_at(BeatPosition::ZERO), 120.0);
         assert!(h.push(&mut s, SetTempo::new(beat, -3.0)).is_err());
         // Ramp flag is applied, merged and restored.
         h.seal();
-        h.push(&mut s, SetTempo::new(BeatPosition::ZERO, 120.0).ramped()).unwrap();
+        h.push(&mut s, SetTempo::new(BeatPosition::ZERO, 120.0).ramped())
+            .unwrap();
         assert!(s.tempo_map().tempo_points()[0].ramp);
-        assert_eq!(s.tempo_map().tempo_at(BeatPosition::new(2.0)), 127.5, "ramping to 135 at beat 4");
-        h.push(&mut s, SetTempo::new(BeatPosition::ZERO, 100.0)).unwrap(); // merged: constant again
+        assert_eq!(
+            s.tempo_map().tempo_at(BeatPosition::new(2.0)),
+            127.5,
+            "ramping to 135 at beat 4"
+        );
+        h.push(&mut s, SetTempo::new(BeatPosition::ZERO, 100.0))
+            .unwrap(); // merged: constant again
         assert!(!s.tempo_map().tempo_points()[0].ramp);
         assert_eq!(h.undo_len(), 2, "both tempo edits at beat 0 are one step");
         h.undo(&mut s).unwrap();
@@ -1135,22 +1369,50 @@ mod tests {
         h.push(&mut s, set_item_gain_db(clip, -2.0)).unwrap();
         h.push(&mut s, set_item_mute(clip, true)).unwrap();
         let t = s.track(a).unwrap();
-        assert_eq!((t.name.as_str(), t.gain_db, t.pan, t.muted, t.soloed, t.armed, t.color), ("vox", -6.0, -0.5, true, true, true, Some(0x123456)));
+        assert_eq!(
+            (
+                t.name.as_str(),
+                t.gain_db,
+                t.pan,
+                t.muted,
+                t.soloed,
+                t.armed,
+                t.color
+            ),
+            ("vox", -6.0, -0.5, true, true, true, Some(0x123456))
+        );
         let i = s.item(clip).unwrap();
         assert_eq!((i.name.as_str(), i.gain_db, i.muted), ("take", -2.0, true));
         assert_eq!(s.name(), "song");
         while h.undo(&mut s).unwrap() {}
         let t = s.track(a).unwrap();
-        assert_eq!((t.name.as_str(), t.gain_db, t.pan, t.muted, t.soloed, t.armed, t.color), ("a", 0.0, 0.0, false, false, false, None));
+        assert_eq!(
+            (
+                t.name.as_str(),
+                t.gain_db,
+                t.pan,
+                t.muted,
+                t.soloed,
+                t.armed,
+                t.color
+            ),
+            ("a", 0.0, 0.0, false, false, false, None)
+        );
         let i = s.item(clip).unwrap();
         assert_eq!((i.name.as_str(), i.gain_db, i.muted), ("i", 0.0, false));
         assert_eq!(s.name(), "t");
         while h.redo(&mut s).unwrap() {}
         assert_eq!(s.track(a).unwrap().gain_db, -6.0);
         // Missing targets fail cleanly.
-        assert!(h.push(&mut s, set_track_name(TrackId::from_raw(999), "x")).is_err());
-        assert!(h.push(&mut s, set_item_mute(ClipId::from_raw(999), true)).is_err());
-        assert!(h.push(&mut s, set_marker_name(MarkerId::from_raw(999), "x")).is_err());
+        assert!(h
+            .push(&mut s, set_track_name(TrackId::from_raw(999), "x"))
+            .is_err());
+        assert!(h
+            .push(&mut s, set_item_mute(ClipId::from_raw(999), true))
+            .is_err());
+        assert!(h
+            .push(&mut s, set_marker_name(MarkerId::from_raw(999), "x"))
+            .is_err());
     }
 
     #[test]
@@ -1164,7 +1426,10 @@ mod tests {
         h.push(&mut s, SetTrackOutput::new(sub, Some(fx))).unwrap();
         assert_eq!(h.undo_label(), Some("Route track"));
         assert_eq!(h.undo_len(), 2, "routing does not coalesce");
-        assert!(h.push(&mut s, SetTrackOutput::new(fx, Some(sub))).is_err(), "cycle rejected, nothing recorded");
+        assert!(
+            h.push(&mut s, SetTrackOutput::new(fx, Some(sub))).is_err(),
+            "cycle rejected, nothing recorded"
+        );
         assert_eq!(h.undo_len(), 2);
         assert!(h.push(&mut s, SetTrackOutput::new(a, Some(k))).is_err());
         h.undo(&mut s).unwrap();
@@ -1178,19 +1443,32 @@ mod tests {
         h.push(&mut s, cmd).unwrap();
         h.push(&mut s, AddSend::new(k, TrackSend::new(fx))).unwrap();
         let auto = s.track(k).unwrap().sends()[0].id();
-        assert!(h.push(&mut s, AddSend::new(sub, TrackSend::new(fx))).is_err(), "buses cannot send");
+        assert!(
+            h.push(&mut s, AddSend::new(sub, TrackSend::new(fx)))
+                .is_err(),
+            "buses cannot send"
+        );
         h.push(&mut s, set_send_level_db(id, -6.0)).unwrap();
         h.push(&mut s, set_send_level_db(id, -9.0)).unwrap();
-        assert!(h.push(&mut s, set_send_level_db(id, f32::INFINITY)).is_err());
+        assert!(h
+            .push(&mut s, set_send_level_db(id, f32::INFINITY))
+            .is_err());
         h.push(&mut s, set_send_enabled(id, false)).unwrap();
         h.push(&mut s, set_send_pre_fader(id, true)).unwrap();
         let send = s.send(id).unwrap();
-        assert_eq!((send.level_db, send.enabled, send.pre_fader), (-9.0, false, true));
+        assert_eq!(
+            (send.level_db, send.enabled, send.pre_fader),
+            (-9.0, false, true)
+        );
         h.undo(&mut s).unwrap();
         h.undo(&mut s).unwrap();
         h.undo(&mut s).unwrap();
         let send = s.send(id).unwrap();
-        assert_eq!((send.level_db, send.enabled, send.pre_fader), (-3.0, true, false), "level edits were one step");
+        assert_eq!(
+            (send.level_db, send.enabled, send.pre_fader),
+            (-3.0, true, false),
+            "level edits were one step"
+        );
         while h.redo(&mut s).unwrap() {}
         assert_eq!(s.send(id).unwrap().level_db, -9.0);
         h.seal();
@@ -1201,8 +1479,12 @@ mod tests {
         assert_eq!(s.send_track(auto).unwrap(), k);
         h.redo(&mut s).unwrap();
         h.undo(&mut s).unwrap();
-        assert!(h.push(&mut s, RemoveSend::new(SendId::from_raw(999))).is_err());
-        assert!(h.push(&mut s, set_send_enabled(SendId::from_raw(999), true)).is_err());
+        assert!(h
+            .push(&mut s, RemoveSend::new(SendId::from_raw(999)))
+            .is_err());
+        assert!(h
+            .push(&mut s, set_send_enabled(SendId::from_raw(999), true))
+            .is_err());
 
         // Removing the fx bus detaches sub's output and both sends; undo
         // brings the bus back with everything re-attached.
@@ -1234,7 +1516,11 @@ mod tests {
         let (mut s, mut h, a, clip) = base();
         h.begin_group("Duplicate track");
         let b = s.allocate_track_id();
-        h.push(&mut s, AddTrack::new(Track::with_id(b, "a copy", TrackKind::Audio))).unwrap();
+        h.push(
+            &mut s,
+            AddTrack::new(Track::with_id(b, "a copy", TrackKind::Audio)),
+        )
+        .unwrap();
         let c = s.allocate_clip_id();
         h.push(&mut s, AddItem::new(b, item(c, 100, 50))).unwrap();
         h.push(&mut s, set_track_color(b, Some(1))).unwrap();

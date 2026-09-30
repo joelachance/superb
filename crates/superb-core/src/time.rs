@@ -105,7 +105,9 @@ impl TimePosition {
 
     /// Returns the position as an unsigned sample index, or an error if negative.
     pub fn as_unsigned(self) -> Result<u64> {
-        u64::try_from(self.0).map_err(|_| SuperbError::InvalidArgument { what: "negative position" })
+        u64::try_from(self.0).map_err(|_| SuperbError::InvalidArgument {
+            what: "negative position",
+        })
     }
 }
 
@@ -336,7 +338,10 @@ pub struct TimeSignature {
 
 impl TimeSignature {
     /// Common time, `4/4`.
-    pub const FOUR_FOUR: Self = Self { numerator: 4, denominator: 4 };
+    pub const FOUR_FOUR: Self = Self {
+        numerator: 4,
+        denominator: 4,
+    };
 
     /// Creates a validated time signature.
     ///
@@ -344,12 +349,19 @@ impl TimeSignature {
     /// in `1..=64`.
     pub const fn new(numerator: u8, denominator: u8) -> Result<Self> {
         if numerator == 0 || numerator > 64 {
-            return Err(SuperbError::InvalidArgument { what: "time_signature.numerator" });
+            return Err(SuperbError::InvalidArgument {
+                what: "time_signature.numerator",
+            });
         }
         if denominator == 0 || denominator > 64 || !denominator.is_power_of_two() {
-            return Err(SuperbError::InvalidArgument { what: "time_signature.denominator" });
+            return Err(SuperbError::InvalidArgument {
+                what: "time_signature.denominator",
+            });
         }
-        Ok(Self { numerator, denominator })
+        Ok(Self {
+            numerator,
+            denominator,
+        })
     }
 
     /// Beats per bar (the numerator).

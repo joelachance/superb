@@ -20,7 +20,9 @@ impl MidiChannel {
     /// Returns [`SuperbError::InvalidArgument`] if `index > 15`.
     pub const fn new(index: u8) -> Result<Self> {
         if index > 15 {
-            Err(SuperbError::InvalidArgument { what: "midi_channel" })
+            Err(SuperbError::InvalidArgument {
+                what: "midi_channel",
+            })
         } else {
             Ok(Self(index))
         }
@@ -60,7 +62,12 @@ mod tests {
 
     #[test]
     fn rejects_out_of_range() {
-        assert_eq!(MidiChannel::new(16), Err(SuperbError::InvalidArgument { what: "midi_channel" }));
+        assert_eq!(
+            MidiChannel::new(16),
+            Err(SuperbError::InvalidArgument {
+                what: "midi_channel"
+            })
+        );
         assert!(MidiChannel::new(255).is_err());
     }
 

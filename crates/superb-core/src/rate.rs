@@ -30,7 +30,9 @@ impl SampleRate {
     /// Returns [`SuperbError::InvalidArgument`] outside `MIN_HZ..=MAX_HZ`.
     pub const fn new(hz: u32) -> Result<Self> {
         if hz < Self::MIN_HZ || hz > Self::MAX_HZ {
-            Err(SuperbError::InvalidArgument { what: "sample_rate" })
+            Err(SuperbError::InvalidArgument {
+                what: "sample_rate",
+            })
         } else {
             Ok(Self(hz))
         }
@@ -115,7 +117,10 @@ mod tests {
         // 44.1k * 0.5 s = 22 050 exactly
         assert_eq!(SampleRate::CD.seconds_to_samples(0.5), 22_050);
         // rounding, not truncation
-        assert_eq!(SampleRate::HZ_48K.seconds_to_samples(1.0 / 48_000.0 * 2.6), 3);
+        assert_eq!(
+            SampleRate::HZ_48K.seconds_to_samples(1.0 / 48_000.0 * 2.6),
+            3
+        );
     }
 
     #[test]

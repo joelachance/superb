@@ -43,7 +43,12 @@ fn io_err(e: io::Error) -> SuperbError {
 }
 
 /// Writes `audio` to `path` in the given format.
-pub fn write(path: impl AsRef<Path>, audio: &PlanarBuffer, sample_rate: SampleRate, format: WavFormat) -> Result<()> {
+pub fn write(
+    path: impl AsRef<Path>,
+    audio: &PlanarBuffer,
+    sample_rate: SampleRate,
+    format: WavFormat,
+) -> Result<()> {
     let file = File::create(path).map_err(io_err)?;
     let mut w = BufWriter::new(file);
     write_to(&mut w, audio, sample_rate, format)?;
@@ -51,10 +56,17 @@ pub fn write(path: impl AsRef<Path>, audio: &PlanarBuffer, sample_rate: SampleRa
 }
 
 /// Writes `audio` to any writer.
-pub fn write_to(w: &mut impl Write, audio: &PlanarBuffer, sample_rate: SampleRate, format: WavFormat) -> Result<()> {
+pub fn write_to(
+    w: &mut impl Write,
+    audio: &PlanarBuffer,
+    sample_rate: SampleRate,
+    format: WavFormat,
+) -> Result<()> {
     let channels = audio.channels();
     if channels == 0 || channels > u16::MAX as usize {
-        return Err(SuperbError::InvalidArgument { what: "wav channels" });
+        return Err(SuperbError::InvalidArgument {
+            what: "wav channels",
+        });
     }
     let bps = format.bytes_per_sample();
     let block_align = channels as u16 * bps;
@@ -108,7 +120,12 @@ pub fn read_from(r: &mut impl Read) -> Result<(PlanarBuffer, SampleRate)> {
     let mut data: Option<&[u8]> = None;
     while pos + 8 <= bytes.len() {
         let id = &bytes[pos..pos + 4];
-        let len = u32::from_le_bytes([bytes[pos + 4], bytes[pos + 5], bytes[pos + 6], bytes[pos + 7]]) as usize;
+        let len = u32::from_le_bytes([
+            bytes[pos + 4],
+            bytes[pos + 5],
+            bytes[pos + 6],
+            bytes[pos + 7],
+        ]) as usize;
         let start = pos + 8;
         let end = (start + len).min(bytes.len());
         match id {
@@ -128,15 +145,22 @@ pub fn read_from(r: &mut impl Read) -> Result<(PlanarBuffer, SampleRate)> {
         }
         pos = start + len + (len & 1); // chunks are word aligned
     }
-    let (tag, channels, rate, bits) = fmt.ok_or_else(|| SuperbError::Message("missing fmt chunk".into()))?;
+    let (tag, channels, rate, bits) =
+        fmt.ok_or_else(|| SuperbError::Message("missing fmt chunk".into()))?;
     let data = data.ok_or_else(|| SuperbError::Message("missing data chunk".into()))?;
     let format = match (tag, bits) {
         (1, 16) => WavFormat::Pcm16,
         (3, 32) => WavFormat::Float32,
-        _ => return Err(SuperbError::Message(format!("unsupported wav format tag {tag} / {bits} bits"))),
+        _ => {
+            return Err(SuperbError::Message(format!(
+                "unsupported wav format tag {tag} / {bits} bits"
+            )))
+        }
     };
     if channels == 0 {
-        return Err(SuperbError::InvalidArgument { what: "wav channels" });
+        return Err(SuperbError::InvalidArgument {
+            what: "wav channels",
+        });
     }
     let sample_rate = SampleRate::new(rate)?;
     let bps = format.bytes_per_sample() as usize;
@@ -147,7 +171,9 @@ pub fn read_from(r: &mut impl Read) -> Result<(PlanarBuffer, SampleRate)> {
         for ch in 0..channels as usize {
             let s = match format {
                 WavFormat::Pcm16 => i16::from_le_bytes([data[i], data[i + 1]]) as f32 / 32_768.0,
-                WavFormat::Float32 => f32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]]),
+                WavFormat::Float32 => {
+                    f32::from_le_bytes([data[i], data[i + 1], data[i + 2], data[i + 3]])
+                }
             };
             audio.channel_mut(ch)[frame] = s;
             i += bps;
@@ -162,8 +188,10 @@ mod tests {
 
     fn fixture() -> PlanarBuffer {
         let mut b = PlanarBuffer::new(2, 5);
-        b.channel_mut(0).copy_from_slice(&[0.0, 0.5, -0.5, 1.0, -1.0]);
-        b.channel_mut(1).copy_from_slice(&[0.25, -0.25, 0.125, 0.0, 0.75]);
+        b.channel_mut(0)
+            .copy_from_slice(&[0.0, 0.5, -0.5, 1.0, -1.0]);
+        b.channel_mut(1)
+            .copy_from_slice(&[0.25, -0.25, 0.125, 0.0, 0.75]);
         b
     }
 
@@ -217,6 +245,12 @@ mod tests {
         write_to(&mut bytes, &fixture(), SampleRate::CD, WavFormat::Pcm16).unwrap();
         bytes[34] = 24; // bits per sample
         assert!(read_from(&mut bytes.as_slice()).is_err());
-        assert!(write_to(&mut Vec::new(), &PlanarBuffer::new(0, 4), SampleRate::CD, WavFormat::Pcm16).is_err());
+        assert!(write_to(
+            &mut Vec::new(),
+            &PlanarBuffer::new(0, 4),
+            SampleRate::CD,
+            WavFormat::Pcm16
+        )
+        .is_err());
     }
 }

@@ -77,9 +77,26 @@ unsafe impl<T: Send> Send for Consumer<T> {}
 /// Panics if `capacity == 0`.
 pub fn channel<T>(capacity: usize) -> (Producer<T>, Consumer<T>) {
     assert!(capacity > 0, "spsc capacity must be at least 1");
-    let slots = (0..capacity).map(|_| UnsafeCell::new(MaybeUninit::uninit())).collect::<Vec<_>>().into_boxed_slice();
-    let shared = Arc::new(Shared { slots, capacity, head: AtomicUsize::new(0), tail: AtomicUsize::new(0) });
-    (Producer { shared: Arc::clone(&shared), head_cache: 0 }, Consumer { shared, tail_cache: 0 })
+    let slots = (0..capacity)
+        .map(|_| UnsafeCell::new(MaybeUninit::uninit()))
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let shared = Arc::new(Shared {
+        slots,
+        capacity,
+        head: AtomicUsize::new(0),
+        tail: AtomicUsize::new(0),
+    });
+    (
+        Producer {
+            shared: Arc::clone(&shared),
+            head_cache: 0,
+        },
+        Consumer {
+            shared,
+            tail_cache: 0,
+        },
+    )
 }
 
 impl<T> Producer<T> {
@@ -99,7 +116,9 @@ impl<T> Producer<T> {
         // SAFETY: slot `tail` is outside [head, tail) so the consumer will
         // not touch it until we publish the new tail below.
         unsafe { (*self.shared.slot(tail)).write(value) };
-        self.shared.tail.store(tail.wrapping_add(1), Ordering::Release);
+        self.shared
+            .tail
+            .store(tail.wrapping_add(1), Ordering::Release);
         Ok(())
     }
 
@@ -152,7 +171,9 @@ impl<T> Consumer<T> {
         // SAFETY: slot `head` is inside [head, tail) and therefore holds an
         // initialised value written by the producer before it published tail.
         let value = unsafe { (*self.shared.slot(head)).assume_init_read() };
-        self.shared.head.store(head.wrapping_add(1), Ordering::Release);
+        self.shared
+            .head
+            .store(head.wrapping_add(1), Ordering::Release);
         Some(value)
     }
 
@@ -210,13 +231,19 @@ impl<T> Consumer<T> {
 
 impl<T> core::fmt::Debug for Producer<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Producer").field("len", &self.len()).field("capacity", &self.capacity()).finish()
+        f.debug_struct("Producer")
+            .field("len", &self.len())
+            .field("capacity", &self.capacity())
+            .finish()
     }
 }
 
 impl<T> core::fmt::Debug for Consumer<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Consumer").field("len", &self.len()).field("capacity", &self.capacity()).finish()
+        f.debug_struct("Consumer")
+            .field("len", &self.len())
+            .field("capacity", &self.capacity())
+            .finish()
     }
 }
 

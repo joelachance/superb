@@ -57,7 +57,10 @@ impl AtomicF32 {
             if !(value > cur_f) {
                 return cur_f;
             }
-            match self.0.compare_exchange_weak(current, value.to_bits(), order, Ordering::Relaxed) {
+            match self
+                .0
+                .compare_exchange_weak(current, value.to_bits(), order, Ordering::Relaxed)
+            {
                 Ok(_) => return cur_f,
                 Err(actual) => current = actual,
             }

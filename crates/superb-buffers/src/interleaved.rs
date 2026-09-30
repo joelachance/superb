@@ -18,16 +18,28 @@ pub struct InterleavedBuffer {
 impl InterleavedBuffer {
     /// Allocates a silent interleaved buffer for `capacity` frames.
     pub fn new(channels: usize, capacity: usize) -> Self {
-        Self { data: vec![0.0; channels * capacity], channels, capacity, frames: capacity }
+        Self {
+            data: vec![0.0; channels * capacity],
+            channels,
+            capacity,
+            frames: capacity,
+        }
     }
 
     /// Wraps an existing interleaved vector. `data.len()` must be divisible by `channels`.
     pub fn from_vec(channels: usize, data: Vec<f32>) -> Result<Self> {
         if channels == 0 || data.len() % channels != 0 {
-            return Err(SuperbError::InvalidArgument { what: "interleaved length not divisible by channels" });
+            return Err(SuperbError::InvalidArgument {
+                what: "interleaved length not divisible by channels",
+            });
         }
         let frames = data.len() / channels;
-        Ok(Self { data, channels, capacity: frames, frames })
+        Ok(Self {
+            data,
+            channels,
+            capacity: frames,
+            frames,
+        })
     }
 
     /// Number of channels.
@@ -51,7 +63,10 @@ impl InterleavedBuffer {
     /// Sets the active frame count without reallocating.
     pub fn set_frames(&mut self, frames: usize) -> Result<()> {
         if frames > self.capacity {
-            return Err(SuperbError::CapacityExceeded { what: "InterleavedBuffer frames", capacity: self.capacity });
+            return Err(SuperbError::CapacityExceeded {
+                what: "InterleavedBuffer frames",
+                capacity: self.capacity,
+            });
         }
         self.frames = frames;
         Ok(())

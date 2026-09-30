@@ -22,7 +22,12 @@ pub struct StripNode {
 impl StripNode {
     /// Creates a strip with `channels` channels driven by `params`.
     pub fn new(params: Arc<StripParams>, channels: usize) -> Self {
-        Self { params, channels, last_gains: [0.0; MAX_RAMP_CHANNELS], primed: false }
+        Self {
+            params,
+            channels,
+            last_gains: [0.0; MAX_RAMP_CHANNELS],
+            primed: false,
+        }
     }
 
     /// The parameter block.
@@ -58,7 +63,12 @@ impl Node for StripNode {
         self.primed = false;
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         let mut targets = [0.0f32; MAX_RAMP_CHANNELS];
         self.target_gains(&mut targets);
         if !self.primed {
@@ -68,7 +78,8 @@ impl Node for StripNode {
         let from = self.last_gains;
         self.last_gains = targets;
 
-        let all_zero = (0..self.channels.min(MAX_RAMP_CHANNELS)).all(|c| from[c] == 0.0 && targets[c] == 0.0);
+        let all_zero =
+            (0..self.channels.min(MAX_RAMP_CHANNELS)).all(|c| from[c] == 0.0 && targets[c] == 0.0);
         if ctx.input_is_silent || all_zero {
             for c in 0..self.channels.min(crate::params::METER_CHANNELS) {
                 self.params.raise_peak(c, 0.0);
@@ -80,7 +91,11 @@ impl Node for StripNode {
         }
         let frames = ctx.frames;
         for (c, plane) in output.planes_mut().enumerate() {
-            let (a, b) = if c < MAX_RAMP_CHANNELS { (from[c], targets[c]) } else { (targets[0], targets[0]) };
+            let (a, b) = if c < MAX_RAMP_CHANNELS {
+                (from[c], targets[c])
+            } else {
+                (targets[0], targets[0])
+            };
             if a == b {
                 if b != 1.0 {
                     for s in plane.iter_mut() {
@@ -115,7 +130,12 @@ pub struct SendNode {
 impl SendNode {
     /// Creates a send with `channels` channels driven by `params`.
     pub fn new(params: Arc<SendParams>, channels: usize) -> Self {
-        Self { params, channels, last: 0.0, primed: false }
+        Self {
+            params,
+            channels,
+            last: 0.0,
+            primed: false,
+        }
     }
 
     /// The parameter block.
@@ -137,7 +157,12 @@ impl Node for SendNode {
         self.primed = false;
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         let target = self.params.effective_level();
         if !self.primed {
             self.last = target;
@@ -169,7 +194,13 @@ mod tests {
     use superb_midi::MidiEventBuffer;
 
     fn ctx<'a>(frames: usize, midi: &'a MidiEventBuffer, silent: bool) -> ProcessContext<'a> {
-        ProcessContext { sample_rate: SampleRate::HZ_48K, frames, time: BlockTime::free_running(), midi, input_is_silent: silent }
+        ProcessContext {
+            sample_rate: SampleRate::HZ_48K,
+            frames,
+            time: BlockTime::free_running(),
+            midi,
+            input_is_silent: silent,
+        }
     }
 
     fn assert_ramp(actual: &[f32], expected: &[f32]) {
@@ -193,7 +224,10 @@ mod tests {
         let mut strip = StripNode::new(Arc::clone(&params), 2);
         let input = ones(2, 8);
         let mut out = PlanarBuffer::new(2, 8);
-        assert_eq!(strip.process(&ctx(8, &midi, false), &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            strip.process(&ctx(8, &midi, false), &input, &mut out),
+            ProcessStatus::Normal
+        );
         assert_eq!(out.channel(0), &[1.0; 8]);
         assert_eq!(out.channel(1), &[1.0; 8]);
         assert_eq!(params.peak(0), 1.0);
@@ -209,15 +243,27 @@ mod tests {
         let mut out = PlanarBuffer::new(2, 4);
         strip.process(&ctx(4, &midi, false), &input, &mut out);
         params.set_mute(true);
-        assert_eq!(strip.process(&ctx(4, &midi, false), &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            strip.process(&ctx(4, &midi, false), &input, &mut out),
+            ProcessStatus::Normal
+        );
         assert_ramp(out.channel(0), &[1.0, 2.0 / 3.0, 1.0 / 3.0, 0.0]);
-        assert_eq!(strip.process(&ctx(4, &midi, false), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            strip.process(&ctx(4, &midi, false), &input, &mut out),
+            ProcessStatus::Silent
+        );
         assert_eq!(params.take_peak(0), 1.0);
         assert_eq!(params.peak(0), 0.0);
         params.set_mute(false);
-        assert_eq!(strip.process(&ctx(4, &midi, false), &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            strip.process(&ctx(4, &midi, false), &input, &mut out),
+            ProcessStatus::Normal
+        );
         assert_ramp(out.channel(1), &[0.0, 1.0 / 3.0, 2.0 / 3.0, 1.0]);
-        assert_eq!(strip.process(&ctx(4, &midi, true), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            strip.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
     }
 
     #[test]
@@ -266,14 +312,23 @@ mod tests {
         let mut send = SendNode::new(Arc::clone(&params), 2);
         let input = ones(2, 4);
         let mut out = PlanarBuffer::new(2, 4);
-        assert_eq!(send.process(&ctx(4, &midi, false), &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            send.process(&ctx(4, &midi, false), &input, &mut out),
+            ProcessStatus::Normal
+        );
         assert_eq!(out.channel(1), &[0.5; 4]);
         params.set_enabled(false);
         send.process(&ctx(4, &midi, false), &input, &mut out); // ramp down
         assert_eq!(out.channel(0)[0], 0.5);
         assert_eq!(out.channel(0)[3], 0.0);
-        assert_eq!(send.process(&ctx(4, &midi, false), &input, &mut out), ProcessStatus::Silent);
-        assert_eq!(send.process(&ctx(4, &midi, true), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            send.process(&ctx(4, &midi, false), &input, &mut out),
+            ProcessStatus::Silent
+        );
+        assert_eq!(
+            send.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
         assert_eq!(send.name(), "send");
         assert!(Arc::ptr_eq(&send.params(), &params));
         send.reset();

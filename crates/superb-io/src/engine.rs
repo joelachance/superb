@@ -217,7 +217,10 @@ impl<P: BlockProcessor> Engine<P> {
     /// producers stamp `TimestampedMessage`s on this clock for
     /// sample-accurate placement.
     pub fn stream_clock_us(&self) -> u64 {
-        let hz = self.prepared.map_or_else(|| self.transport.sample_rate(), |(sr, _)| sr).hz();
+        let hz = self
+            .prepared
+            .map_or_else(|| self.transport.sample_rate(), |(sr, _)| sr)
+            .hz();
         frames_to_us(self.frames_rendered, hz)
     }
 
@@ -228,7 +231,10 @@ impl<P: BlockProcessor> Engine<P> {
 
     /// Counters from all renders so far.
     pub fn stats(&self) -> EngineStats {
-        EngineStats { midi_dropped: self.midi_dropped.load(Ordering::Relaxed), ..self.stats }
+        EngineStats {
+            midi_dropped: self.midi_dropped.load(Ordering::Relaxed),
+            ..self.stats
+        }
     }
 
     /// Output channel count of the processor.
@@ -245,20 +251,34 @@ impl<P: BlockProcessor> Engine<P> {
         let (sample_rate, max_frames) = self.prepared.ok_or(SuperbError::NotPrepared)?;
         let frames = out.frames();
         if frames > max_frames {
-            return Err(SuperbError::CapacityExceeded { what: "block frames", capacity: max_frames });
+            return Err(SuperbError::CapacityExceeded {
+                what: "block frames",
+                capacity: max_frames,
+            });
         }
         let timer = ProcessBudget::for_block(frames, sample_rate).start();
 
         // Drain queued external MIDI into this block.
-        let block_start_us = self.midi_block_start_us.take().unwrap_or_else(|| frames_to_us(self.frames_rendered, sample_rate.hz()));
-        self.frame_mapper.set_block(block_start_us, frames.min(u32::MAX as usize) as u32);
+        let block_start_us = self
+            .midi_block_start_us
+            .take()
+            .unwrap_or_else(|| frames_to_us(self.frames_rendered, sample_rate.hz()));
+        self.frame_mapper
+            .set_block(block_start_us, frames.min(u32::MAX as usize) as u32);
         if let Some(rx) = self.midi_in.as_mut() {
             while let Some(msg) = rx.pop() {
                 let frame = match self.midi_timing {
                     MidiTiming::BlockStart => 0,
                     MidiTiming::Stream => self.frame_mapper.frame_for(msg.timestamp_us),
                 };
-                if self.midi.push(MidiEvent { frame, message: msg.message }).is_err() {
+                if self
+                    .midi
+                    .push(MidiEvent {
+                        frame,
+                        message: msg.message,
+                    })
+                    .is_err()
+                {
                     self.midi_dropped.fetch_add(1, Ordering::Relaxed);
                 }
             }
@@ -272,7 +292,9 @@ impl<P: BlockProcessor> Engine<P> {
                 result = Err(e);
                 break;
             }
-            if let Err(e) = out.copy_block_from(seg.block_offset, self.processor.output(), seg.frames) {
+            if let Err(e) =
+                out.copy_block_from(seg.block_offset, self.processor.output(), seg.frames)
+            {
                 result = Err(e);
                 break;
             }
@@ -321,7 +343,10 @@ mod tests {
         assert_eq!(e.render(&mut out), Err(SuperbError::NotPrepared));
         assert!(e.prepare(R, 0).is_err());
         e.prepare(R, 32).unwrap();
-        assert!(matches!(e.render(&mut out), Err(SuperbError::CapacityExceeded { .. })));
+        assert!(matches!(
+            e.render(&mut out),
+            Err(SuperbError::CapacityExceeded { .. })
+        ));
         out.set_frames(32).unwrap();
         e.render(&mut out).unwrap();
         assert_eq!(out.channel(1), &[1.0; 32]);
@@ -352,7 +377,13 @@ mod tests {
         let mut e = Engine::new(g, Transport::new(R, 120.0));
         e.prepare(R, 100).unwrap();
         let t = e.transport_mut();
-        t.set_loop(Some(LoopRange::new(TimePosition::from_samples(0), TimePosition::from_samples(150)).unwrap()));
+        t.set_loop(Some(
+            LoopRange::new(
+                TimePosition::from_samples(0),
+                TimePosition::from_samples(150),
+            )
+            .unwrap(),
+        ));
         t.set_loop_enabled(true);
         t.play();
         let mut out = PlanarBuffer::new(1, 100);
@@ -386,7 +417,15 @@ mod tests {
 
         let (mut tx, rx) = superb_rt::spsc::channel::<TimestampedMessage>(8);
         e.set_midi_input(Some(rx));
-        tx.push(TimestampedMessage { timestamp_us: 0, message: MidiMessage::NoteOn { channel: ch, note: 69, velocity: 127 } }).unwrap();
+        tx.push(TimestampedMessage {
+            timestamp_us: 0,
+            message: MidiMessage::NoteOn {
+                channel: ch,
+                note: 69,
+                velocity: 127,
+            },
+        })
+        .unwrap();
 
         let mut out = PlanarBuffer::new(1, 64);
         e.render(&mut out).unwrap();
@@ -394,7 +433,16 @@ mod tests {
         assert!(e.midi_mut().is_empty(), "block buffer cleared after render");
 
         // Block buffer events at a frame offset
-        e.midi_mut().push(MidiEvent { frame: 32, message: MidiMessage::NoteOff { channel: ch, note: 69, velocity: 0 } }).unwrap();
+        e.midi_mut()
+            .push(MidiEvent {
+                frame: 32,
+                message: MidiMessage::NoteOff {
+                    channel: ch,
+                    note: 69,
+                    velocity: 0,
+                },
+            })
+            .unwrap();
         e.render(&mut out).unwrap();
         assert!(out.channel(0)[..32].iter().any(|&x| x != 0.0));
         assert!(out.channel(0)[32..].iter().all(|&x| x == 0.0));
@@ -403,14 +451,23 @@ mod tests {
         let (mut tx2, rx2) = superb_rt::spsc::channel::<TimestampedMessage>(4096);
         e.set_midi_input(Some(rx2));
         for _ in 0..(Engine::<AudioGraph>::DEFAULT_MIDI_CAPACITY + 5) {
-            tx2.push(TimestampedMessage { timestamp_us: 0, message: MidiMessage::TimingClock }).unwrap();
+            tx2.push(TimestampedMessage {
+                timestamp_us: 0,
+                message: MidiMessage::TimingClock,
+            })
+            .unwrap();
         }
         e.render(&mut out).unwrap();
         assert_eq!(e.stats().midi_dropped, 5);
         drop(tx);
     }
 
-    fn synth_engine(max_frames: usize) -> (Engine<AudioGraph>, superb_rt::spsc::Producer<TimestampedMessage>) {
+    fn synth_engine(
+        max_frames: usize,
+    ) -> (
+        Engine<AudioGraph>,
+        superb_rt::spsc::Producer<TimestampedMessage>,
+    ) {
         let mut g = AudioGraph::new();
         let synth = g.add_node(Box::new(MonoSynthNode::new(1)));
         g.set_output(synth).unwrap();
@@ -423,12 +480,26 @@ mod tests {
 
     fn note_on(us: u64) -> TimestampedMessage {
         let ch = MidiChannel::new(0).unwrap();
-        TimestampedMessage { timestamp_us: us, message: MidiMessage::NoteOn { channel: ch, note: 69, velocity: 127 } }
+        TimestampedMessage {
+            timestamp_us: us,
+            message: MidiMessage::NoteOn {
+                channel: ch,
+                note: 69,
+                velocity: 127,
+            },
+        }
     }
 
     fn note_off(us: u64) -> TimestampedMessage {
         let ch = MidiChannel::new(0).unwrap();
-        TimestampedMessage { timestamp_us: us, message: MidiMessage::NoteOff { channel: ch, note: 69, velocity: 0 } }
+        TimestampedMessage {
+            timestamp_us: us,
+            message: MidiMessage::NoteOff {
+                channel: ch,
+                note: 69,
+                velocity: 0,
+            },
+        }
     }
 
     /// Asserts the note started at `frame`: every sample before it is zero
@@ -436,8 +507,14 @@ mod tests {
     /// sine may be at phase 0 exactly on the note-on frame).
     fn assert_onset(out: &PlanarBuffer, frame: usize) {
         let s = out.channel(0);
-        assert!(s[..frame].iter().all(|&x| x == 0.0), "expected silence before frame {frame}");
-        assert!(s[frame..frame + 2].iter().any(|&x| x != 0.0), "expected sound at frame {frame}");
+        assert!(
+            s[..frame].iter().all(|&x| x == 0.0),
+            "expected silence before frame {frame}"
+        );
+        assert!(
+            s[frame..frame + 2].iter().any(|&x| x != 0.0),
+            "expected sound at frame {frame}"
+        );
     }
 
     #[test]
@@ -451,8 +528,14 @@ mod tests {
         // 5 ms into the first block -> frame 240.
         tx.push(note_on(5_000)).unwrap();
         e.render(&mut out).unwrap();
-        assert!(out.channel(0)[..240].iter().all(|&x| x == 0.0), "silent before the note-on frame");
-        assert!(out.channel(0)[240..].iter().any(|&x| x.abs() > 0.5), "sounding from frame 240");
+        assert!(
+            out.channel(0)[..240].iter().all(|&x| x == 0.0),
+            "silent before the note-on frame"
+        );
+        assert!(
+            out.channel(0)[240..].iter().any(|&x| x.abs() > 0.5),
+            "sounding from frame 240"
+        );
         assert_eq!(e.frames_rendered(), 480);
         assert_eq!(e.stream_clock_us(), 10_000);
 
@@ -487,7 +570,7 @@ mod tests {
         tx.push(note_on(5_000)).unwrap();
         e.render(&mut out).unwrap();
         assert_onset(&out, 0); // mid-block timestamp still lands at frame 0
-        // Stream clock still advances so switching modes later is consistent.
+                               // Stream clock still advances so switching modes later is consistent.
         assert_eq!(e.frames_rendered(), 480);
     }
 
@@ -522,7 +605,11 @@ mod tests {
     fn frames_to_us_inverts_us_to_frames_on_sample_boundaries() {
         for &frames in &[0u64, 1, 479, 480, 48_000, 1 << 40] {
             let us = frames_to_us(frames, 48_000);
-            assert_eq!(superb_midi::timing::us_to_frames(us, R), frames, "frames {frames}");
+            assert_eq!(
+                superb_midi::timing::us_to_frames(us, R),
+                frames,
+                "frames {frames}"
+            );
         }
         assert_eq!(frames_to_us(480, 48_000), 10_000);
         assert_eq!(frames_to_us(44_100, 44_100), 1_000_000);

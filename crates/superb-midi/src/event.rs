@@ -52,7 +52,10 @@ impl MidiEventBuffer {
     /// Allocates a buffer that can hold up to `capacity` events. The
     /// allocation happens exactly once, here.
     pub fn with_capacity(capacity: usize) -> Self {
-        Self { events: Vec::with_capacity(capacity), capacity }
+        Self {
+            events: Vec::with_capacity(capacity),
+            capacity,
+        }
     }
 
     /// Appends `event` to the end of the buffer.
@@ -62,7 +65,10 @@ impl MidiEventBuffer {
     /// buffer is never grown.
     pub fn push(&mut self, event: MidiEvent) -> Result<()> {
         if self.events.len() >= self.capacity {
-            return Err(SuperbError::CapacityExceeded { what: "midi_event_buffer", capacity: self.capacity });
+            return Err(SuperbError::CapacityExceeded {
+                what: "midi_event_buffer",
+                capacity: self.capacity,
+            });
         }
         self.events.push(event);
         Ok(())
@@ -77,9 +83,16 @@ impl MidiEventBuffer {
     /// Returns [`SuperbError::CapacityExceeded`] if the buffer is full.
     pub fn push_sorted(&mut self, event: MidiEvent) -> Result<()> {
         if self.events.len() >= self.capacity {
-            return Err(SuperbError::CapacityExceeded { what: "midi_event_buffer", capacity: self.capacity });
+            return Err(SuperbError::CapacityExceeded {
+                what: "midi_event_buffer",
+                capacity: self.capacity,
+            });
         }
-        let pos = self.events.iter().position(|e| e.frame > event.frame).unwrap_or(self.events.len());
+        let pos = self
+            .events
+            .iter()
+            .position(|e| e.frame > event.frame)
+            .unwrap_or(self.events.len());
         // `len() < capacity` was just checked, so this never reallocates.
         self.events.insert(pos, event);
         Ok(())
@@ -137,7 +150,9 @@ impl MidiEventBuffer {
     /// Iterates over events whose `frame` lies in `range`
     /// (`range.start <= frame < range.end`), in buffer order.
     pub fn iter_range(&self, range: Range<u32>) -> impl Iterator<Item = &MidiEvent> {
-        self.events.iter().filter(move |e| e.frame >= range.start && e.frame < range.end)
+        self.events
+            .iter()
+            .filter(move |e| e.frame >= range.start && e.frame < range.end)
     }
 
     /// Appends every event from `other`, preserving its order.
@@ -148,7 +163,10 @@ impl MidiEventBuffer {
     pub fn extend_from(&mut self, other: &MidiEventBuffer) -> Result<()> {
         let needed = self.events.len() + other.events.len();
         if needed > self.capacity {
-            return Err(SuperbError::CapacityExceeded { what: "midi_event_buffer", capacity: self.capacity });
+            return Err(SuperbError::CapacityExceeded {
+                what: "midi_event_buffer",
+                capacity: self.capacity,
+            });
         }
         self.events.extend_from_slice(&other.events);
         Ok(())
@@ -195,7 +213,13 @@ mod tests {
         assert_eq!(buf.len(), 3);
 
         let err = buf.push(ev(3)).unwrap_err();
-        assert_eq!(err, SuperbError::CapacityExceeded { what: "midi_event_buffer", capacity: 3 });
+        assert_eq!(
+            err,
+            SuperbError::CapacityExceeded {
+                what: "midi_event_buffer",
+                capacity: 3
+            }
+        );
         assert_eq!(buf.capacity(), 3, "a failed push must not grow the buffer");
         assert_eq!(buf.len(), 3);
     }
@@ -207,7 +231,13 @@ mod tests {
         buf.push_sorted(ev(1)).unwrap();
         assert_eq!(buf.capacity(), 2);
         let err = buf.push_sorted(ev(3)).unwrap_err();
-        assert_eq!(err, SuperbError::CapacityExceeded { what: "midi_event_buffer", capacity: 2 });
+        assert_eq!(
+            err,
+            SuperbError::CapacityExceeded {
+                what: "midi_event_buffer",
+                capacity: 2
+            }
+        );
         assert_eq!(buf.capacity(), 2);
     }
 
@@ -225,9 +255,18 @@ mod tests {
     fn push_sorted_is_stable_for_equal_frames() {
         let mut buf = MidiEventBuffer::with_capacity(4);
         let ch = MidiChannel::new(0).unwrap();
-        let a = MidiEvent { frame: 2, message: MidiMessage::note_on(ch, 1, 1).unwrap() };
-        let b = MidiEvent { frame: 2, message: MidiMessage::note_on(ch, 2, 1).unwrap() };
-        let c = MidiEvent { frame: 2, message: MidiMessage::note_on(ch, 3, 1).unwrap() };
+        let a = MidiEvent {
+            frame: 2,
+            message: MidiMessage::note_on(ch, 1, 1).unwrap(),
+        };
+        let b = MidiEvent {
+            frame: 2,
+            message: MidiMessage::note_on(ch, 2, 1).unwrap(),
+        };
+        let c = MidiEvent {
+            frame: 2,
+            message: MidiMessage::note_on(ch, 3, 1).unwrap(),
+        };
         buf.push_sorted(a).unwrap();
         buf.push_sorted(b).unwrap();
         buf.push_sorted(c).unwrap();
@@ -238,7 +277,11 @@ mod tests {
                 _ => unreachable!(),
             })
             .collect();
-        assert_eq!(notes, vec![1, 2, 3], "equal-frame events must keep insertion order");
+        assert_eq!(
+            notes,
+            vec![1, 2, 3],
+            "equal-frame events must keep insertion order"
+        );
     }
 
     #[test]
@@ -247,11 +290,26 @@ mod tests {
         let ch = MidiChannel::new(0).unwrap();
         // Two events share frame 2; tag them via note number to detect order.
         let events = [
-            MidiEvent { frame: 4, message: MidiMessage::note_on(ch, 40, 1).unwrap() },
-            MidiEvent { frame: 2, message: MidiMessage::note_on(ch, 21, 1).unwrap() },
-            MidiEvent { frame: 1, message: MidiMessage::note_on(ch, 10, 1).unwrap() },
-            MidiEvent { frame: 2, message: MidiMessage::note_on(ch, 22, 1).unwrap() },
-            MidiEvent { frame: 0, message: MidiMessage::note_on(ch, 0, 1).unwrap() },
+            MidiEvent {
+                frame: 4,
+                message: MidiMessage::note_on(ch, 40, 1).unwrap(),
+            },
+            MidiEvent {
+                frame: 2,
+                message: MidiMessage::note_on(ch, 21, 1).unwrap(),
+            },
+            MidiEvent {
+                frame: 1,
+                message: MidiMessage::note_on(ch, 10, 1).unwrap(),
+            },
+            MidiEvent {
+                frame: 2,
+                message: MidiMessage::note_on(ch, 22, 1).unwrap(),
+            },
+            MidiEvent {
+                frame: 0,
+                message: MidiMessage::note_on(ch, 0, 1).unwrap(),
+            },
         ];
         for e in events {
             buf.push(e).unwrap();
@@ -280,7 +338,11 @@ mod tests {
             buf.push(ev(f)).unwrap();
         }
         let frames: Vec<u32> = buf.iter_range(2..4).map(|e| e.frame).collect();
-        assert_eq!(frames, vec![2, 3], "range end is exclusive, start is inclusive");
+        assert_eq!(
+            frames,
+            vec![2, 3],
+            "range end is exclusive, start is inclusive"
+        );
 
         let none: Vec<u32> = buf.iter_range(10..20).map(|e| e.frame).collect();
         assert!(none.is_empty());
@@ -308,7 +370,13 @@ mod tests {
         assert_eq!(a.capacity(), 4);
 
         let err = a.extend_from(&b).unwrap_err();
-        assert_eq!(err, SuperbError::CapacityExceeded { what: "midi_event_buffer", capacity: 4 });
+        assert_eq!(
+            err,
+            SuperbError::CapacityExceeded {
+                what: "midi_event_buffer",
+                capacity: 4
+            }
+        );
         // Unchanged on failure.
         assert_eq!(a.len(), 4);
     }

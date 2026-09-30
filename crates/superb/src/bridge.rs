@@ -48,7 +48,10 @@ impl SessionMixerBridge {
 
     /// Binding for a session track, if any.
     pub fn binding(&self, session_track: TrackId) -> Option<MixerBinding> {
-        self.entries.iter().find(|(id, _)| *id == session_track).map(|(_, b)| *b)
+        self.entries
+            .iter()
+            .find(|(id, _)| *id == session_track)
+            .map(|(_, b)| *b)
     }
 
     /// Mixer track for a session audio/MIDI track.
@@ -70,7 +73,10 @@ impl SessionMixerBridge {
     /// Mixer send for a session send, once [`apply_routing`](Self::apply_routing)
     /// has created it.
     pub fn mixer_send(&self, session_send: SendId) -> Option<SendId> {
-        self.sends.iter().find(|(id, _)| *id == session_send).map(|(_, m)| *m)
+        self.sends
+            .iter()
+            .find(|(id, _)| *id == session_send)
+            .map(|(_, m)| *m)
     }
 
     /// All bindings in session order.
@@ -132,7 +138,9 @@ impl SessionMixerBridge {
     /// moves; does not allocate beyond iterating the side tables.
     pub fn apply_strip_params(&mut self, session: &Session, mixer: &Mixer) {
         for (session_id, binding) in &self.entries {
-            let Ok(track) = session.track(*session_id) else { continue };
+            let Ok(track) = session.track(*session_id) else {
+                continue;
+            };
             match binding {
                 MixerBinding::Track(mid) => {
                     if let Ok(params) = mixer.track_params(*mid) {
@@ -160,7 +168,9 @@ impl SessionMixerBridge {
 
     fn mirror_send_params(&self, session: &Session, mixer: &Mixer) {
         for (session_send, mixer_send) in &self.sends {
-            let Ok(send) = session.send(*session_send) else { continue };
+            let Ok(send) = session.send(*session_send) else {
+                continue;
+            };
             if let Ok(params) = mixer.send_params(*mixer_send) {
                 params.set_level_db(send.level_db);
                 params.set_enabled(send.enabled);
@@ -190,11 +200,18 @@ impl SessionMixerBridge {
 
         // Outputs.
         for (session_id, binding) in &self.entries {
-            let Ok(track) = session.track(*session_id) else { continue };
-            let target = track.output().and_then(|bus| self.mixer_bus(bus)).unwrap_or(master);
+            let Ok(track) = session.track(*session_id) else {
+                continue;
+            };
+            let target = track
+                .output()
+                .and_then(|bus| self.mixer_bus(bus))
+                .unwrap_or(master);
             match binding {
                 MixerBinding::Track(mid) => {
-                    let Ok(info) = mixer.track(*mid) else { continue };
+                    let Ok(info) = mixer.track(*mid) else {
+                        continue;
+                    };
                     if info.output != target {
                         mixer.set_track_output(*mid, target)?;
                         changed += 1;
@@ -232,19 +249,29 @@ impl SessionMixerBridge {
 
         // Sends: create, re-create on destination/tap change, keep otherwise.
         for track in session.tracks() {
-            let Some(MixerBinding::Track(mid)) = self.binding(track.id()) else { continue };
+            let Some(MixerBinding::Track(mid)) = self.binding(track.id()) else {
+                continue;
+            };
             if mixer.track(mid).is_err() {
                 continue;
             }
             for send in track.sends() {
-                let Some(bus) = self.mixer_bus(send.bus()) else { continue };
+                let Some(bus) = self.mixer_bus(send.bus()) else {
+                    continue;
+                };
                 if mixer.bus(bus).is_err() {
                     continue;
                 }
-                let tap = if send.pre_fader { SendTap::PreFader } else { SendTap::PostFader };
+                let tap = if send.pre_fader {
+                    SendTap::PreFader
+                } else {
+                    SendTap::PostFader
+                };
                 if let Some(existing) = self.mixer_send(send.id()) {
                     match mixer.send(existing) {
-                        Ok(info) if info.track == mid && info.bus == bus && info.tap == tap => continue,
+                        Ok(info) if info.track == mid && info.bus == bus && info.tap == tap => {
+                            continue
+                        }
                         Ok(_) => {
                             mixer.remove_send(existing)?;
                             changed += 1;
@@ -340,11 +367,25 @@ mod tests {
         let mut mixer = Mixer::new(2);
         let mut bridge = SessionMixerBridge::new();
         bridge.sync(&session, &mut mixer);
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 2, "lead → sub, sub → room");
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 0, "idempotent");
+        assert_eq!(
+            bridge.apply_routing(&session, &mut mixer).unwrap(),
+            2,
+            "lead → sub, sub → room"
+        );
+        assert_eq!(
+            bridge.apply_routing(&session, &mut mixer).unwrap(),
+            0,
+            "idempotent"
+        );
 
-        let (m_lead, m_keys) = (bridge.mixer_track(lead).unwrap(), bridge.mixer_track(keys).unwrap());
-        let (m_sub, m_room) = (bridge.mixer_bus(sub).unwrap(), bridge.mixer_bus(room).unwrap());
+        let (m_lead, m_keys) = (
+            bridge.mixer_track(lead).unwrap(),
+            bridge.mixer_track(keys).unwrap(),
+        );
+        let (m_sub, m_room) = (
+            bridge.mixer_bus(sub).unwrap(),
+            bridge.mixer_bus(room).unwrap(),
+        );
         assert_eq!(mixer.track(m_lead).unwrap().output, m_sub);
         assert_eq!(mixer.track(m_keys).unwrap().output, mixer.master());
         assert_eq!(mixer.bus(m_sub).unwrap().output, Some(m_room));
@@ -375,8 +416,12 @@ mod tests {
         let lead = session.add_track("lead", TrackKind::Audio);
         let fx = session.add_track("fx", TrackKind::Bus);
         let room = session.add_track("room", TrackKind::Bus);
-        let a = session.add_send(lead, TrackSend::new(fx).level_db(-6.0)).unwrap();
-        let b = session.add_send(lead, TrackSend::new(room).pre_fader()).unwrap();
+        let a = session
+            .add_send(lead, TrackSend::new(fx).level_db(-6.0))
+            .unwrap();
+        let b = session
+            .add_send(lead, TrackSend::new(room).pre_fader())
+            .unwrap();
         session.send_mut(b).unwrap().enabled = false;
 
         let mut mixer = Mixer::new(2);
@@ -408,7 +453,11 @@ mod tests {
 
         // Tap change re-creates the mixer send under the same session id.
         session.send_mut(b).unwrap().pre_fader = false;
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 2, "remove + add");
+        assert_eq!(
+            bridge.apply_routing(&session, &mut mixer).unwrap(),
+            2,
+            "remove + add"
+        );
         let mb2 = bridge.mixer_send(b).unwrap();
         assert_ne!(mb, mb2);
         assert!(mixer.send(mb).is_err());
@@ -445,7 +494,9 @@ mod tests {
         bridge.apply_routing(&session, &mut mixer).unwrap();
         // The app tears down the bus and the strip behind the bridge's back.
         mixer.remove_bus(bridge.mixer_bus(fx).unwrap()).unwrap();
-        mixer.remove_track(bridge.mixer_track(lead).unwrap()).unwrap();
+        mixer
+            .remove_track(bridge.mixer_track(lead).unwrap())
+            .unwrap();
         assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 0);
         bridge.apply_strip_params(&session, &mixer);
     }

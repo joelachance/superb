@@ -119,9 +119,17 @@ impl MidiMessage {
         check_7bit("note", note)?;
         check_7bit("velocity", velocity)?;
         if velocity == 0 {
-            Ok(MidiMessage::NoteOff { channel, note, velocity: 0 })
+            Ok(MidiMessage::NoteOff {
+                channel,
+                note,
+                velocity: 0,
+            })
         } else {
-            Ok(MidiMessage::NoteOn { channel, note, velocity })
+            Ok(MidiMessage::NoteOn {
+                channel,
+                note,
+                velocity,
+            })
         }
     }
 
@@ -130,7 +138,11 @@ impl MidiMessage {
     pub fn note_off(channel: MidiChannel, note: u8, velocity: u8) -> Result<Self> {
         check_7bit("note", note)?;
         check_7bit("velocity", velocity)?;
-        Ok(MidiMessage::NoteOff { channel, note, velocity })
+        Ok(MidiMessage::NoteOff {
+            channel,
+            note,
+            velocity,
+        })
     }
 
     /// Creates a `ControlChange` message, validating `controller` and
@@ -138,7 +150,11 @@ impl MidiMessage {
     pub fn control_change(channel: MidiChannel, controller: u8, value: u8) -> Result<Self> {
         check_7bit("controller", controller)?;
         check_7bit("value", value)?;
-        Ok(MidiMessage::ControlChange { channel, controller, value })
+        Ok(MidiMessage::ControlChange {
+            channel,
+            controller,
+            value,
+        })
     }
 
     /// Creates a `PitchBend` message, validating `value` is `< 16384`.
@@ -153,7 +169,8 @@ impl MidiMessage {
     pub fn bend_normalized(&self) -> f32 {
         match self {
             MidiMessage::PitchBend { value, .. } => {
-                (*value as f32 - Self::pitch_bend_centre() as f32) / Self::pitch_bend_centre() as f32
+                (*value as f32 - Self::pitch_bend_centre() as f32)
+                    / Self::pitch_bend_centre() as f32
             }
             _ => 0.0,
         }
@@ -176,7 +193,10 @@ impl MidiMessage {
 
     /// `true` for [`MidiMessage::NoteOn`] and [`MidiMessage::NoteOff`].
     pub const fn is_note(&self) -> bool {
-        matches!(self, MidiMessage::NoteOn { .. } | MidiMessage::NoteOff { .. })
+        matches!(
+            self,
+            MidiMessage::NoteOn { .. } | MidiMessage::NoteOff { .. }
+        )
     }
 
     /// `true` for the single-byte System Real-Time messages (clock,
@@ -238,7 +258,9 @@ impl MidiMessage {
                 out[2] = pressure;
                 3
             }
-            MidiMessage::ControlChange { controller, value, .. } => {
+            MidiMessage::ControlChange {
+                controller, value, ..
+            } => {
                 out[0] = self.status_byte();
                 out[1] = controller;
                 out[2] = value;
@@ -301,14 +323,20 @@ impl MidiMessage {
     /// - the status byte is SysEx (`0xF0`), MTC quarter frame (`0xF1`), a
     ///   standalone end-of-SysEx (`0xF7`), or an undefined system byte.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let status = *bytes.first().ok_or(SuperbError::InvalidArgument { what: "midi_bytes_empty" })?;
+        let status = *bytes.first().ok_or(SuperbError::InvalidArgument {
+            what: "midi_bytes_empty",
+        })?;
         if status < 0x80 {
-            return Err(SuperbError::InvalidArgument { what: "midi_running_status_unsupported" });
+            return Err(SuperbError::InvalidArgument {
+                what: "midi_running_status_unsupported",
+            });
         }
         let data = &bytes[1..];
         for &b in data {
             if b >= 0x80 {
-                return Err(SuperbError::InvalidArgument { what: "midi_data_byte" });
+                return Err(SuperbError::InvalidArgument {
+                    what: "midi_data_byte",
+                });
             }
         }
 
@@ -316,7 +344,9 @@ impl MidiMessage {
             if data.len() == n {
                 Ok(())
             } else {
-                Err(SuperbError::InvalidArgument { what: "midi_message_length" })
+                Err(SuperbError::InvalidArgument {
+                    what: "midi_message_length",
+                })
             }
         };
 
@@ -324,37 +354,63 @@ impl MidiMessage {
             0x80..=0x8F => {
                 expect(2)?;
                 let channel = MidiChannel::new(status & 0x0F)?;
-                Ok(MidiMessage::NoteOff { channel, note: data[0], velocity: data[1] })
+                Ok(MidiMessage::NoteOff {
+                    channel,
+                    note: data[0],
+                    velocity: data[1],
+                })
             }
             0x90..=0x9F => {
                 expect(2)?;
                 let channel = MidiChannel::new(status & 0x0F)?;
                 let (note, velocity) = (data[0], data[1]);
                 if velocity == 0 {
-                    Ok(MidiMessage::NoteOff { channel, note, velocity: 0 })
+                    Ok(MidiMessage::NoteOff {
+                        channel,
+                        note,
+                        velocity: 0,
+                    })
                 } else {
-                    Ok(MidiMessage::NoteOn { channel, note, velocity })
+                    Ok(MidiMessage::NoteOn {
+                        channel,
+                        note,
+                        velocity,
+                    })
                 }
             }
             0xA0..=0xAF => {
                 expect(2)?;
                 let channel = MidiChannel::new(status & 0x0F)?;
-                Ok(MidiMessage::PolyPressure { channel, note: data[0], pressure: data[1] })
+                Ok(MidiMessage::PolyPressure {
+                    channel,
+                    note: data[0],
+                    pressure: data[1],
+                })
             }
             0xB0..=0xBF => {
                 expect(2)?;
                 let channel = MidiChannel::new(status & 0x0F)?;
-                Ok(MidiMessage::ControlChange { channel, controller: data[0], value: data[1] })
+                Ok(MidiMessage::ControlChange {
+                    channel,
+                    controller: data[0],
+                    value: data[1],
+                })
             }
             0xC0..=0xCF => {
                 expect(1)?;
                 let channel = MidiChannel::new(status & 0x0F)?;
-                Ok(MidiMessage::ProgramChange { channel, program: data[0] })
+                Ok(MidiMessage::ProgramChange {
+                    channel,
+                    program: data[0],
+                })
             }
             0xD0..=0xDF => {
                 expect(1)?;
                 let channel = MidiChannel::new(status & 0x0F)?;
-                Ok(MidiMessage::ChannelPressure { channel, pressure: data[0] })
+                Ok(MidiMessage::ChannelPressure {
+                    channel,
+                    pressure: data[0],
+                })
             }
             0xE0..=0xEF => {
                 expect(2)?;
@@ -362,8 +418,12 @@ impl MidiMessage {
                 let value = data[0] as u16 | ((data[1] as u16) << 7);
                 Ok(MidiMessage::PitchBend { channel, value })
             }
-            0xF0 => Err(SuperbError::InvalidArgument { what: "midi_sysex_unsupported" }),
-            0xF1 => Err(SuperbError::InvalidArgument { what: "midi_mtc_quarter_frame_unsupported" }),
+            0xF0 => Err(SuperbError::InvalidArgument {
+                what: "midi_sysex_unsupported",
+            }),
+            0xF1 => Err(SuperbError::InvalidArgument {
+                what: "midi_mtc_quarter_frame_unsupported",
+            }),
             0xF2 => {
                 expect(2)?;
                 let pos = data[0] as u16 | ((data[1] as u16) << 7);
@@ -373,12 +433,16 @@ impl MidiMessage {
                 expect(1)?;
                 Ok(MidiMessage::SongSelect(data[0]))
             }
-            0xF4 | 0xF5 | 0xF9 | 0xFD => Err(SuperbError::InvalidArgument { what: "midi_undefined_status" }),
+            0xF4 | 0xF5 | 0xF9 | 0xFD => Err(SuperbError::InvalidArgument {
+                what: "midi_undefined_status",
+            }),
             0xF6 => {
                 expect(0)?;
                 Ok(MidiMessage::TuneRequest)
             }
-            0xF7 => Err(SuperbError::InvalidArgument { what: "midi_standalone_eox_unsupported" }),
+            0xF7 => Err(SuperbError::InvalidArgument {
+                what: "midi_standalone_eox_unsupported",
+            }),
             0xF8 => {
                 expect(0)?;
                 Ok(MidiMessage::TimingClock)
@@ -441,15 +505,46 @@ mod tests {
     #[test]
     fn round_trips_every_variant() {
         let cases = [
-            MidiMessage::NoteOff { channel: ch(0), note: 60, velocity: 64 },
-            MidiMessage::NoteOn { channel: ch(1), note: 61, velocity: 100 },
-            MidiMessage::PolyPressure { channel: ch(2), note: 62, pressure: 10 },
-            MidiMessage::ControlChange { channel: ch(3), controller: 7, value: 127 },
-            MidiMessage::ProgramChange { channel: ch(4), program: 5 },
-            MidiMessage::ChannelPressure { channel: ch(5), pressure: 33 },
-            MidiMessage::PitchBend { channel: ch(6), value: 0 },
-            MidiMessage::PitchBend { channel: ch(6), value: 8192 },
-            MidiMessage::PitchBend { channel: ch(6), value: 16383 },
+            MidiMessage::NoteOff {
+                channel: ch(0),
+                note: 60,
+                velocity: 64,
+            },
+            MidiMessage::NoteOn {
+                channel: ch(1),
+                note: 61,
+                velocity: 100,
+            },
+            MidiMessage::PolyPressure {
+                channel: ch(2),
+                note: 62,
+                pressure: 10,
+            },
+            MidiMessage::ControlChange {
+                channel: ch(3),
+                controller: 7,
+                value: 127,
+            },
+            MidiMessage::ProgramChange {
+                channel: ch(4),
+                program: 5,
+            },
+            MidiMessage::ChannelPressure {
+                channel: ch(5),
+                pressure: 33,
+            },
+            MidiMessage::PitchBend {
+                channel: ch(6),
+                value: 0,
+            },
+            MidiMessage::PitchBend {
+                channel: ch(6),
+                value: 8192,
+            },
+            MidiMessage::PitchBend {
+                channel: ch(6),
+                value: 16383,
+            },
             MidiMessage::SongPosition(1234),
             MidiMessage::SongSelect(9),
             MidiMessage::TuneRequest,
@@ -469,16 +564,37 @@ mod tests {
     fn note_on_velocity_zero_normalises_to_note_off() {
         let bytes = [0x90, 60, 0];
         let msg = MidiMessage::from_bytes(&bytes).unwrap();
-        assert_eq!(msg, MidiMessage::NoteOff { channel: ch(0), note: 60, velocity: 0 });
+        assert_eq!(
+            msg,
+            MidiMessage::NoteOff {
+                channel: ch(0),
+                note: 60,
+                velocity: 0
+            }
+        );
 
         let via_ctor = MidiMessage::note_on(ch(0), 60, 0).unwrap();
-        assert_eq!(via_ctor, MidiMessage::NoteOff { channel: ch(0), note: 60, velocity: 0 });
+        assert_eq!(
+            via_ctor,
+            MidiMessage::NoteOff {
+                channel: ch(0),
+                note: 60,
+                velocity: 0
+            }
+        );
     }
 
     #[test]
     fn note_on_nonzero_velocity_stays_note_on() {
         let msg = MidiMessage::from_bytes(&[0x91, 60, 1]).unwrap();
-        assert_eq!(msg, MidiMessage::NoteOn { channel: ch(1), note: 60, velocity: 1 });
+        assert_eq!(
+            msg,
+            MidiMessage::NoteOn {
+                channel: ch(1),
+                note: 60,
+                velocity: 1
+            }
+        );
     }
 
     #[test]
@@ -541,7 +657,10 @@ mod tests {
 
     #[test]
     fn channel_accessor() {
-        assert_eq!(MidiMessage::note_on(ch(3), 60, 64).unwrap().channel(), Some(ch(3)));
+        assert_eq!(
+            MidiMessage::note_on(ch(3), 60, 64).unwrap().channel(),
+            Some(ch(3))
+        );
         assert_eq!(MidiMessage::TimingClock.channel(), None);
         assert_eq!(MidiMessage::SongPosition(0).channel(), None);
     }
@@ -565,7 +684,11 @@ mod tests {
         ] {
             assert!(msg.is_realtime(), "{msg:?} should be realtime");
         }
-        for msg in [MidiMessage::TuneRequest, MidiMessage::SongSelect(0), MidiMessage::SongPosition(0)] {
+        for msg in [
+            MidiMessage::TuneRequest,
+            MidiMessage::SongSelect(0),
+            MidiMessage::SongPosition(0),
+        ] {
             assert!(!msg.is_realtime(), "{msg:?} should not be realtime");
         }
         assert!(!MidiMessage::note_on(ch(0), 60, 64).unwrap().is_realtime());
@@ -584,9 +707,28 @@ mod tests {
     #[test]
     fn to_bytes_lengths_per_variant() {
         let mut buf = [0u8; 3];
-        assert_eq!(MidiMessage::note_on(ch(0), 1, 1).unwrap().to_bytes(&mut buf), 3);
-        assert_eq!(MidiMessage::ProgramChange { channel: ch(0), program: 1 }.to_bytes(&mut buf), 2);
-        assert_eq!(MidiMessage::ChannelPressure { channel: ch(0), pressure: 1 }.to_bytes(&mut buf), 2);
+        assert_eq!(
+            MidiMessage::note_on(ch(0), 1, 1)
+                .unwrap()
+                .to_bytes(&mut buf),
+            3
+        );
+        assert_eq!(
+            MidiMessage::ProgramChange {
+                channel: ch(0),
+                program: 1
+            }
+            .to_bytes(&mut buf),
+            2
+        );
+        assert_eq!(
+            MidiMessage::ChannelPressure {
+                channel: ch(0),
+                pressure: 1
+            }
+            .to_bytes(&mut buf),
+            2
+        );
         assert_eq!(MidiMessage::SongSelect(1).to_bytes(&mut buf), 2);
         assert_eq!(MidiMessage::SongPosition(1).to_bytes(&mut buf), 3);
         assert_eq!(MidiMessage::TuneRequest.to_bytes(&mut buf), 1);

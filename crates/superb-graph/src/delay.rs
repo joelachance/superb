@@ -19,7 +19,13 @@ impl DelayLine {
     /// to process blocks of up to `max_frames`.
     pub(crate) fn new(channels: usize, delay: usize, max_frames: usize) -> Self {
         let len = (delay + max_frames).max(1);
-        Self { delay, len, planes: vec![vec![0.0; len]; channels], write: 0, silent_run: len }
+        Self {
+            delay,
+            len,
+            planes: vec![vec![0.0; len]; channels],
+            write: 0,
+            silent_run: len,
+        }
     }
 
     /// Delay in frames.
@@ -45,7 +51,12 @@ impl DelayLine {
     /// silence has been pushed for at least `delay + frames` frames. The
     /// flag is conservative (a live source that happens to output zeros is
     /// not detected); `out` is fully written either way.
-    pub(crate) fn process(&mut self, src: Option<&PlanarBuffer>, frames: usize, out: &mut PlanarBuffer) -> bool {
+    pub(crate) fn process(
+        &mut self,
+        src: Option<&PlanarBuffer>,
+        frames: usize,
+        out: &mut PlanarBuffer,
+    ) -> bool {
         let frames = frames.min(self.len.saturating_sub(self.delay));
         let len = self.len;
         let write = self.write;
@@ -130,7 +141,10 @@ mod tests {
         let mut line = DelayLine::new(1, 4, 4);
         let mut out = PlanarBuffer::new(1, 4);
         assert!(line.process(None, 4, &mut out), "fresh line is silent");
-        assert!(!line.process(Some(&ramp(1, 1.0, 4)), 4, &mut out), "output is still the old zeros but input is live");
+        assert!(
+            !line.process(Some(&ramp(1, 1.0, 4)), 4, &mut out),
+            "output is still the old zeros but input is live"
+        );
         assert_eq!(out.channel(0), &[0.0; 4]);
         assert!(!line.process(None, 4, &mut out), "the ramp comes out now");
         assert_eq!(out.channel(0), &[1.0, 2.0, 3.0, 4.0]);
@@ -149,8 +163,16 @@ mod tests {
         out.channel_mut(2).fill(7.0);
         assert!(!line.process(Some(&ramp(1, 1.0, 4)), 4, &mut out));
         assert_eq!(out.channel(0), &[1.0, 2.0, 3.0, 4.0]);
-        assert_eq!(out.channel(1), &[0.0; 4], "missing source channel reads as silence");
-        assert_eq!(out.channel(2), &[7.0; 4], "extra destination channel untouched");
+        assert_eq!(
+            out.channel(1),
+            &[0.0; 4],
+            "missing source channel reads as silence"
+        );
+        assert_eq!(
+            out.channel(2),
+            &[7.0; 4],
+            "extra destination channel untouched"
+        );
         // Blocks larger than max_frames are truncated rather than corrupting the ring.
         let mut line = DelayLine::new(1, 2, 2);
         let mut out = PlanarBuffer::new(1, 4);

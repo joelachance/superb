@@ -95,9 +95,15 @@ mod tests {
 
     #[test]
     fn display_is_human_readable() {
-        let e = SuperbError::ChannelMismatch { expected: 2, actual: 1 };
+        let e = SuperbError::ChannelMismatch {
+            expected: 2,
+            actual: 1,
+        };
         assert_eq!(e.to_string(), "channel mismatch: expected 2, got 1");
-        let e = SuperbError::NotFound { kind: "node", id: 7 };
+        let e = SuperbError::NotFound {
+            kind: "node",
+            id: 7,
+        };
         assert_eq!(e.to_string(), "node with id 7 not found");
         let e: SuperbError = "device vanished".into();
         assert_eq!(e.to_string(), "device vanished");

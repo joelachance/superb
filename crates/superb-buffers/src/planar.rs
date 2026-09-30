@@ -22,7 +22,12 @@ impl PlanarBuffer {
     ///
     /// The active frame count starts equal to `capacity`.
     pub fn new(channels: usize, capacity: usize) -> Self {
-        Self { data: vec![0.0; channels * capacity], channels, capacity, frames: capacity }
+        Self {
+            data: vec![0.0; channels * capacity],
+            channels,
+            capacity,
+            frames: capacity,
+        }
     }
 
     /// Allocates a buffer from a channel layout.
@@ -37,7 +42,10 @@ impl PlanarBuffer {
         let mut buf = Self::new(channels, frames);
         for (ch, plane) in planes.iter().enumerate() {
             if plane.len() != frames {
-                return Err(SuperbError::FrameMismatch { expected: frames, actual: plane.len() });
+                return Err(SuperbError::FrameMismatch {
+                    expected: frames,
+                    actual: plane.len(),
+                });
             }
             buf.channel_mut(ch).copy_from_slice(plane);
         }
@@ -72,7 +80,10 @@ impl PlanarBuffer {
     /// This never allocates and is safe to call on the audio thread.
     pub fn set_frames(&mut self, frames: usize) -> Result<()> {
         if frames > self.capacity {
-            return Err(SuperbError::CapacityExceeded { what: "PlanarBuffer frames", capacity: self.capacity });
+            return Err(SuperbError::CapacityExceeded {
+                what: "PlanarBuffer frames",
+                capacity: self.capacity,
+            });
         }
         self.frames = frames;
         Ok(())
@@ -86,7 +97,11 @@ impl PlanarBuffer {
     /// Immutable view of one channel's active frames.
     #[inline]
     pub fn channel(&self, ch: usize) -> &[f32] {
-        assert!(ch < self.channels, "channel {ch} out of range ({})", self.channels);
+        assert!(
+            ch < self.channels,
+            "channel {ch} out of range ({})",
+            self.channels
+        );
         let start = ch * self.capacity;
         &self.data[start..start + self.frames]
     }
@@ -94,7 +109,11 @@ impl PlanarBuffer {
     /// Mutable view of one channel's active frames.
     #[inline]
     pub fn channel_mut(&mut self, ch: usize) -> &mut [f32] {
-        assert!(ch < self.channels, "channel {ch} out of range ({})", self.channels);
+        assert!(
+            ch < self.channels,
+            "channel {ch} out of range ({})",
+            self.channels
+        );
         let start = ch * self.capacity;
         &mut self.data[start..start + self.frames]
     }
@@ -102,20 +121,29 @@ impl PlanarBuffer {
     /// Iterates over every channel's active frames.
     pub fn planes(&self) -> impl Iterator<Item = &[f32]> + '_ {
         let frames = self.frames;
-        self.data.chunks_exact(self.capacity.max(1)).take(self.channels).map(move |c| &c[..frames])
+        self.data
+            .chunks_exact(self.capacity.max(1))
+            .take(self.channels)
+            .map(move |c| &c[..frames])
     }
 
     /// Iterates mutably over every channel's active frames.
     pub fn planes_mut(&mut self) -> impl Iterator<Item = &mut [f32]> + '_ {
         let frames = self.frames;
         let channels = self.channels;
-        self.data.chunks_exact_mut(self.capacity.max(1)).take(channels).map(move |c| &mut c[..frames])
+        self.data
+            .chunks_exact_mut(self.capacity.max(1))
+            .take(channels)
+            .map(move |c| &mut c[..frames])
     }
 
     /// Returns mutable views of two *different* channels at once.
     pub fn channel_pair_mut(&mut self, a: usize, b: usize) -> (&mut [f32], &mut [f32]) {
         assert!(a != b, "channels must differ");
-        assert!(a < self.channels && b < self.channels, "channel out of range");
+        assert!(
+            a < self.channels && b < self.channels,
+            "channel out of range"
+        );
         let (lo, hi, swapped) = if a < b { (a, b, false) } else { (b, a, true) };
         let (head, tail) = self.data.split_at_mut(hi * self.capacity);
         let lo_slice = &mut head[lo * self.capacity..lo * self.capacity + self.frames];
@@ -214,9 +242,18 @@ impl PlanarBuffer {
     }
 
     /// Adds a single channel of `src` into a single channel of `self` with gain.
-    pub fn add_channel_from(&mut self, dst_ch: usize, src: &PlanarBuffer, src_ch: usize, gain: f32) -> Result<()> {
+    pub fn add_channel_from(
+        &mut self,
+        dst_ch: usize,
+        src: &PlanarBuffer,
+        src_ch: usize,
+        gain: f32,
+    ) -> Result<()> {
         if src.frames != self.frames {
-            return Err(SuperbError::FrameMismatch { expected: self.frames, actual: src.frames });
+            return Err(SuperbError::FrameMismatch {
+                expected: self.frames,
+                actual: src.frames,
+            });
         }
         let s = src.channel(src_ch);
         for (d, x) in self.channel_mut(dst_ch).iter_mut().zip(s) {
@@ -231,12 +268,23 @@ impl PlanarBuffer {
     /// copied and any extra destination channels are zeroed.
     ///
     /// Fails if either buffer is too short. Never allocates.
-    pub fn copy_block_from(&mut self, dst_offset: usize, src: &PlanarBuffer, len: usize) -> Result<()> {
+    pub fn copy_block_from(
+        &mut self,
+        dst_offset: usize,
+        src: &PlanarBuffer,
+        len: usize,
+    ) -> Result<()> {
         if src.frames < len {
-            return Err(SuperbError::FrameMismatch { expected: len, actual: src.frames });
+            return Err(SuperbError::FrameMismatch {
+                expected: len,
+                actual: src.frames,
+            });
         }
         if self.frames < dst_offset + len {
-            return Err(SuperbError::FrameMismatch { expected: dst_offset + len, actual: self.frames });
+            return Err(SuperbError::FrameMismatch {
+                expected: dst_offset + len,
+                actual: self.frames,
+            });
         }
         let (sc, dc) = (src.channels, self.channels);
         for ch in 0..dc {
@@ -256,7 +304,9 @@ impl PlanarBuffer {
 
     /// Largest absolute sample value across all channels (0.0 for an empty block).
     pub fn peak(&self) -> f32 {
-        self.planes().flat_map(|p| p.iter()).fold(0.0f32, |m, s| m.max(s.abs()))
+        self.planes()
+            .flat_map(|p| p.iter())
+            .fold(0.0f32, |m, s| m.max(s.abs()))
     }
 
     /// Per-channel peak absolute values written into `out` (one entry per channel).
@@ -278,10 +328,16 @@ impl PlanarBuffer {
 
     fn check_compatible(&self, other: &PlanarBuffer) -> Result<()> {
         if other.channels != self.channels {
-            return Err(SuperbError::ChannelMismatch { expected: self.channels, actual: other.channels });
+            return Err(SuperbError::ChannelMismatch {
+                expected: self.channels,
+                actual: other.channels,
+            });
         }
         if other.frames != self.frames {
-            return Err(SuperbError::FrameMismatch { expected: self.frames, actual: other.frames });
+            return Err(SuperbError::FrameMismatch {
+                expected: self.frames,
+                actual: other.frames,
+            });
         }
         Ok(())
     }
@@ -370,9 +426,15 @@ mod tests {
         assert!(b.channel(0).iter().all(|&s| s == 0.0));
 
         let wrong_ch = PlanarBuffer::new(1, 4);
-        assert!(matches!(b.add_from(&wrong_ch), Err(SuperbError::ChannelMismatch { .. })));
+        assert!(matches!(
+            b.add_from(&wrong_ch),
+            Err(SuperbError::ChannelMismatch { .. })
+        ));
         let wrong_frames = PlanarBuffer::new(2, 3);
-        assert!(matches!(b.copy_from(&wrong_frames), Err(SuperbError::FrameMismatch { .. })));
+        assert!(matches!(
+            b.copy_from(&wrong_frames),
+            Err(SuperbError::FrameMismatch { .. })
+        ));
     }
 
     #[test]
@@ -381,7 +443,10 @@ mod tests {
         let mut dst = PlanarBuffer::new(2, 10);
         dst.fill(9.0);
         dst.copy_block_from(3, &src, 4).unwrap();
-        assert_eq!(dst.channel(1), &[9.0, 9.0, 9.0, 10.0, 11.0, 12.0, 13.0, 9.0, 9.0, 9.0]);
+        assert_eq!(
+            dst.channel(1),
+            &[9.0, 9.0, 9.0, 10.0, 11.0, 12.0, 13.0, 9.0, 9.0, 9.0]
+        );
         assert!(dst.copy_block_from(7, &src, 4).is_err()); // dst too short
         assert!(dst.copy_block_from(0, &src, 5).is_err()); // src too short
 

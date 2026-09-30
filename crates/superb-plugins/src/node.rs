@@ -37,7 +37,10 @@ impl PluginNode {
         Self {
             instance,
             name,
-            channels: NodeChannels { inputs: ports.inputs, outputs: ports.outputs },
+            channels: NodeChannels {
+                inputs: ports.inputs,
+                outputs: ports.outputs,
+            },
             params_rx: rx,
             params_tx: Some(tx),
             prepared: false,
@@ -92,7 +95,12 @@ impl Node for PluginNode {
         self.instance.reset();
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         if !self.prepared {
             return ProcessStatus::Silent;
         }
@@ -162,7 +170,10 @@ pub(crate) mod tests {
             &self.desc
         }
         fn ports(&self) -> AudioPortLayout {
-            AudioPortLayout { inputs: 2, outputs: 2 }
+            AudioPortLayout {
+                inputs: 2,
+                outputs: 2,
+            }
         }
         fn params(&self) -> &[ParamInfo] {
             &self.params
@@ -171,16 +182,25 @@ pub(crate) mod tests {
             if id == 1 {
                 Ok(self.gain)
             } else {
-                Err(SuperbError::NotFound { kind: "param", id: id as u64 })
+                Err(SuperbError::NotFound {
+                    kind: "param",
+                    id: id as u64,
+                })
             }
         }
         fn set_param(&mut self, id: u32, value: f64) -> Result<()> {
             if id != 1 {
-                return Err(SuperbError::NotFound { kind: "param", id: id as u64 });
+                return Err(SuperbError::NotFound {
+                    kind: "param",
+                    id: id as u64,
+                });
             }
             if self.active {
                 if self.queue.len() == self.queue.capacity() {
-                    return Err(SuperbError::CapacityExceeded { what: "mock queue", capacity: 8 });
+                    return Err(SuperbError::CapacityExceeded {
+                        what: "mock queue",
+                        capacity: 8,
+                    });
                 }
                 self.queue.push((id, value));
             } else {
@@ -204,7 +224,12 @@ pub(crate) mod tests {
         fn reset(&mut self) {
             self.resets += 1;
         }
-        fn process(&mut self, _ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+        fn process(
+            &mut self,
+            _ctx: &ProcessContext<'_>,
+            input: &PlanarBuffer,
+            output: &mut PlanarBuffer,
+        ) -> ProcessStatus {
             for (_, v) in self.queue.drain(..) {
                 self.gain = v;
             }
@@ -219,7 +244,9 @@ pub(crate) mod tests {
             Ok(self.gain.to_le_bytes().to_vec())
         }
         fn load_state(&mut self, bytes: &[u8]) -> Result<()> {
-            let arr: [u8; 8] = bytes.try_into().map_err(|_| SuperbError::InvalidArgument { what: "state" })?;
+            let arr: [u8; 8] = bytes
+                .try_into()
+                .map_err(|_| SuperbError::InvalidArgument { what: "state" })?;
             self.gain = f64::from_le_bytes(arr);
             Ok(())
         }
@@ -237,7 +264,10 @@ pub(crate) mod tests {
         assert_eq!(node.latency_frames(), 12);
         assert!(!node.is_prepared());
         assert!(node.take_param_sender().is_some());
-        assert!(node.take_param_sender().is_none(), "sender is handed out once");
+        assert!(
+            node.take_param_sender().is_none(),
+            "sender is handed out once"
+        );
         assert_eq!(node.instance().descriptor().id, "superb.mock.gain");
         node.instance_mut().set_param(1, 0.25).unwrap();
         assert_eq!(node.into_instance().param_value(1).unwrap(), 0.25);
@@ -281,8 +311,17 @@ pub(crate) mod tests {
         let input = PlanarBuffer::new(2, 16);
         let mut output = PlanarBuffer::new(2, 16);
         let midi = no_midi();
-        let ctx = ProcessContext { sample_rate: SampleRate::HZ_48K, frames: 16, time: BlockTime::free_running(), midi: &midi, input_is_silent: false };
-        assert_eq!(node.process(&ctx, &input, &mut output), ProcessStatus::Silent);
+        let ctx = ProcessContext {
+            sample_rate: SampleRate::HZ_48K,
+            frames: 16,
+            time: BlockTime::free_running(),
+            midi: &midi,
+            input_is_silent: false,
+        };
+        assert_eq!(
+            node.process(&ctx, &input, &mut output),
+            ProcessStatus::Silent
+        );
 
         // Re-preparing an active plugin deactivates first.
         let mut node = PluginNode::new(Box::new(MockGain::new(0)));
@@ -290,6 +329,9 @@ pub(crate) mod tests {
         node.prepare(SampleRate::CD, 32);
         assert!(node.is_prepared() && node.instance().is_active());
         node.reset();
-        assert_eq!(node.process(&ctx, &input, &mut output), ProcessStatus::Normal);
+        assert_eq!(
+            node.process(&ctx, &input, &mut output),
+            ProcessStatus::Normal
+        );
     }
 }

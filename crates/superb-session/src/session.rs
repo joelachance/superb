@@ -1,7 +1,8 @@
 //! The [`Session`] document.
 
 use superb_core::{
-    ClipId, MarkerId, RawId, Result, SampleRate, SendId, SuperbError, TimeDuration, TimePosition, TrackId,
+    ClipId, MarkerId, RawId, Result, SampleRate, SendId, SuperbError, TimeDuration, TimePosition,
+    TrackId,
 };
 use superb_transport::{LoopRange, TempoMap};
 
@@ -107,7 +108,11 @@ impl Session {
 
     /// End of the last item on any track (zero for an empty session).
     pub fn end_position(&self) -> TimePosition {
-        self.tracks.iter().map(Track::end).max().unwrap_or(TimePosition::ZERO)
+        self.tracks
+            .iter()
+            .map(Track::end)
+            .max()
+            .unwrap_or(TimePosition::ZERO)
     }
 
     /// Total number of items across all tracks.
@@ -168,7 +173,8 @@ impl Session {
     /// Appends a new track and returns its ID.
     pub fn add_track(&mut self, name: impl Into<String>, kind: TrackKind) -> TrackId {
         let id = self.allocate_track_id();
-        self.insert_track(self.tracks.len(), Track::with_id(id, name, kind)).expect("fresh id, valid index")
+        self.insert_track(self.tracks.len(), Track::with_id(id, name, kind))
+            .expect("fresh id, valid index")
     }
 
     /// Inserts `track` at `index`. A track without an ID gets a fresh one;
@@ -179,33 +185,49 @@ impl Session {
     /// ID.
     pub fn insert_track(&mut self, index: usize, mut track: Track) -> Result<TrackId> {
         if index > self.tracks.len() {
-            return Err(SuperbError::InvalidArgument { what: "track index" });
+            return Err(SuperbError::InvalidArgument {
+                what: "track index",
+            });
         }
         if track.id.is_valid() && self.tracks.iter().any(|t| t.id == track.id) {
-            return Err(SuperbError::InvalidArgument { what: "duplicate track id" });
+            return Err(SuperbError::InvalidArgument {
+                what: "duplicate track id",
+            });
         }
         // Validate everything before touching the ID counter so a rejected
         // insert leaves the document untouched.
         if track.kind == TrackKind::Bus && !track.items.is_empty() {
-            return Err(SuperbError::InvalidArgument { what: "bus tracks hold no items" });
+            return Err(SuperbError::InvalidArgument {
+                what: "bus tracks hold no items",
+            });
         }
         if track.kind == TrackKind::Bus && !track.sends.is_empty() {
-            return Err(SuperbError::InvalidArgument { what: "bus tracks have no sends" });
+            return Err(SuperbError::InvalidArgument {
+                what: "bus tracks have no sends",
+            });
         }
         if let Some(bus) = track.output {
             self.check_bus(bus)?;
         }
         for i in 0..track.items.len() {
             let id = track.items[i].id;
-            if id.is_valid() && (self.find_item(id).is_some() || track.items[..i].iter().any(|o| o.id == id)) {
-                return Err(SuperbError::InvalidArgument { what: "duplicate clip id" });
+            if id.is_valid()
+                && (self.find_item(id).is_some() || track.items[..i].iter().any(|o| o.id == id))
+            {
+                return Err(SuperbError::InvalidArgument {
+                    what: "duplicate clip id",
+                });
             }
         }
         for i in 0..track.sends.len() {
             let id = track.sends[i].id;
             self.check_bus(track.sends[i].bus)?;
-            if id.is_valid() && (self.find_send(id).is_some() || track.sends[..i].iter().any(|o| o.id == id)) {
-                return Err(SuperbError::InvalidArgument { what: "duplicate send id" });
+            if id.is_valid()
+                && (self.find_send(id).is_some() || track.sends[..i].iter().any(|o| o.id == id))
+            {
+                return Err(SuperbError::InvalidArgument {
+                    what: "duplicate send id",
+                });
             }
         }
 
@@ -259,7 +281,9 @@ impl Session {
     pub fn move_track(&mut self, id: TrackId, index: usize) -> Result<()> {
         let from = self.track_index(id)?;
         if index >= self.tracks.len() {
-            return Err(SuperbError::InvalidArgument { what: "track index" });
+            return Err(SuperbError::InvalidArgument {
+                what: "track index",
+            });
         }
         if from != index {
             let t = self.tracks.remove(from);
@@ -271,7 +295,13 @@ impl Session {
 
     /// Position of a track in the track order.
     pub fn track_index(&self, id: TrackId) -> Result<usize> {
-        self.tracks.iter().position(|t| t.id == id).ok_or(SuperbError::NotFound { kind: "track", id: id.raw() })
+        self.tracks
+            .iter()
+            .position(|t| t.id == id)
+            .ok_or(SuperbError::NotFound {
+                kind: "track",
+                id: id.raw(),
+            })
     }
 
     /// Looks up a track.
@@ -341,14 +371,19 @@ impl Session {
 
     fn check_bus(&self, bus: TrackId) -> Result<()> {
         if self.track(bus)?.kind != TrackKind::Bus {
-            return Err(SuperbError::InvalidArgument { what: "routing target is not a bus track" });
+            return Err(SuperbError::InvalidArgument {
+                what: "routing target is not a bus track",
+            });
         }
         Ok(())
     }
 
     /// Tracks (and buses) whose output is `bus`, in track order.
     pub fn tracks_routed_to(&self, bus: TrackId) -> impl Iterator<Item = TrackId> + '_ {
-        self.tracks.iter().filter(move |t| t.output == Some(bus)).map(Track::id)
+        self.tracks
+            .iter()
+            .filter(move |t| t.output == Some(bus))
+            .map(Track::id)
     }
 
     /// Adds a send from an audio/MIDI track to the bus named by
@@ -357,12 +392,16 @@ impl Session {
     pub fn add_send(&mut self, track: TrackId, mut send: TrackSend) -> Result<SendId> {
         let ti = self.track_index(track)?;
         if self.tracks[ti].kind == TrackKind::Bus {
-            return Err(SuperbError::InvalidArgument { what: "bus tracks have no sends" });
+            return Err(SuperbError::InvalidArgument {
+                what: "bus tracks have no sends",
+            });
         }
         self.check_bus(send.bus)?;
         if send.id.is_valid() {
             if self.find_send(send.id).is_some() {
-                return Err(SuperbError::InvalidArgument { what: "duplicate send id" });
+                return Err(SuperbError::InvalidArgument {
+                    what: "duplicate send id",
+                });
             }
             self.reserve(send.id.raw());
         } else {
@@ -376,7 +415,10 @@ impl Session {
 
     /// Removes a send, returning the track it was on and the send.
     pub fn remove_send(&mut self, id: SendId) -> Result<(TrackId, TrackSend)> {
-        let (ti, si) = self.find_send(id).ok_or(SuperbError::NotFound { kind: "send", id: id.raw() })?;
+        let (ti, si) = self.find_send(id).ok_or(SuperbError::NotFound {
+            kind: "send",
+            id: id.raw(),
+        })?;
         let track = self.tracks[ti].id;
         let send = self.tracks[ti].sends.remove(si);
         self.touch();
@@ -385,27 +427,41 @@ impl Session {
 
     /// Looks up a send on any track.
     pub fn send(&self, id: SendId) -> Result<&TrackSend> {
-        let (ti, si) = self.find_send(id).ok_or(SuperbError::NotFound { kind: "send", id: id.raw() })?;
+        let (ti, si) = self.find_send(id).ok_or(SuperbError::NotFound {
+            kind: "send",
+            id: id.raw(),
+        })?;
         Ok(&self.tracks[ti].sends[si])
     }
 
     /// Mutable send access (bumps the revision). The destination is fixed;
     /// remove and re-add to retarget.
     pub fn send_mut(&mut self, id: SendId) -> Result<&mut TrackSend> {
-        let (ti, si) = self.find_send(id).ok_or(SuperbError::NotFound { kind: "send", id: id.raw() })?;
+        let (ti, si) = self.find_send(id).ok_or(SuperbError::NotFound {
+            kind: "send",
+            id: id.raw(),
+        })?;
         self.touch();
         Ok(&mut self.tracks[ti].sends[si])
     }
 
     /// The track a send belongs to.
     pub fn send_track(&self, id: SendId) -> Result<TrackId> {
-        let (ti, _) = self.find_send(id).ok_or(SuperbError::NotFound { kind: "send", id: id.raw() })?;
+        let (ti, _) = self.find_send(id).ok_or(SuperbError::NotFound {
+            kind: "send",
+            id: id.raw(),
+        })?;
         Ok(self.tracks[ti].id)
     }
 
     /// All sends into `bus` as `(source track, send)` pairs, in track order.
     pub fn sends_to(&self, bus: TrackId) -> impl Iterator<Item = (TrackId, &TrackSend)> + '_ {
-        self.tracks.iter().flat_map(move |t| t.sends.iter().filter(move |s| s.bus == bus).map(move |s| (t.id, s)))
+        self.tracks.iter().flat_map(move |t| {
+            t.sends
+                .iter()
+                .filter(move |s| s.bus == bus)
+                .map(move |s| (t.id, s))
+        })
     }
 
     /// Total number of sends across all tracks.
@@ -414,7 +470,10 @@ impl Session {
     }
 
     fn find_send(&self, id: SendId) -> Option<(usize, usize)> {
-        self.tracks.iter().enumerate().find_map(|(ti, t)| t.sends.iter().position(|s| s.id == id).map(|si| (ti, si)))
+        self.tracks
+            .iter()
+            .enumerate()
+            .find_map(|(ti, t)| t.sends.iter().position(|s| s.id == id).map(|si| (ti, si)))
     }
 
     // ------------------------------------------------------------------
@@ -427,11 +486,15 @@ impl Session {
     pub fn add_item(&mut self, track: TrackId, mut item: Item) -> Result<ClipId> {
         let ti = self.track_index(track)?;
         if self.tracks[ti].kind == TrackKind::Bus {
-            return Err(SuperbError::InvalidArgument { what: "bus tracks hold no items" });
+            return Err(SuperbError::InvalidArgument {
+                what: "bus tracks hold no items",
+            });
         }
         if item.id.is_valid() {
             if self.find_item(item.id).is_some() {
-                return Err(SuperbError::InvalidArgument { what: "duplicate clip id" });
+                return Err(SuperbError::InvalidArgument {
+                    what: "duplicate clip id",
+                });
             }
             self.reserve(item.id.raw());
         } else {
@@ -447,7 +510,10 @@ impl Session {
 
     /// Removes an item, returning the track it was on and the item.
     pub fn remove_item(&mut self, id: ClipId) -> Result<(TrackId, Item)> {
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound { kind: "clip", id: id.raw() })?;
+        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+            kind: "clip",
+            id: id.raw(),
+        })?;
         let track = self.tracks[ti].id;
         let item = self.tracks[ti].items.remove(ii);
         self.touch();
@@ -456,7 +522,10 @@ impl Session {
 
     /// Moves an item to a new start position on its current track.
     pub fn move_item(&mut self, id: ClipId, start: TimePosition) -> Result<()> {
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound { kind: "clip", id: id.raw() })?;
+        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+            kind: "clip",
+            id: id.raw(),
+        })?;
         let t = &mut self.tracks[ti];
         if t.items[ii].start != start {
             t.items[ii].start = start;
@@ -470,9 +539,14 @@ impl Session {
     pub fn move_item_to_track(&mut self, id: ClipId, track: TrackId) -> Result<()> {
         let dest = self.track_index(track)?;
         if self.tracks[dest].kind == TrackKind::Bus {
-            return Err(SuperbError::InvalidArgument { what: "bus tracks hold no items" });
+            return Err(SuperbError::InvalidArgument {
+                what: "bus tracks hold no items",
+            });
         }
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound { kind: "clip", id: id.raw() })?;
+        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+            kind: "clip",
+            id: id.raw(),
+        })?;
         if ti == dest {
             return Ok(());
         }
@@ -491,26 +565,38 @@ impl Session {
 
     /// Looks up an item on any track.
     pub fn item(&self, id: ClipId) -> Result<&Item> {
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound { kind: "clip", id: id.raw() })?;
+        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+            kind: "clip",
+            id: id.raw(),
+        })?;
         Ok(&self.tracks[ti].items[ii])
     }
 
     /// Mutable item access (bumps the revision). Use
     /// [`move_item`](Self::move_item) to change the start so ordering holds.
     pub fn item_mut(&mut self, id: ClipId) -> Result<&mut Item> {
-        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound { kind: "clip", id: id.raw() })?;
+        let (ti, ii) = self.find_item(id).ok_or(SuperbError::NotFound {
+            kind: "clip",
+            id: id.raw(),
+        })?;
         self.touch();
         Ok(&mut self.tracks[ti].items[ii])
     }
 
     /// The track an item lives on.
     pub fn item_track(&self, id: ClipId) -> Result<TrackId> {
-        let (ti, _) = self.find_item(id).ok_or(SuperbError::NotFound { kind: "clip", id: id.raw() })?;
+        let (ti, _) = self.find_item(id).ok_or(SuperbError::NotFound {
+            kind: "clip",
+            id: id.raw(),
+        })?;
         Ok(self.tracks[ti].id)
     }
 
     fn find_item(&self, id: ClipId) -> Option<(usize, usize)> {
-        self.tracks.iter().enumerate().find_map(|(ti, t)| t.items.iter().position(|i| i.id == id).map(|ii| (ti, ii)))
+        self.tracks
+            .iter()
+            .enumerate()
+            .find_map(|(ti, t)| t.items.iter().position(|i| i.id == id).map(|ii| (ti, ii)))
     }
 
     // ------------------------------------------------------------------
@@ -520,14 +606,17 @@ impl Session {
     /// Adds a marker and returns its ID.
     pub fn add_marker(&mut self, name: impl Into<String>, position: TimePosition) -> MarkerId {
         let id = self.allocate_marker_id();
-        self.insert_marker(Marker::with_id(id, name, position)).expect("fresh id")
+        self.insert_marker(Marker::with_id(id, name, position))
+            .expect("fresh id")
     }
 
     /// Inserts a marker (fresh ID if it has none; no collisions otherwise).
     pub fn insert_marker(&mut self, mut marker: Marker) -> Result<MarkerId> {
         if marker.id.is_valid() {
             if self.markers.iter().any(|m| m.id == marker.id) {
-                return Err(SuperbError::InvalidArgument { what: "duplicate marker id" });
+                return Err(SuperbError::InvalidArgument {
+                    what: "duplicate marker id",
+                });
             }
             self.reserve(marker.id.raw());
         } else {
@@ -588,11 +677,18 @@ impl Session {
     }
 
     fn marker_index(&self, id: MarkerId) -> Result<usize> {
-        self.markers.iter().position(|m| m.id == id).ok_or(SuperbError::NotFound { kind: "marker", id: id.raw() })
+        self.markers
+            .iter()
+            .position(|m| m.id == id)
+            .ok_or(SuperbError::NotFound {
+                kind: "marker",
+                id: id.raw(),
+            })
     }
 
     fn sort_markers(&mut self) {
-        self.markers.sort_by(|a, b| a.position.cmp(&b.position).then(a.id.cmp(&b.id)));
+        self.markers
+            .sort_by(|a, b| a.position.cmp(&b.position).then(a.id.cmp(&b.id)));
     }
 }
 
@@ -605,7 +701,13 @@ mod tests {
     const R: SampleRate = SampleRate::HZ_48K;
 
     fn item(start: i64, len: i64) -> Item {
-        Item::new("i", TimePosition::from_samples(start), TimeDuration::from_samples(len), ItemSource::Empty).unwrap()
+        Item::new(
+            "i",
+            TimePosition::from_samples(start),
+            TimeDuration::from_samples(len),
+            ItemSource::Empty,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -639,7 +741,10 @@ mod tests {
         assert_eq!(s.track_count(), 3);
         assert_eq!(s.track_index(b).unwrap(), 1);
         s.move_track(c, 0).unwrap();
-        assert_eq!(s.tracks().iter().map(|t| t.id()).collect::<Vec<_>>(), [c, a, b]);
+        assert_eq!(
+            s.tracks().iter().map(|t| t.id()).collect::<Vec<_>>(),
+            [c, a, b]
+        );
         assert!(s.move_track(c, 3).is_err());
         s.move_track(c, 0).unwrap(); // no-op
         let rev = s.revision();
@@ -649,14 +754,23 @@ mod tests {
         let removed = s.remove_track(a).unwrap();
         assert_eq!(removed.name, "a");
         assert!(s.track(a).is_err());
-        assert!(matches!(s.remove_track(a), Err(SuperbError::NotFound { kind: "track", .. })));
+        assert!(matches!(
+            s.remove_track(a),
+            Err(SuperbError::NotFound { kind: "track", .. })
+        ));
         // Re-inserting under the original id works once, then collides.
         s.insert_track(1, removed.clone()).unwrap();
         assert_eq!(s.track_index(a).unwrap(), 1);
         assert!(s.insert_track(0, removed).is_err());
-        assert!(s.insert_track(9, Track::new("x", TrackKind::Audio)).is_err());
+        assert!(s
+            .insert_track(9, Track::new("x", TrackKind::Audio))
+            .is_err());
         // A track inserted with a high explicit id pushes the counter past it.
-        s.insert_track(0, Track::with_id(TrackId::from_raw(100), "hi", TrackKind::Audio)).unwrap();
+        s.insert_track(
+            0,
+            Track::with_id(TrackId::from_raw(100), "hi", TrackKind::Audio),
+        )
+        .unwrap();
         assert!(s.add_track("next", TrackKind::Audio).raw() > 100);
         s.track_mut(b).unwrap().name = "bee".into();
         assert_eq!(s.track(b).unwrap().name, "bee");
@@ -671,12 +785,21 @@ mod tests {
         let late = s.add_item(a, item(1_000, 100)).unwrap();
         let early = s.add_item(a, item(0, 100)).unwrap();
         assert!(late < early);
-        assert_eq!(s.track(a).unwrap().items().iter().map(Item::id).collect::<Vec<_>>(), [early, late]);
+        assert_eq!(
+            s.track(a)
+                .unwrap()
+                .items()
+                .iter()
+                .map(Item::id)
+                .collect::<Vec<_>>(),
+            [early, late]
+        );
         assert_eq!(s.item_track(late).unwrap(), a);
         assert_eq!(s.item_count(), 2);
         assert_eq!(s.end_position().samples(), 1_100);
 
-        s.move_item(early, TimePosition::from_samples(5_000)).unwrap();
+        s.move_item(early, TimePosition::from_samples(5_000))
+            .unwrap();
         assert_eq!(s.track(a).unwrap().items()[1].id(), early);
         assert_eq!(s.end_position().samples(), 5_100);
 
@@ -716,16 +839,52 @@ mod tests {
         let a = s.add_track("a", TrackKind::Audio);
         let existing = s.add_item(a, item(0, 10)).unwrap();
         let mut t = Track::new("dup", TrackKind::Audio);
-        t.items.push(Item::with_id(existing, "x", TimePosition::ZERO, TimeDuration::from_samples(1), ItemSource::Empty).unwrap());
+        t.items.push(
+            Item::with_id(
+                existing,
+                "x",
+                TimePosition::ZERO,
+                TimeDuration::from_samples(1),
+                ItemSource::Empty,
+            )
+            .unwrap(),
+        );
         assert!(s.insert_track(0, t).is_err());
         let mut t = Track::new("dup2", TrackKind::Audio);
         let id = ClipId::from_raw(77);
-        t.items.push(Item::with_id(id, "x", TimePosition::ZERO, TimeDuration::from_samples(1), ItemSource::Empty).unwrap());
-        t.items.push(Item::with_id(id, "y", TimePosition::ZERO, TimeDuration::from_samples(1), ItemSource::Empty).unwrap());
+        t.items.push(
+            Item::with_id(
+                id,
+                "x",
+                TimePosition::ZERO,
+                TimeDuration::from_samples(1),
+                ItemSource::Empty,
+            )
+            .unwrap(),
+        );
+        t.items.push(
+            Item::with_id(
+                id,
+                "y",
+                TimePosition::ZERO,
+                TimeDuration::from_samples(1),
+                ItemSource::Empty,
+            )
+            .unwrap(),
+        );
         assert!(s.insert_track(0, t).is_err());
         let mut t = Track::new("ok", TrackKind::Audio);
         t.items.push(item(5, 1));
-        t.items.push(Item::with_id(id, "x", TimePosition::ZERO, TimeDuration::from_samples(1), ItemSource::Empty).unwrap());
+        t.items.push(
+            Item::with_id(
+                id,
+                "x",
+                TimePosition::ZERO,
+                TimeDuration::from_samples(1),
+                ItemSource::Empty,
+            )
+            .unwrap(),
+        );
         let tid = s.insert_track(0, t).unwrap();
         let ids: Vec<_> = s.track(tid).unwrap().items().iter().map(Item::id).collect();
         assert_eq!(ids[0], id, "sorted by start");
@@ -747,33 +906,63 @@ mod tests {
         let rev = s.revision();
         s.set_track_output(a, Some(sub)).unwrap();
         assert_eq!(s.revision(), rev, "no-op routing does not bump");
-        assert!(matches!(s.set_track_output(a, Some(k)), Err(SuperbError::InvalidArgument { .. })), "target must be a bus");
+        assert!(
+            matches!(
+                s.set_track_output(a, Some(k)),
+                Err(SuperbError::InvalidArgument { .. })
+            ),
+            "target must be a bus"
+        );
         assert!(s.set_track_output(a, Some(TrackId::from_raw(999))).is_err());
         assert!(s.set_track_output(TrackId::from_raw(999), None).is_err());
         assert_eq!(s.set_track_output(sub, Some(sub)), Err(SuperbError::Cycle));
         s.set_track_output(sub, Some(fx)).unwrap();
         assert_eq!(s.set_track_output(fx, Some(sub)), Err(SuperbError::Cycle));
-        assert_eq!(s.track(fx).unwrap().output(), None, "rejected route leaves the old one");
+        assert_eq!(
+            s.track(fx).unwrap().output(),
+            None,
+            "rejected route leaves the old one"
+        );
         assert_eq!(s.tracks_routed_to(sub).collect::<Vec<_>>(), [a]);
         assert_eq!(s.tracks_routed_to(fx).collect::<Vec<_>>(), [sub]);
 
         // Sends: only from audio/MIDI tracks, only to buses, unique ids.
         let id = s.allocate_send_id();
-        assert_eq!(s.add_send(a, TrackSend::with_id(id, fx).level_db(-6.0)).unwrap(), id);
+        assert_eq!(
+            s.add_send(a, TrackSend::with_id(id, fx).level_db(-6.0))
+                .unwrap(),
+            id
+        );
         let auto = s.add_send(k, TrackSend::new(fx).pre_fader()).unwrap();
         assert!(auto.is_valid() && auto != id);
-        assert!(s.add_send(a, TrackSend::with_id(id, fx)).is_err(), "duplicate send id");
-        assert!(s.add_send(sub, TrackSend::new(fx)).is_err(), "buses cannot send");
-        assert!(s.add_send(a, TrackSend::new(k)).is_err(), "sends target buses");
-        assert!(s.add_send(a, TrackSend::new(TrackId::from_raw(999))).is_err());
-        assert!(s.add_send(TrackId::from_raw(999), TrackSend::new(fx)).is_err());
+        assert!(
+            s.add_send(a, TrackSend::with_id(id, fx)).is_err(),
+            "duplicate send id"
+        );
+        assert!(
+            s.add_send(sub, TrackSend::new(fx)).is_err(),
+            "buses cannot send"
+        );
+        assert!(
+            s.add_send(a, TrackSend::new(k)).is_err(),
+            "sends target buses"
+        );
+        assert!(s
+            .add_send(a, TrackSend::new(TrackId::from_raw(999)))
+            .is_err());
+        assert!(s
+            .add_send(TrackId::from_raw(999), TrackSend::new(fx))
+            .is_err());
         assert_eq!(s.send_count(), 2);
         assert_eq!(s.send(id).unwrap().level_db, -6.0);
         assert_eq!(s.send_track(auto).unwrap(), k);
         assert!(s.send(auto).unwrap().pre_fader);
         s.send_mut(auto).unwrap().enabled = false;
         assert!(!s.send(auto).unwrap().enabled);
-        assert_eq!(s.sends_to(fx).map(|(t, s)| (t, s.id())).collect::<Vec<_>>(), [(a, id), (k, auto)]);
+        assert_eq!(
+            s.sends_to(fx).map(|(t, s)| (t, s.id())).collect::<Vec<_>>(),
+            [(a, id), (k, auto)]
+        );
         assert!(s.sends_to(sub).next().is_none());
 
         let (from, removed) = s.remove_send(auto).unwrap();
@@ -791,7 +980,11 @@ mod tests {
         assert_eq!(gone.kind, TrackKind::Bus);
         assert_eq!(s.track(sub).unwrap().output(), None);
         assert_eq!(s.send_count(), 0);
-        assert_eq!(s.track(a).unwrap().output(), Some(sub), "unrelated routes survive");
+        assert_eq!(
+            s.track(a).unwrap().output(),
+            Some(sub),
+            "unrelated routes survive"
+        );
 
         // Removing a routed track takes its sends and output along; it can
         // come back as long as its targets still exist.
@@ -801,17 +994,26 @@ mod tests {
         assert_eq!(track_a.sends().len(), 1);
         s.insert_track(0, track_a.clone()).unwrap();
         assert_eq!(s.track(a).unwrap().sends().len(), 1);
-        assert!(s.insert_track(0, track_a.clone()).is_err(), "duplicate track id");
+        assert!(
+            s.insert_track(0, track_a.clone()).is_err(),
+            "duplicate track id"
+        );
         let mut dup = track_a.clone();
         dup.id = TrackId::INVALID;
         assert!(s.insert_track(0, dup).is_err(), "duplicate send id");
         s.remove_track(sub).unwrap();
-        assert!(s.insert_track(0, track_a.clone()).is_err(), "dangling output");
+        assert!(
+            s.insert_track(0, track_a.clone()).is_err(),
+            "dangling output"
+        );
         let mut orphan = track_a;
         orphan.output = None;
         assert!(s.insert_track(0, orphan.clone()).is_err(), "dangling send");
         orphan.sends.clear();
-        assert!(s.insert_track(0, orphan).is_err(), "still a duplicate id (a is present)");
+        assert!(
+            s.insert_track(0, orphan).is_err(),
+            "still a duplicate id (a is present)"
+        );
         // Bus tracks may not carry sends.
         let mut bad_bus = Track::new("b", TrackKind::Bus);
         bad_bus.sends.push(TrackSend::new(a));
@@ -830,12 +1032,26 @@ mod tests {
         let verse = s.add_marker("verse", TimePosition::from_samples(1_000));
         let intro = s.add_marker("intro", TimePosition::ZERO);
         let chorus = s.add_marker("chorus", TimePosition::from_samples(2_000));
-        assert_eq!(s.markers().iter().map(Marker::id).collect::<Vec<_>>(), [intro, verse, chorus]);
-        assert_eq!(s.next_marker(TimePosition::from_samples(1_000)).unwrap().id(), chorus);
-        assert_eq!(s.previous_marker(TimePosition::from_samples(1_000)).unwrap().id(), intro);
+        assert_eq!(
+            s.markers().iter().map(Marker::id).collect::<Vec<_>>(),
+            [intro, verse, chorus]
+        );
+        assert_eq!(
+            s.next_marker(TimePosition::from_samples(1_000))
+                .unwrap()
+                .id(),
+            chorus
+        );
+        assert_eq!(
+            s.previous_marker(TimePosition::from_samples(1_000))
+                .unwrap()
+                .id(),
+            intro
+        );
         assert!(s.next_marker(TimePosition::from_samples(2_000)).is_none());
         assert!(s.previous_marker(TimePosition::ZERO).is_none());
-        s.move_marker(intro, TimePosition::from_samples(3_000)).unwrap();
+        s.move_marker(intro, TimePosition::from_samples(3_000))
+            .unwrap();
         assert_eq!(s.markers().last().unwrap().id(), intro);
         s.marker_mut(intro).unwrap().name = "outro".into();
         assert_eq!(s.marker(intro).unwrap().name, "outro");
@@ -845,7 +1061,9 @@ mod tests {
         assert!(s.move_marker(intro, TimePosition::ZERO).is_err());
         s.insert_marker(m.clone()).unwrap();
         assert!(s.insert_marker(m).is_err());
-        let fresh = s.insert_marker(Marker::new("free", TimePosition::ZERO)).unwrap();
+        let fresh = s
+            .insert_marker(Marker::new("free", TimePosition::ZERO))
+            .unwrap();
         assert!(fresh.is_valid());
     }
 }

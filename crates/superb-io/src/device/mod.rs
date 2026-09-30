@@ -50,7 +50,11 @@ pub(crate) fn stream_instant_us(instant: cpal::StreamInstant) -> u64 {
 }
 
 /// Shared validation for stream configs.
-pub(crate) fn validate_io_config(channels: usize, max_block_frames: usize, what: &'static str) -> Result<()> {
+pub(crate) fn validate_io_config(
+    channels: usize,
+    max_block_frames: usize,
+    what: &'static str,
+) -> Result<()> {
     if channels == 0 || max_block_frames == 0 {
         return Err(SuperbError::InvalidArgument { what });
     }
@@ -79,7 +83,10 @@ mod tests {
 
     #[test]
     fn stream_instant_converts_to_microseconds() {
-        assert_eq!(stream_instant_us(cpal::StreamInstant::from_micros(1_234_567)), 1_234_567);
+        assert_eq!(
+            stream_instant_us(cpal::StreamInstant::from_micros(1_234_567)),
+            1_234_567
+        );
         assert_eq!(stream_instant_us(cpal::StreamInstant::from_nanos(2_500)), 2);
         assert_eq!(stream_instant_us(cpal::StreamInstant::new(0, 0)), 0);
     }

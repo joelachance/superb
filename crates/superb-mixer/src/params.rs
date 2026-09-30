@@ -183,7 +183,9 @@ impl StripParams {
 
     /// Reads and resets the peak hold for `channel`.
     pub fn take_peak(&self, channel: usize) -> f32 {
-        self.peaks.get(channel).map_or(0.0, |p| p.swap(0.0, Ordering::Relaxed))
+        self.peaks
+            .get(channel)
+            .map_or(0.0, |p| p.swap(0.0, Ordering::Relaxed))
     }
 
     /// Raises the peak hold for `channel` (called by the audio thread).
@@ -204,7 +206,10 @@ pub struct SendParams {
 impl SendParams {
     /// Creates an enabled send at `level` (linear).
     pub fn new(level: f32) -> Self {
-        Self { level: AtomicF32::new(level.max(0.0)), enabled: AtomicBool::new(true) }
+        Self {
+            level: AtomicF32::new(level.max(0.0)),
+            enabled: AtomicBool::new(true),
+        }
     }
 
     /// Linear send level.

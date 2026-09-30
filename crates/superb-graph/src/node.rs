@@ -17,7 +17,10 @@ pub struct NodeChannels {
 impl NodeChannels {
     /// Same channel count in and out.
     pub const fn symmetric(channels: usize) -> Self {
-        Self { inputs: channels, outputs: channels }
+        Self {
+            inputs: channels,
+            outputs: channels,
+        }
     }
 
     /// A generator with no input.
@@ -99,7 +102,12 @@ pub trait Node: Send {
     fn reset(&mut self) {}
 
     /// Processes one block. Must be real-time safe.
-    fn process(&mut self, ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus;
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus;
 
     /// Processing latency in frames. Read by [`AudioGraph`](crate::AudioGraph)
     /// after `prepare` to align parallel paths (latency compensation) and to

@@ -52,13 +52,13 @@
 pub mod bridge;
 pub mod playback;
 
+pub use superb_automation as automation;
 pub use superb_buffers as buffers;
 pub use superb_core as core;
 pub use superb_graph as graph;
 pub use superb_io as io;
 pub use superb_midi as midi;
 pub use superb_mixer as mixer;
-pub use superb_automation as automation;
 pub use superb_plugins as plugins;
 pub use superb_rt as rt;
 pub use superb_session as session;
@@ -67,28 +67,35 @@ pub use superb_undo as undo;
 
 /// The most commonly used items, for `use superb::prelude::*`.
 pub mod prelude {
+    pub use crate::playback::{AudioCache, RenderOptions, SessionPlayer};
+    pub use superb_automation::{AutomationLane, AutomationMode, Envelope, EnvelopePoint};
     pub use superb_buffers::{InterleavedBuffer, PlanarBuffer};
     pub use superb_core::{
-        BeatPosition, BusId, ClipId, MarkerId, NodeId, Result, SampleRate, SendId, SuperbError, TimeDuration,
-        TimePosition, TimeSignature, TrackId,
+        BeatPosition, BusId, ClipId, MarkerId, NodeId, Result, SampleRate, SendId, SuperbError,
+        TimeDuration, TimePosition, TimeSignature, TrackId,
     };
-    pub use superb_graph::nodes::{BufferPlayerNode, GainNode, MonoSynthNode, PassThroughNode, ScheduledNoteEvent, ScheduledSynthNode, SineNode};
+    pub use superb_graph::nodes::{
+        BufferPlayerNode, GainNode, MonoSynthNode, PassThroughNode, ScheduledNoteEvent,
+        ScheduledSynthNode, SineNode,
+    };
     pub use superb_graph::{
-        live_pair, AudioGraph, BlockProcessor, BlockTime, GraphCommand, GraphEditor, LiveGraph, MidiEdge, MidiPort,
-        Node, NodeChannels, ProcessContext, ProcessStatus,
+        live_pair, AudioGraph, BlockProcessor, BlockTime, GraphCommand, GraphEditor, LiveGraph,
+        MidiEdge, MidiPort, Node, NodeChannels, ProcessContext, ProcessStatus,
     };
-    pub use superb_io::{Engine, EngineStats, MidiTiming};
     #[cfg(feature = "files")]
     pub use superb_io::files::AudioFile;
-    pub use superb_midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage, TimestampedMessage};
+    pub use superb_io::{Engine, EngineStats, MidiTiming};
+    pub use superb_midi::{
+        MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage, TimestampedMessage,
+    };
     pub use superb_mixer::{Mixer, PanLaw, SendParams, SendTap, StripParams};
-    pub use superb_automation::{AutomationLane, AutomationMode, Envelope, EnvelopePoint};
     pub use superb_plugins::{PluginDescriptor, PluginInstance, PluginNode};
     pub use superb_rt::{AtomicF32, LoadMeter};
-    pub use superb_session::{Item, ItemSource, Marker, Session, SessionSnapshot, Track, TrackKind, TrackSend};
+    pub use superb_session::{
+        Item, ItemSource, Marker, Session, SessionSnapshot, Track, TrackKind, TrackSend,
+    };
     pub use superb_transport::{LoopRange, TempoMap, Transport, TransportState};
     pub use superb_undo::{CoalesceKey, Command, PropertyEdit, UndoStack};
-    pub use crate::playback::{AudioCache, RenderOptions, SessionPlayer};
 }
 
 #[cfg(test)]
@@ -109,7 +116,16 @@ mod tests {
         let mut session = Session::new("facade", SampleRate::HZ_48K);
         let mut history = UndoStack::new();
         let track = session.allocate_track_id();
-        history.push(&mut session, crate::session::commands::AddTrack::new(Track::with_id(track, "t", TrackKind::Audio))).unwrap();
+        history
+            .push(
+                &mut session,
+                crate::session::commands::AddTrack::new(Track::with_id(
+                    track,
+                    "t",
+                    TrackKind::Audio,
+                )),
+            )
+            .unwrap();
         assert!(session.track(track).is_ok());
         history.undo(&mut session).unwrap();
         assert!(session.track(track).is_err());
@@ -126,9 +142,15 @@ mod tests {
     #[test]
     fn facade_exposes_files() {
         assert!(crate::io::FILES_FEATURE);
-        let file = AudioFile { buffer: PlanarBuffer::new(1, 48), sample_rate: SampleRate::HZ_48K };
+        let file = AudioFile {
+            buffer: PlanarBuffer::new(1, 48),
+            sample_rate: SampleRate::HZ_48K,
+        };
         let cd = file.resampled_to(SampleRate::CD).unwrap();
-        assert_eq!(cd.frames(), crate::io::files::resampled_frames(48, SampleRate::HZ_48K, SampleRate::CD));
+        assert_eq!(
+            cd.frames(),
+            crate::io::files::resampled_frames(48, SampleRate::HZ_48K, SampleRate::CD)
+        );
         assert!(crate::io::files::decode_bytes(vec![0u8; 64], None).is_err());
     }
 }

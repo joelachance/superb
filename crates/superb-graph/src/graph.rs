@@ -174,7 +174,13 @@ impl AudioGraph {
         let id: NodeId = self.ids.next();
         let ch = node.channels();
         self.index.insert(id, self.slots.len());
-        self.slots.push(Slot { id, node, inputs: ch.inputs, outputs: ch.outputs, producers: Vec::new() });
+        self.slots.push(Slot {
+            id,
+            node,
+            inputs: ch.inputs,
+            outputs: ch.outputs,
+            producers: Vec::new(),
+        });
         self.dirty = true;
         id
     }
@@ -208,17 +214,25 @@ impl AudioGraph {
         let from_idx = self.slot_index(from)?;
         let to_idx = self.slot_index(to)?;
         if self.slots[from_idx].outputs == 0 {
-            return Err(SuperbError::ChannelMismatch { expected: 1, actual: 0 });
+            return Err(SuperbError::ChannelMismatch {
+                expected: 1,
+                actual: 0,
+            });
         }
         if self.slots[to_idx].inputs == 0 {
-            return Err(SuperbError::ChannelMismatch { expected: 1, actual: 0 });
+            return Err(SuperbError::ChannelMismatch {
+                expected: 1,
+                actual: 0,
+            });
         }
         if from == to || self.reaches(to, from) {
             return Err(SuperbError::Cycle);
         }
         let edge = Edge { from, to };
         if self.edges.contains(&edge) {
-            return Err(SuperbError::InvalidArgument { what: "edge already exists" });
+            return Err(SuperbError::InvalidArgument {
+                what: "edge already exists",
+            });
         }
         self.edges.push(edge);
         self.dirty = true;
@@ -231,7 +245,10 @@ impl AudioGraph {
         let before = self.edges.len();
         self.edges.retain(|e| !(e.from == from && e.to == to));
         if self.edges.len() == before {
-            return Err(SuperbError::NotFound { kind: "edge", id: from.raw() });
+            return Err(SuperbError::NotFound {
+                kind: "edge",
+                id: from.raw(),
+            });
         }
         self.dirty = true;
         Ok(())
@@ -280,7 +297,9 @@ impl AudioGraph {
         self.slot_index(to)?;
         let edge = MidiEdge { from, to };
         if self.midi_edges.contains(&edge) {
-            return Err(SuperbError::InvalidArgument { what: "midi edge already exists" });
+            return Err(SuperbError::InvalidArgument {
+                what: "midi edge already exists",
+            });
         }
         self.midi_edges.push(edge);
         self.dirty = true;
@@ -293,7 +312,10 @@ impl AudioGraph {
         let before = self.midi_edges.len();
         self.midi_edges.retain(|e| !(e.from == from && e.to == to));
         if self.midi_edges.len() == before {
-            return Err(SuperbError::NotFound { kind: "midi edge", id: to.raw() });
+            return Err(SuperbError::NotFound {
+                kind: "midi edge",
+                id: to.raw(),
+            });
         }
         self.dirty = true;
         Ok(())
@@ -308,7 +330,10 @@ impl AudioGraph {
     pub fn set_output(&mut self, id: NodeId) -> Result<()> {
         let idx = self.slot_index(id)?;
         if self.slots[idx].outputs == 0 {
-            return Err(SuperbError::ChannelMismatch { expected: 1, actual: 0 });
+            return Err(SuperbError::ChannelMismatch {
+                expected: 1,
+                actual: 0,
+            });
         }
         self.output = Some(id);
         self.dirty = true;
@@ -433,7 +458,10 @@ impl AudioGraph {
             .producers
             .iter()
             .find(|p| p.slot == from_idx)
-            .ok_or(SuperbError::NotFound { kind: "edge", id: from.raw() })?;
+            .ok_or(SuperbError::NotFound {
+                kind: "edge",
+                id: from.raw(),
+            })?;
         Ok(producer.delay.map_or(0, |d| self.delays[d].line.delay()))
     }
 
@@ -453,8 +481,16 @@ impl AudioGraph {
         }
         self.compile()?;
         let n = self.slots.len();
-        self.input_buffers = self.slots.iter().map(|s| PlanarBuffer::new(s.inputs, max_frames)).collect();
-        self.output_buffers = self.slots.iter().map(|s| PlanarBuffer::new(s.outputs, max_frames)).collect();
+        self.input_buffers = self
+            .slots
+            .iter()
+            .map(|s| PlanarBuffer::new(s.inputs, max_frames))
+            .collect();
+        self.output_buffers = self
+            .slots
+            .iter()
+            .map(|s| PlanarBuffer::new(s.outputs, max_frames))
+            .collect();
         self.silent = vec![true; n];
         for slot in &mut self.slots {
             slot.node.prepare(sample_rate, max_frames);
@@ -486,7 +522,12 @@ impl AudioGraph {
         self.output_latency = vec![0; n];
         self.delays.clear();
         for &i in &self.order {
-            let arrival = self.slots[i].producers.iter().map(|p| self.output_latency[p.slot]).max().unwrap_or(0);
+            let arrival = self.slots[i]
+                .producers
+                .iter()
+                .map(|p| self.output_latency[p.slot])
+                .max()
+                .unwrap_or(0);
             self.input_latency[i] = arrival;
             self.output_latency[i] = arrival + self.slots[i].node.latency_frames();
         }
@@ -522,7 +563,10 @@ impl AudioGraph {
             let to = self.index[&e.to];
             consumers[from].push(to);
             indegree[to] += 1;
-            self.slots[to].producers.push(Producer { slot: from, delay: None });
+            self.slots[to].producers.push(Producer {
+                slot: from,
+                delay: None,
+            });
         }
         // Kahn's algorithm; ties broken by insertion order for determinism.
         let mut ready: Vec<usize> = (0..n).filter(|&i| indegree[i] == 0).collect();
@@ -577,7 +621,10 @@ impl AudioGraph {
     }
 
     fn slot_index(&self, id: NodeId) -> Result<usize> {
-        self.index.get(&id).copied().ok_or(SuperbError::NotFound { kind: "node", id: id.raw() })
+        self.index.get(&id).copied().ok_or(SuperbError::NotFound {
+            kind: "node",
+            id: id.raw(),
+        })
     }
 
     // ------------------------------------------------------------------
@@ -598,13 +645,21 @@ impl AudioGraph {
     /// `prepare`; the buffer is never copied or filtered (channel filters are
     /// a later milestone). Fails if the graph is dirty/unprepared or `frames`
     /// exceeds the prepared maximum.
-    pub fn process(&mut self, time: BlockTime, frames: usize, midi: &MidiEventBuffer) -> Result<()> {
+    pub fn process(
+        &mut self,
+        time: BlockTime,
+        frames: usize,
+        midi: &MidiEventBuffer,
+    ) -> Result<()> {
         let (sample_rate, max_frames) = match (self.dirty, self.prepared) {
             (false, Some(cfg)) => cfg,
             _ => return Err(SuperbError::NotPrepared),
         };
         if frames > max_frames {
-            return Err(SuperbError::CapacityExceeded { what: "block frames", capacity: max_frames });
+            return Err(SuperbError::CapacityExceeded {
+                what: "block frames",
+                capacity: max_frames,
+            });
         }
         self.stats = GraphStats::default();
 
@@ -631,7 +686,11 @@ impl AudioGraph {
                             // aligned with the timeline.
                             let delay = &mut self.delays[d];
                             delay.out.set_frames(frames)?;
-                            let src = if self.silent[p] { None } else { Some(&self.output_buffers[p]) };
+                            let src = if self.silent[p] {
+                                None
+                            } else {
+                                Some(&self.output_buffers[p])
+                            };
                             if delay.line.process(src, frames, &mut delay.out) {
                                 continue;
                             }
@@ -645,8 +704,18 @@ impl AudioGraph {
             }
             let output = &mut self.output_buffers[i];
             output.set_frames(frames)?;
-            let node_midi = if self.receives_external_midi[i] { midi } else { &self.empty_midi };
-            let ctx = ProcessContext { sample_rate, frames, time, midi: node_midi, input_is_silent };
+            let node_midi = if self.receives_external_midi[i] {
+                midi
+            } else {
+                &self.empty_midi
+            };
+            let ctx = ProcessContext {
+                sample_rate,
+                frames,
+                time,
+                midi: node_midi,
+                input_is_silent,
+            };
             let status = slot.node.process(&ctx, &self.input_buffers[i], output);
             self.stats.nodes_processed += 1;
             let is_silent = status == ProcessStatus::Silent || slot.outputs == 0;
@@ -704,7 +773,9 @@ impl crate::BlockProcessor for AudioGraph {
     }
 
     fn output_channels(&self) -> usize {
-        self.output.and_then(|id| self.index.get(&id)).map_or(0, |&i| self.slots[i].outputs)
+        self.output
+            .and_then(|id| self.index.get(&id))
+            .map_or(0, |&i| self.slots[i].outputs)
     }
 
     fn reset(&mut self) {
@@ -757,7 +828,9 @@ mod tests {
     }
 
     fn run(graph: &mut AudioGraph, frames: usize) {
-        graph.process(BlockTime::free_running(), frames, &no_midi()).unwrap();
+        graph
+            .process(BlockTime::free_running(), frames, &no_midi())
+            .unwrap();
     }
 
     #[test]
@@ -774,17 +847,26 @@ mod tests {
         let mut g = AudioGraph::new();
         let c = g.add_node(Box::new(ConstantNode::new(1.0, 1)));
         g.set_output(c).unwrap();
-        assert_eq!(g.process(BlockTime::free_running(), 16, &no_midi()), Err(SuperbError::NotPrepared));
+        assert_eq!(
+            g.process(BlockTime::free_running(), 16, &no_midi()),
+            Err(SuperbError::NotPrepared)
+        );
         g.prepare(R, 16).unwrap();
         run(&mut g, 16);
         assert!(g.add_node(Box::new(SilenceNode::new(1))).is_valid());
         assert!(g.is_dirty());
-        assert_eq!(g.process(BlockTime::free_running(), 16, &no_midi()), Err(SuperbError::NotPrepared));
+        assert_eq!(
+            g.process(BlockTime::free_running(), 16, &no_midi()),
+            Err(SuperbError::NotPrepared)
+        );
         assert_eq!(g.output().channels(), 0);
         assert!(g.prepared_config().is_none());
         g.prepare(R, 16).unwrap();
         assert_eq!(g.prepared_config(), Some((R, 16)));
-        assert!(matches!(g.process(BlockTime::free_running(), 17, &no_midi()), Err(SuperbError::CapacityExceeded { .. })));
+        assert!(matches!(
+            g.process(BlockTime::free_running(), 17, &no_midi()),
+            Err(SuperbError::CapacityExceeded { .. })
+        ));
         assert!(g.prepare(R, 0).is_err());
     }
 
@@ -854,8 +936,14 @@ mod tests {
         assert_eq!(g.connect(a, a), Err(SuperbError::Cycle));
         assert!(g.connect(a, b).is_err()); // duplicate
         let ghost = NodeId::from_raw(999);
-        assert!(matches!(g.connect(a, ghost), Err(SuperbError::NotFound { .. })));
-        assert!(matches!(g.set_output(ghost), Err(SuperbError::NotFound { .. })));
+        assert!(matches!(
+            g.connect(a, ghost),
+            Err(SuperbError::NotFound { .. })
+        ));
+        assert!(matches!(
+            g.set_output(ghost),
+            Err(SuperbError::NotFound { .. })
+        ));
         let gen = g.add_node(Box::new(ConstantNode::new(1.0, 1)));
         assert!(g.connect(a, gen).is_err()); // generator has no inputs
         assert!(g.disconnect(c, a).is_err());
@@ -939,7 +1027,11 @@ mod tests {
         g.set_output(m).unwrap();
         g.prepare(R, 4).unwrap();
         run(&mut g, 4);
-        assert!(g.output().channel(0).iter().all(|&s| (s - 0.5).abs() < 1e-6));
+        assert!(g
+            .output()
+            .channel(0)
+            .iter()
+            .all(|&s| (s - 0.5).abs() < 1e-6));
 
         // 4 -> 2 maps the first two channels
         let mut g = AudioGraph::new();
@@ -982,7 +1074,15 @@ mod tests {
         use superb_midi::{MidiChannel, MidiEvent, MidiMessage};
         let ch = MidiChannel::new(0).unwrap();
         let mut midi = MidiEventBuffer::with_capacity(4);
-        midi.push(MidiEvent { frame: 0, message: MidiMessage::NoteOn { channel: ch, note: 69, velocity: 127 } }).unwrap();
+        midi.push(MidiEvent {
+            frame: 0,
+            message: MidiMessage::NoteOn {
+                channel: ch,
+                note: 69,
+                velocity: 127,
+            },
+        })
+        .unwrap();
         midi
     }
 
@@ -1003,12 +1103,24 @@ mod tests {
     fn midi_edge_routes_external_midi_to_targets_only() {
         let (mut g, a, b, sink) = two_synths();
         g.connect_midi(MidiPort::External, a).unwrap();
-        assert_eq!(g.midi_edges(), &[MidiEdge { from: MidiPort::External, to: a }]);
+        assert_eq!(
+            g.midi_edges(),
+            &[MidiEdge {
+                from: MidiPort::External,
+                to: a
+            }]
+        );
         g.prepare(R, 64).unwrap();
         let midi = note_on_buffer();
         g.process(BlockTime::free_running(), 64, &midi).unwrap();
-        assert!(g.node_output(a).unwrap().peak() > 0.9, "routed synth sounds");
-        assert!(g.node_output(b).unwrap().is_silent(), "unrouted synth is silent");
+        assert!(
+            g.node_output(a).unwrap().peak() > 0.9,
+            "routed synth sounds"
+        );
+        assert!(
+            g.node_output(b).unwrap().is_silent(),
+            "unrouted synth is silent"
+        );
         assert_eq!(g.stats().nodes_silent, 1);
         assert_eq!(g.stats().mixes, 1, "only A is mixed into the sink");
         assert!(g.node_output(sink).unwrap().peak() > 0.9);
@@ -1029,7 +1141,8 @@ mod tests {
     fn without_midi_edges_midi_is_broadcast() {
         let (mut g, a, b, _sink) = two_synths();
         g.prepare(R, 64).unwrap();
-        g.process(BlockTime::free_running(), 64, &note_on_buffer()).unwrap();
+        g.process(BlockTime::free_running(), 64, &note_on_buffer())
+            .unwrap();
         assert!(g.node_output(a).unwrap().peak() > 0.9);
         assert!(g.node_output(b).unwrap().peak() > 0.9);
         assert_eq!(g.stats().nodes_silent, 0);
@@ -1040,7 +1153,8 @@ mod tests {
         assert!(g.midi_edges().is_empty());
         g.prepare(R, 64).unwrap();
         g.reset();
-        g.process(BlockTime::free_running(), 64, &note_on_buffer()).unwrap();
+        g.process(BlockTime::free_running(), 64, &note_on_buffer())
+            .unwrap();
         assert_eq!(g.stats().mixes, 2);
     }
 
@@ -1050,19 +1164,36 @@ mod tests {
         g.connect_midi(MidiPort::External, a).unwrap();
         assert!(matches!(
             g.connect_midi(MidiPort::External, a),
-            Err(SuperbError::InvalidArgument { what: "midi edge already exists" })
+            Err(SuperbError::InvalidArgument {
+                what: "midi edge already exists"
+            })
         ));
         let ghost = NodeId::from_raw(999);
-        assert!(matches!(g.connect_midi(MidiPort::External, ghost), Err(SuperbError::NotFound { .. })));
-        assert!(matches!(g.disconnect_midi(MidiPort::External, b), Err(SuperbError::NotFound { .. })));
+        assert!(matches!(
+            g.connect_midi(MidiPort::External, ghost),
+            Err(SuperbError::NotFound { .. })
+        ));
+        assert!(matches!(
+            g.disconnect_midi(MidiPort::External, b),
+            Err(SuperbError::NotFound { .. })
+        ));
         // Editing MIDI edges dirties the graph like audio edits.
         g.prepare(R, 8).unwrap();
         g.connect_midi(MidiPort::External, b).unwrap();
         assert!(g.is_dirty());
-        assert_eq!(g.process(BlockTime::free_running(), 8, &no_midi()), Err(SuperbError::NotPrepared));
+        assert_eq!(
+            g.process(BlockTime::free_running(), 8, &no_midi()),
+            Err(SuperbError::NotPrepared)
+        );
         // remove_node drops the MIDI edges targeting it.
         g.remove_node(a).unwrap();
-        assert_eq!(g.midi_edges(), &[MidiEdge { from: MidiPort::External, to: b }]);
+        assert_eq!(
+            g.midi_edges(),
+            &[MidiEdge {
+                from: MidiPort::External,
+                to: b
+            }]
+        );
         g.remove_node(b).unwrap();
         assert!(g.midi_edges().is_empty());
         g.prepare(R, 8).unwrap();
@@ -1080,7 +1211,12 @@ mod tests {
         fn reset(&mut self) {
             self.fired = false;
         }
-        fn process(&mut self, _ctx: &ProcessContext<'_>, _i: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+        fn process(
+            &mut self,
+            _ctx: &ProcessContext<'_>,
+            _i: &PlanarBuffer,
+            output: &mut PlanarBuffer,
+        ) -> ProcessStatus {
             output.clear();
             if self.fired {
                 return ProcessStatus::Silent;
@@ -1125,21 +1261,33 @@ mod tests {
         assert_eq!(g.node_input_latency(src).unwrap(), 0);
         assert_eq!(g.node_output_latency(slow).unwrap(), 10);
         assert_eq!(g.node_input_latency(sum).unwrap(), 10);
-        assert_eq!(g.edge_delay(src, sum).unwrap(), 10, "direct path is delayed to match");
+        assert_eq!(
+            g.edge_delay(src, sum).unwrap(),
+            10,
+            "direct path is delayed to match"
+        );
         assert_eq!(g.edge_delay(slow, sum).unwrap(), 0);
         let out = collect(&mut g, 4, 6);
         // Both copies of the impulse land at frame 10 and sum to 2.0.
         let mut expected = vec![0.0; 24];
         expected[10] = 2.0;
         assert_eq!(out, expected);
-        assert_eq!(g.stats().delayed_mixes, 0, "delay line drained: nothing mixed in the last block");
+        assert_eq!(
+            g.stats().delayed_mixes,
+            0,
+            "delay line drained: nothing mixed in the last block"
+        );
 
         // Without compensation the direct copy arrives at frame 0.
         g.set_latency_compensation(false);
         assert!(g.is_dirty());
         g.prepare(R, 4).unwrap();
         g.reset();
-        assert_eq!(g.latency_frames(), 10, "reported latency is still the longest path");
+        assert_eq!(
+            g.latency_frames(),
+            10,
+            "reported latency is still the longest path"
+        );
         assert_eq!(g.edge_delay(src, sum).unwrap(), 0);
         let out = collect(&mut g, 4, 6);
         let mut expected = vec![0.0; 24];
@@ -1158,7 +1306,11 @@ mod tests {
         // silence flag is conservative: it tracks pushed silence, not content).
         g.reset();
         run(&mut g, 2);
-        assert_eq!(g.stats().delayed_mixes, 1, "impulse entered the line this block");
+        assert_eq!(
+            g.stats().delayed_mixes,
+            1,
+            "impulse entered the line this block"
+        );
         assert_eq!(g.output().channel(0), &[0.0, 0.0]);
         run(&mut g, 2);
         assert_eq!(g.stats().delayed_mixes, 1);

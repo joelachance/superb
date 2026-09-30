@@ -16,11 +16,20 @@ use crate::Engine;
 /// Lists output devices of the default host.
 pub fn output_devices() -> Result<Vec<DeviceInfo>> {
     let host = cpal::default_host();
-    let default_name = host.default_output_device().and_then(|d| d.description().ok()).map(|d| d.name().to_owned());
-    let devices = host.output_devices().map_err(|e| SuperbError::Message(format!("enumerate devices: {e}")))?;
+    let default_name = host
+        .default_output_device()
+        .and_then(|d| d.description().ok())
+        .map(|d| d.name().to_owned());
+    let devices = host
+        .output_devices()
+        .map_err(|e| SuperbError::Message(format!("enumerate devices: {e}")))?;
     Ok(devices
         .filter_map(|d| d.description().ok())
-        .map(|desc| DeviceInfo { is_default: default_name.as_deref() == Some(desc.name()), name: desc.name().to_owned(), max_channels: 0 })
+        .map(|desc| DeviceInfo {
+            is_default: default_name.as_deref() == Some(desc.name()),
+            name: desc.name().to_owned(),
+            max_channels: 0,
+        })
         .collect())
 }
 
@@ -42,7 +51,13 @@ pub struct OutputConfig {
 
 impl Default for OutputConfig {
     fn default() -> Self {
-        Self { device_name: None, sample_rate: SampleRate::HZ_48K, channels: 2, buffer_frames: None, max_block_frames: 4096 }
+        Self {
+            device_name: None,
+            sample_rate: SampleRate::HZ_48K,
+            channels: 2,
+            buffer_frames: None,
+            max_block_frames: 4096,
+        }
     }
 }
 
@@ -83,7 +98,11 @@ impl OutputStream {
         Self::open_with_meter(config, render, load)
     }
 
-    pub(super) fn open_with_meter<F>(config: &OutputConfig, render: F, load: Arc<LoadMeter>) -> Result<Self>
+    pub(super) fn open_with_meter<F>(
+        config: &OutputConfig,
+        render: F,
+        load: Arc<LoadMeter>,
+    ) -> Result<Self>
     where
         F: FnMut(&mut PlanarBuffer, u64) + Send + 'static,
     {
@@ -93,11 +112,20 @@ impl OutputStream {
             Some(name) => host
                 .output_devices()
                 .map_err(|e| SuperbError::Message(format!("enumerate devices: {e}")))?
-                .find(|d| d.description().map(|desc| desc.name() == name).unwrap_or(false))
+                .find(|d| {
+                    d.description()
+                        .map(|desc| desc.name() == name)
+                        .unwrap_or(false)
+                })
                 .ok_or_else(|| SuperbError::Message(format!("output device '{name}' not found")))?,
-            None => host.default_output_device().ok_or_else(|| SuperbError::Message("no default output device".into()))?,
+            None => host
+                .default_output_device()
+                .ok_or_else(|| SuperbError::Message("no default output device".into()))?,
         };
-        let device_name = device.description().map(|d| d.name().to_owned()).unwrap_or_else(|_| "unknown".into());
+        let device_name = device
+            .description()
+            .map(|d| d.name().to_owned())
+            .unwrap_or_else(|_| "unknown".into());
 
         // Prefer f32, then i16, then whatever the default is.
         let supported = device
@@ -127,24 +155,72 @@ impl OutputStream {
         let err_cb = |e: cpal::Error| eprintln!("superb-io stream error: {e}");
         let timeout = Some(Duration::from_secs(2));
         let stream = match sample_format {
-            SampleFormat::F32 => build::<f32, _>(&device, &stream_config, channels, max_block, render, err_cb, timeout)?,
-            SampleFormat::I16 => build::<i16, _>(&device, &stream_config, channels, max_block, render, err_cb, timeout)?,
-            SampleFormat::U16 => build::<u16, _>(&device, &stream_config, channels, max_block, render, err_cb, timeout)?,
-            SampleFormat::I32 => build::<i32, _>(&device, &stream_config, channels, max_block, render, err_cb, timeout)?,
-            other => return Err(SuperbError::Message(format!("unsupported device sample format {other:?}"))),
+            SampleFormat::F32 => build::<f32, _>(
+                &device,
+                &stream_config,
+                channels,
+                max_block,
+                render,
+                err_cb,
+                timeout,
+            )?,
+            SampleFormat::I16 => build::<i16, _>(
+                &device,
+                &stream_config,
+                channels,
+                max_block,
+                render,
+                err_cb,
+                timeout,
+            )?,
+            SampleFormat::U16 => build::<u16, _>(
+                &device,
+                &stream_config,
+                channels,
+                max_block,
+                render,
+                err_cb,
+                timeout,
+            )?,
+            SampleFormat::I32 => build::<i32, _>(
+                &device,
+                &stream_config,
+                channels,
+                max_block,
+                render,
+                err_cb,
+                timeout,
+            )?,
+            other => {
+                return Err(SuperbError::Message(format!(
+                    "unsupported device sample format {other:?}"
+                )))
+            }
         };
-        stream.play().map_err(|e| SuperbError::Message(format!("start stream: {e}")))?;
-        Ok(Self { stream, sample_rate: config.sample_rate, channels, load, device_name })
+        stream
+            .play()
+            .map_err(|e| SuperbError::Message(format!("start stream: {e}")))?;
+        Ok(Self {
+            stream,
+            sample_rate: config.sample_rate,
+            channels,
+            load,
+            device_name,
+        })
     }
 
     /// Resumes a paused stream.
     pub fn play(&self) -> Result<()> {
-        self.stream.play().map_err(|e| SuperbError::Message(format!("play: {e}")))
+        self.stream
+            .play()
+            .map_err(|e| SuperbError::Message(format!("play: {e}")))
     }
 
     /// Pauses the stream (not supported by every backend).
     pub fn pause(&self) -> Result<()> {
-        self.stream.pause().map_err(|e| SuperbError::Message(format!("pause: {e}")))
+        self.stream
+            .pause()
+            .map_err(|e| SuperbError::Message(format!("pause: {e}")))
     }
 
     /// Sample rate the stream runs at.
@@ -254,9 +330,15 @@ mod tests {
 
     #[test]
     fn config_validation_does_not_need_a_device() {
-        let bad = OutputConfig { channels: 0, ..OutputConfig::default() };
+        let bad = OutputConfig {
+            channels: 0,
+            ..OutputConfig::default()
+        };
         assert!(OutputStream::open(&bad, |_| {}).is_err());
-        let bad = OutputConfig { max_block_frames: 0, ..OutputConfig::default() };
+        let bad = OutputConfig {
+            max_block_frames: 0,
+            ..OutputConfig::default()
+        };
         assert!(OutputStream::open(&bad, |_| {}).is_err());
         assert!(OutputStream::open_timed(&bad, |_, _| {}).is_err());
     }

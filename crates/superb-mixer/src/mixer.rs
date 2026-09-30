@@ -103,11 +103,21 @@ impl Mixer {
         let master_params = Arc::new(StripParams::new(None));
         master_params.set_pan_law(PanLaw::Balance);
         let input_node = graph.add_node(Box::new(PassThroughNode::new(channels)));
-        let strip_node = graph.add_node(Box::new(StripNode::new(Arc::clone(&master_params), channels)));
+        let strip_node = graph.add_node(Box::new(StripNode::new(
+            Arc::clone(&master_params),
+            channels,
+        )));
         graph.connect(input_node, strip_node).expect("fresh nodes");
         graph.set_output(strip_node).expect("fresh node");
         let master: BusId = ids.next();
-        let buses = vec![BusInfo { id: master, name: "master".into(), input_node, strip_node, output: None, params: master_params }];
+        let buses = vec![BusInfo {
+            id: master,
+            name: "master".into(),
+            input_node,
+            strip_node,
+            output: None,
+            params: master_params,
+        }];
         Self {
             graph,
             ids,
@@ -153,13 +163,28 @@ impl Mixer {
     pub fn add_track(&mut self, name: impl Into<String>) -> TrackId {
         debug_assert_not_rt("Mixer::add_track");
         let params = Arc::new(StripParams::new(Some(Arc::clone(&self.solo_count))));
-        let input_node = self.graph.add_node(Box::new(PassThroughNode::new(self.channels)));
-        let strip_node = self.graph.add_node(Box::new(StripNode::new(Arc::clone(&params), self.channels)));
-        self.graph.connect(input_node, strip_node).expect("fresh nodes");
+        let input_node = self
+            .graph
+            .add_node(Box::new(PassThroughNode::new(self.channels)));
+        let strip_node = self
+            .graph
+            .add_node(Box::new(StripNode::new(Arc::clone(&params), self.channels)));
+        self.graph
+            .connect(input_node, strip_node)
+            .expect("fresh nodes");
         let master_in = self.bus(self.master).expect("master exists").input_node;
-        self.graph.connect(strip_node, master_in).expect("fresh nodes");
+        self.graph
+            .connect(strip_node, master_in)
+            .expect("fresh nodes");
         let id: TrackId = self.ids.next();
-        self.tracks.push(TrackInfo { id, name: name.into(), input_node, strip_node, output: self.master, params });
+        self.tracks.push(TrackInfo {
+            id,
+            name: name.into(),
+            input_node,
+            strip_node,
+            output: self.master,
+            params,
+        });
         id
     }
 
@@ -167,7 +192,12 @@ impl Mixer {
     pub fn remove_track(&mut self, id: TrackId) -> Result<()> {
         debug_assert_not_rt("Mixer::remove_track");
         let idx = self.track_index(id)?;
-        let sends: Vec<SendId> = self.sends.iter().filter(|s| s.track == id).map(|s| s.id).collect();
+        let sends: Vec<SendId> = self
+            .sends
+            .iter()
+            .filter(|s| s.track == id)
+            .map(|s| s.id)
+            .collect();
         for s in sends {
             self.remove_send(s)?;
         }
@@ -182,7 +212,12 @@ impl Mixer {
 
     /// Track description.
     pub fn track(&self, id: TrackId) -> Result<&TrackInfo> {
-        self.tracks.get(self.track_index(id)?).ok_or(SuperbError::NotFound { kind: "track", id: id.raw() })
+        self.tracks
+            .get(self.track_index(id)?)
+            .ok_or(SuperbError::NotFound {
+                kind: "track",
+                id: id.raw(),
+            })
     }
 
     /// All tracks in creation order.
@@ -226,13 +261,28 @@ impl Mixer {
         debug_assert_not_rt("Mixer::add_bus");
         let params = Arc::new(StripParams::new(None));
         params.set_pan_law(PanLaw::Balance);
-        let input_node = self.graph.add_node(Box::new(PassThroughNode::new(self.channels)));
-        let strip_node = self.graph.add_node(Box::new(StripNode::new(Arc::clone(&params), self.channels)));
-        self.graph.connect(input_node, strip_node).expect("fresh nodes");
+        let input_node = self
+            .graph
+            .add_node(Box::new(PassThroughNode::new(self.channels)));
+        let strip_node = self
+            .graph
+            .add_node(Box::new(StripNode::new(Arc::clone(&params), self.channels)));
+        self.graph
+            .connect(input_node, strip_node)
+            .expect("fresh nodes");
         let master_in = self.bus(self.master).expect("master exists").input_node;
-        self.graph.connect(strip_node, master_in).expect("fresh nodes");
+        self.graph
+            .connect(strip_node, master_in)
+            .expect("fresh nodes");
         let id: BusId = self.ids.next();
-        self.buses.push(BusInfo { id, name: name.into(), input_node, strip_node, output: Some(self.master), params });
+        self.buses.push(BusInfo {
+            id,
+            name: name.into(),
+            input_node,
+            strip_node,
+            output: Some(self.master),
+            params,
+        });
         id
     }
 
@@ -241,18 +291,35 @@ impl Mixer {
     pub fn remove_bus(&mut self, id: BusId) -> Result<()> {
         debug_assert_not_rt("Mixer::remove_bus");
         if id == self.master {
-            return Err(SuperbError::InvalidArgument { what: "cannot remove master bus" });
+            return Err(SuperbError::InvalidArgument {
+                what: "cannot remove master bus",
+            });
         }
         let idx = self.bus_index(id)?;
-        let sends: Vec<SendId> = self.sends.iter().filter(|s| s.bus == id).map(|s| s.id).collect();
+        let sends: Vec<SendId> = self
+            .sends
+            .iter()
+            .filter(|s| s.bus == id)
+            .map(|s| s.id)
+            .collect();
         for s in sends {
             self.remove_send(s)?;
         }
-        let tracks: Vec<TrackId> = self.tracks.iter().filter(|t| t.output == id).map(|t| t.id).collect();
+        let tracks: Vec<TrackId> = self
+            .tracks
+            .iter()
+            .filter(|t| t.output == id)
+            .map(|t| t.id)
+            .collect();
         for t in tracks {
             self.set_track_output(t, self.master)?;
         }
-        let buses: Vec<BusId> = self.buses.iter().filter(|b| b.output == Some(id)).map(|b| b.id).collect();
+        let buses: Vec<BusId> = self
+            .buses
+            .iter()
+            .filter(|b| b.output == Some(id))
+            .map(|b| b.id)
+            .collect();
         for b in buses {
             self.set_bus_output(b, self.master)?;
         }
@@ -264,7 +331,12 @@ impl Mixer {
 
     /// Bus description.
     pub fn bus(&self, id: BusId) -> Result<&BusInfo> {
-        self.buses.get(self.bus_index(id)?).ok_or(SuperbError::NotFound { kind: "bus", id: id.raw() })
+        self.buses
+            .get(self.bus_index(id)?)
+            .ok_or(SuperbError::NotFound {
+                kind: "bus",
+                id: id.raw(),
+            })
     }
 
     /// All buses (master first).
@@ -281,7 +353,9 @@ impl Mixer {
     pub fn set_bus_output(&mut self, bus: BusId, into: BusId) -> Result<()> {
         debug_assert_not_rt("Mixer::set_bus_output");
         if bus == self.master {
-            return Err(SuperbError::InvalidArgument { what: "master has no output bus" });
+            return Err(SuperbError::InvalidArgument {
+                what: "master has no output bus",
+            });
         }
         let idx = self.bus_index(bus)?;
         let new_in = self.bus(into)?.input_node;
@@ -289,7 +363,9 @@ impl Mixer {
             return Ok(());
         }
         let strip = self.buses[idx].strip_node;
-        let old = self.buses[idx].output.expect("non-master bus has an output");
+        let old = self.buses[idx]
+            .output
+            .expect("non-master bus has an output");
         let old_in = self.bus(old)?.input_node;
         // `connect` rejects cycles; try it before tearing down the old edge.
         self.graph.disconnect(strip, old_in)?;
@@ -306,12 +382,20 @@ impl Mixer {
     // ------------------------------------------------------------------
 
     /// Adds a send from `track` to `bus` at linear `level`.
-    pub fn add_send(&mut self, track: TrackId, bus: BusId, level: f32, tap: SendTap) -> Result<SendId> {
+    pub fn add_send(
+        &mut self,
+        track: TrackId,
+        bus: BusId,
+        level: f32,
+        tap: SendTap,
+    ) -> Result<SendId> {
         debug_assert_not_rt("Mixer::add_send");
         let t = self.track(track)?.clone();
         let bus_in = self.bus(bus)?.input_node;
         let params = Arc::new(SendParams::new(level));
-        let node = self.graph.add_node(Box::new(SendNode::new(Arc::clone(&params), self.channels)));
+        let node = self
+            .graph
+            .add_node(Box::new(SendNode::new(Arc::clone(&params), self.channels)));
         let tap_node = match tap {
             SendTap::PreFader => t.input_node,
             SendTap::PostFader => t.strip_node,
@@ -322,14 +406,28 @@ impl Mixer {
             return Err(e);
         }
         let id: SendId = self.ids.next();
-        self.sends.push(SendInfo { id, track, bus, tap, node, params });
+        self.sends.push(SendInfo {
+            id,
+            track,
+            bus,
+            tap,
+            node,
+            params,
+        });
         Ok(id)
     }
 
     /// Removes a send.
     pub fn remove_send(&mut self, id: SendId) -> Result<()> {
         debug_assert_not_rt("Mixer::remove_send");
-        let idx = self.sends.iter().position(|s| s.id == id).ok_or(SuperbError::NotFound { kind: "send", id: id.raw() })?;
+        let idx = self
+            .sends
+            .iter()
+            .position(|s| s.id == id)
+            .ok_or(SuperbError::NotFound {
+                kind: "send",
+                id: id.raw(),
+            })?;
         let info = self.sends.remove(idx);
         self.graph.remove_node(info.node)?;
         Ok(())
@@ -337,7 +435,13 @@ impl Mixer {
 
     /// Send description.
     pub fn send(&self, id: SendId) -> Result<&SendInfo> {
-        self.sends.iter().find(|s| s.id == id).ok_or(SuperbError::NotFound { kind: "send", id: id.raw() })
+        self.sends
+            .iter()
+            .find(|s| s.id == id)
+            .ok_or(SuperbError::NotFound {
+                kind: "send",
+                id: id.raw(),
+            })
     }
 
     /// All sends.
@@ -363,11 +467,23 @@ impl Mixer {
     }
 
     fn track_index(&self, id: TrackId) -> Result<usize> {
-        self.tracks.iter().position(|t| t.id == id).ok_or(SuperbError::NotFound { kind: "track", id: id.raw() })
+        self.tracks
+            .iter()
+            .position(|t| t.id == id)
+            .ok_or(SuperbError::NotFound {
+                kind: "track",
+                id: id.raw(),
+            })
     }
 
     fn bus_index(&self, id: BusId) -> Result<usize> {
-        self.buses.iter().position(|b| b.id == id).ok_or(SuperbError::NotFound { kind: "bus", id: id.raw() })
+        self.buses
+            .iter()
+            .position(|b| b.id == id)
+            .ok_or(SuperbError::NotFound {
+                kind: "bus",
+                id: id.raw(),
+            })
     }
 }
 
@@ -415,11 +531,15 @@ mod tests {
         for _ in 0..2 {
             m.process(BlockTime::free_running(), N, &midi).unwrap();
         }
-        (0..m.channels()).map(|c| m.output().channel(c)[N - 1]).collect()
+        (0..m.channels())
+            .map(|c| m.output().channel(c)[N - 1])
+            .collect()
     }
 
     fn add_source(m: &mut Mixer, track: TrackId, value: f32) -> NodeId {
-        let n = m.graph_mut().add_node(Box::new(ConstantNode::new(value, 2)));
+        let n = m
+            .graph_mut()
+            .add_node(Box::new(ConstantNode::new(value, 2)));
         m.connect_source(n, track).unwrap();
         n
     }
@@ -489,7 +609,11 @@ mod tests {
 
         pb.set_solo(true);
         assert_eq!(m.solo_count(), 1);
-        assert_eq!(settle(&mut m), vec![0.5, 0.5], "solo silences the other track");
+        assert_eq!(
+            settle(&mut m),
+            vec![0.5, 0.5],
+            "solo silences the other track"
+        );
         pa.set_solo(true);
         assert_eq!(settle(&mut m), vec![0.75, 0.75], "two solos: both play");
         pa.set_mute(true);
@@ -504,7 +628,11 @@ mod tests {
         m.set_track_output(b, fx).unwrap();
         m.prepare(R, N).unwrap();
         pa.set_solo(true);
-        assert_eq!(settle(&mut m), vec![0.25, 0.25], "b is silenced at the track, bus passes a's signal");
+        assert_eq!(
+            settle(&mut m),
+            vec![0.25, 0.25],
+            "b is silenced at the track, bus passes a's signal"
+        );
         pb.set_solo(true);
         assert_eq!(settle(&mut m), vec![0.75, 0.75]);
     }
@@ -555,7 +683,11 @@ mod tests {
         // pre-fader: send unaffected by the 0.5 track gain
         assert_eq!(settle(&mut m), vec![1.0, 1.0]);
         tp.set_mute(true);
-        assert_eq!(settle(&mut m), vec![0.5, 0.5], "pre-fader send survives mute");
+        assert_eq!(
+            settle(&mut m),
+            vec![0.5, 0.5],
+            "pre-fader send survives mute"
+        );
         assert_eq!(m.sends().len(), 1);
         assert_eq!(m.send(pre).unwrap().tap, SendTap::PreFader);
         let bus_peak = m.bus_params(fx).unwrap().peak(0);
@@ -611,7 +743,11 @@ mod tests {
         m.track_params(a).unwrap().set_solo(true);
         let nodes_before = m.graph().node_count();
         m.remove_track(a).unwrap();
-        assert_eq!(m.solo_count(), 0, "removing a soloed track releases the solo");
+        assert_eq!(
+            m.solo_count(),
+            0,
+            "removing a soloed track releases the solo"
+        );
         assert!(m.sends().is_empty());
         assert_eq!(m.graph().node_count(), nodes_before - 3);
         assert!(m.track(a).is_err());
@@ -650,7 +786,9 @@ mod tests {
         let t = m.add_track("t");
         assert!(m.set_track_output(t, ghost_b).is_err());
         assert!(m.add_send(t, ghost_b, 1.0, SendTap::PostFader).is_err());
-        assert!(m.add_send(ghost_t, m.master(), 1.0, SendTap::PostFader).is_err());
+        assert!(m
+            .add_send(ghost_t, m.master(), 1.0, SendTap::PostFader)
+            .is_err());
         assert!(m.connect_source(NodeId::from_raw(1234), t).is_err());
         let g = m.into_graph();
         assert_eq!(g.node_count(), 4);

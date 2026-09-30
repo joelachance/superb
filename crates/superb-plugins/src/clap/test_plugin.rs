@@ -9,21 +9,27 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::entry::clap_plugin_entry;
 use clap_sys::events::{
-    clap_event_header, clap_event_note, clap_event_param_value, clap_input_events, clap_output_events,
-    CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_ON, CLAP_EVENT_PARAM_VALUE, CLAP_TRANSPORT_IS_PLAYING,
+    clap_event_header, clap_event_note, clap_event_param_value, clap_input_events,
+    clap_output_events, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_ON, CLAP_EVENT_PARAM_VALUE,
+    CLAP_TRANSPORT_IS_PLAYING,
 };
-use clap_sys::ext::audio_ports::{clap_audio_port_info, clap_plugin_audio_ports, CLAP_AUDIO_PORT_IS_MAIN, CLAP_EXT_AUDIO_PORTS, CLAP_PORT_STEREO};
+use clap_sys::ext::audio_ports::{
+    clap_audio_port_info, clap_plugin_audio_ports, CLAP_AUDIO_PORT_IS_MAIN, CLAP_EXT_AUDIO_PORTS,
+    CLAP_PORT_STEREO,
+};
 use clap_sys::ext::latency::{clap_plugin_latency, CLAP_EXT_LATENCY};
 use clap_sys::ext::params::{
-    clap_param_info, clap_plugin_params, CLAP_EXT_PARAMS, CLAP_PARAM_IS_AUTOMATABLE, CLAP_PARAM_IS_HIDDEN,
-    CLAP_PARAM_IS_READONLY,
+    clap_param_info, clap_plugin_params, CLAP_EXT_PARAMS, CLAP_PARAM_IS_AUTOMATABLE,
+    CLAP_PARAM_IS_HIDDEN, CLAP_PARAM_IS_READONLY,
 };
 use clap_sys::ext::state::{clap_plugin_state, CLAP_EXT_STATE};
 use clap_sys::factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
 use clap_sys::host::clap_host;
 use clap_sys::id::CLAP_INVALID_ID;
 use clap_sys::plugin::{clap_plugin, clap_plugin_descriptor};
-use clap_sys::process::{clap_process, clap_process_status, CLAP_PROCESS_CONTINUE, CLAP_PROCESS_SLEEP};
+use clap_sys::process::{
+    clap_process, clap_process_status, CLAP_PROCESS_CONTINUE, CLAP_PROCESS_SLEEP,
+};
 use clap_sys::stream::{clap_istream, clap_ostream};
 use clap_sys::version::CLAP_VERSION;
 
@@ -76,7 +82,8 @@ struct SyncPtrs<const N: usize>([*const c_char; N]);
 // SAFETY: the pointers refer to string literals, which are immutable.
 unsafe impl<const N: usize> Sync for SyncPtrs<N> {}
 
-static FEATURES: SyncPtrs<3> = SyncPtrs([c"audio-effect".as_ptr(), c"utility".as_ptr(), ptr::null()]);
+static FEATURES: SyncPtrs<3> =
+    SyncPtrs([c"audio-effect".as_ptr(), c"utility".as_ptr(), ptr::null()]);
 
 static DESCRIPTOR: clap_plugin_descriptor = clap_plugin_descriptor {
     clap_version: CLAP_VERSION,
@@ -111,7 +118,10 @@ unsafe extern "C" fn count(_f: *const clap_plugin_factory) -> u32 {
     1
 }
 
-unsafe extern "C" fn descriptor(_f: *const clap_plugin_factory, index: u32) -> *const clap_plugin_descriptor {
+unsafe extern "C" fn descriptor(
+    _f: *const clap_plugin_factory,
+    index: u32,
+) -> *const clap_plugin_descriptor {
     if index == 0 {
         &DESCRIPTOR
     } else {
@@ -119,7 +129,11 @@ unsafe extern "C" fn descriptor(_f: *const clap_plugin_factory, index: u32) -> *
     }
 }
 
-unsafe extern "C" fn create(_f: *const clap_plugin_factory, host: *const clap_host, id: *const c_char) -> *const clap_plugin {
+unsafe extern "C" fn create(
+    _f: *const clap_plugin_factory,
+    host: *const clap_host,
+    id: *const c_char,
+) -> *const clap_plugin {
     // SAFETY: the host passes a NUL-terminated id.
     if unsafe { CStr::from_ptr(id) } != c"superb.test.gain" {
         return ptr::null();
@@ -165,7 +179,12 @@ unsafe extern "C" fn p_destroy(p: *const clap_plugin) {
     LIVE.fetch_sub(1, Ordering::SeqCst);
 }
 
-unsafe extern "C" fn p_activate(p: *const clap_plugin, sample_rate: f64, _min: u32, max: u32) -> bool {
+unsafe extern "C" fn p_activate(
+    p: *const clap_plugin,
+    sample_rate: f64,
+    _min: u32,
+    max: u32,
+) -> bool {
     // SAFETY: valid plugin from `create`.
     let g = unsafe { state(p) };
     if sample_rate <= 0.0 || max == 0 {
@@ -225,7 +244,10 @@ unsafe fn apply_events(g: &mut Gain, list: *const clap_input_events) {
             CLAP_EVENT_NOTE_ON => {
                 let e = unsafe { &*(h as *const clap_event_note) };
                 g.notes += 1;
-                LAST_NOTE.store(((e.channel as u32) << 24) | ((e.key as u32) << 16) | (hdr.time & 0xFFFF), Ordering::SeqCst);
+                LAST_NOTE.store(
+                    ((e.channel as u32) << 24) | ((e.key as u32) << 16) | (hdr.time & 0xFFFF),
+                    Ordering::SeqCst,
+                );
             }
             CLAP_EVENT_MIDI => {
                 RAW_MIDI.fetch_add(1, Ordering::SeqCst);
@@ -235,13 +257,19 @@ unsafe fn apply_events(g: &mut Gain, list: *const clap_input_events) {
     }
 }
 
-unsafe extern "C" fn p_process(p: *const clap_plugin, process: *const clap_process) -> clap_process_status {
+unsafe extern "C" fn p_process(
+    p: *const clap_plugin,
+    process: *const clap_process,
+) -> clap_process_status {
     // SAFETY: valid plugin from `create`; `process` is the host's descriptor for this call.
     let g = unsafe { state(p) };
     let pr = unsafe { &*process };
     BLOCKS.fetch_add(1, Ordering::SeqCst);
     if !pr.transport.is_null() {
-        TRANSPORT_PLAYING.store(unsafe { (*pr.transport).flags } & CLAP_TRANSPORT_IS_PLAYING != 0, Ordering::SeqCst);
+        TRANSPORT_PLAYING.store(
+            unsafe { (*pr.transport).flags } & CLAP_TRANSPORT_IS_PLAYING != 0,
+            Ordering::SeqCst,
+        );
     }
     unsafe { apply_events(g, pr.in_events) };
     if pr.audio_inputs_count == 0 || pr.audio_outputs_count == 0 {
@@ -251,7 +279,8 @@ unsafe extern "C" fn p_process(p: *const clap_plugin, process: *const clap_proce
     let output: &mut clap_audio_buffer = unsafe { &mut *pr.audio_outputs };
     let frames = pr.frames_count as usize;
     let channels = input.channel_count.min(output.channel_count) as usize;
-    let all_constant = input.channel_count > 0 && input.constant_mask == (u64::MAX >> (64 - input.channel_count));
+    let all_constant =
+        input.channel_count > 0 && input.constant_mask == (u64::MAX >> (64 - input.channel_count));
     for ch in 0..channels {
         // SAFETY: the host guarantees `channel_count` valid channel pointers
         // of `frames_count` samples each.
@@ -259,7 +288,11 @@ unsafe extern "C" fn p_process(p: *const clap_plugin, process: *const clap_proce
             let src = *input.data32.add(ch);
             let dst = *output.data32.add(ch);
             for f in 0..frames {
-                *dst.add(f) = if all_constant { 0.0 } else { *src.add(f) * g.gain as f32 };
+                *dst.add(f) = if all_constant {
+                    0.0
+                } else {
+                    *src.add(f) * g.gain as f32
+                };
             }
         }
     }
@@ -282,7 +315,11 @@ unsafe extern "C" fn params_count(_p: *const clap_plugin) -> u32 {
     2
 }
 
-unsafe extern "C" fn params_get_info(_p: *const clap_plugin, index: u32, info: *mut clap_param_info) -> bool {
+unsafe extern "C" fn params_get_info(
+    _p: *const clap_plugin,
+    index: u32,
+    info: *mut clap_param_info,
+) -> bool {
     // SAFETY: the host passes a writable `clap_param_info`.
     let info = unsafe { &mut *info };
     match index {
@@ -324,15 +361,30 @@ unsafe extern "C" fn params_get_value(p: *const clap_plugin, id: u32, out: *mut 
     true
 }
 
-unsafe extern "C" fn params_value_to_text(_p: *const clap_plugin, _id: u32, _v: f64, _buf: *mut c_char, _cap: u32) -> bool {
+unsafe extern "C" fn params_value_to_text(
+    _p: *const clap_plugin,
+    _id: u32,
+    _v: f64,
+    _buf: *mut c_char,
+    _cap: u32,
+) -> bool {
     false
 }
 
-unsafe extern "C" fn params_text_to_value(_p: *const clap_plugin, _id: u32, _text: *const c_char, _out: *mut f64) -> bool {
+unsafe extern "C" fn params_text_to_value(
+    _p: *const clap_plugin,
+    _id: u32,
+    _text: *const c_char,
+    _out: *mut f64,
+) -> bool {
     false
 }
 
-unsafe extern "C" fn params_flush(p: *const clap_plugin, input: *const clap_input_events, _out: *const clap_output_events) {
+unsafe extern "C" fn params_flush(
+    p: *const clap_plugin,
+    input: *const clap_input_events,
+    _out: *const clap_output_events,
+) {
     // SAFETY: valid plugin; the host's list is valid for the call.
     let g = unsafe { state(p) };
     unsafe { apply_events(g, input) };
@@ -369,19 +421,29 @@ unsafe extern "C" fn state_load(p: *const clap_plugin, stream: *const clap_istre
     true
 }
 
-static STATE_EXT: clap_plugin_state = clap_plugin_state { save: Some(state_save), load: Some(state_load) };
+static STATE_EXT: clap_plugin_state = clap_plugin_state {
+    save: Some(state_save),
+    load: Some(state_load),
+};
 
 unsafe extern "C" fn latency_get(_p: *const clap_plugin) -> u32 {
     16
 }
 
-static LATENCY_EXT: clap_plugin_latency = clap_plugin_latency { get: Some(latency_get) };
+static LATENCY_EXT: clap_plugin_latency = clap_plugin_latency {
+    get: Some(latency_get),
+};
 
 unsafe extern "C" fn ports_count(_p: *const clap_plugin, _is_input: bool) -> u32 {
     1
 }
 
-unsafe extern "C" fn ports_get(_p: *const clap_plugin, index: u32, _is_input: bool, info: *mut clap_audio_port_info) -> bool {
+unsafe extern "C" fn ports_get(
+    _p: *const clap_plugin,
+    index: u32,
+    _is_input: bool,
+    info: *mut clap_audio_port_info,
+) -> bool {
     if index != 0 {
         return false;
     }
@@ -396,7 +458,10 @@ unsafe extern "C" fn ports_get(_p: *const clap_plugin, index: u32, _is_input: bo
     true
 }
 
-static PORTS_EXT: clap_plugin_audio_ports = clap_plugin_audio_ports { count: Some(ports_count), get: Some(ports_get) };
+static PORTS_EXT: clap_plugin_audio_ports = clap_plugin_audio_ports {
+    count: Some(ports_count),
+    get: Some(ports_get),
+};
 
 unsafe extern "C" fn p_get_extension(_p: *const clap_plugin, id: *const c_char) -> *const c_void {
     // SAFETY: the host passes a NUL-terminated extension id.
@@ -416,8 +481,11 @@ unsafe extern "C" fn p_get_extension(_p: *const clap_plugin, id: *const c_char) 
 
 // --- entry ------------------------------------------------------------------
 
-static FACTORY: clap_plugin_factory =
-    clap_plugin_factory { get_plugin_count: Some(count), get_plugin_descriptor: Some(descriptor), create_plugin: Some(create) };
+static FACTORY: clap_plugin_factory = clap_plugin_factory {
+    get_plugin_count: Some(count),
+    get_plugin_descriptor: Some(descriptor),
+    create_plugin: Some(create),
+};
 
 unsafe extern "C" fn entry_init(_path: *const c_char) -> bool {
     true
@@ -435,8 +503,12 @@ unsafe extern "C" fn entry_get_factory(id: *const c_char) -> *const c_void {
 }
 
 /// The plugin's entry point, as a `.clap` would export it under `clap_entry`.
-pub static TEST_ENTRY: clap_plugin_entry =
-    clap_plugin_entry { clap_version: CLAP_VERSION, init: Some(entry_init), deinit: Some(entry_deinit), get_factory: Some(entry_get_factory) };
+pub static TEST_ENTRY: clap_plugin_entry = clap_plugin_entry {
+    clap_version: CLAP_VERSION,
+    init: Some(entry_init),
+    deinit: Some(entry_deinit),
+    get_factory: Some(entry_get_factory),
+};
 
 /// Keeps the unused-header import meaningful for readers of the ABI layout.
 #[allow(dead_code)]

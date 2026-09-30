@@ -14,8 +14,12 @@ static ALLOC: CountingAllocator = CountingAllocator::system();
 const R: SampleRate = SampleRate::HZ_48K;
 
 fn publish_sine_chain(editor: &mut GraphEditor, gain: f32) {
-    let s = editor.graph_mut().add_node(Box::new(SineNode::new(440.0, 1.0, 2)));
-    let g = editor.graph_mut().add_node(Box::new(GainNode::new(gain, 2)));
+    let s = editor
+        .graph_mut()
+        .add_node(Box::new(SineNode::new(440.0, 1.0, 2)));
+    let g = editor
+        .graph_mut()
+        .add_node(Box::new(GainNode::new(gain, 2)));
     editor.graph_mut().connect(s, g).unwrap();
     editor.graph_mut().set_output(g).unwrap();
     editor.publish().unwrap();
@@ -48,7 +52,9 @@ fn live_process_is_allocation_free_with_and_without_pending_swap() {
     assert_eq!(live.swap_count(), 1);
 
     // Publish (allocates, control thread) ...
-    let c = editor.graph_mut().add_node(Box::new(ConstantNode::new(0.125, 2)));
+    let c = editor
+        .graph_mut()
+        .add_node(Box::new(ConstantNode::new(0.125, 2)));
     editor.graph_mut().set_output(c).unwrap();
     editor.publish().unwrap();
     assert!(live.has_pending());

@@ -23,7 +23,9 @@ pub struct ProcessBudget {
 impl ProcessBudget {
     /// Budget for `frames` samples at `rate`.
     pub fn for_block(frames: usize, rate: SampleRate) -> Self {
-        Self { budget: Duration::from_secs_f64(frames as f64 / rate.as_f64()) }
+        Self {
+            budget: Duration::from_secs_f64(frames as f64 / rate.as_f64()),
+        }
     }
 
     /// Budget from an explicit duration.
@@ -39,7 +41,10 @@ impl ProcessBudget {
     /// Starts timing a callback.
     #[inline]
     pub fn start(&self) -> Timer {
-        Timer { budget: self.budget, started: Instant::now() }
+        Timer {
+            budget: self.budget,
+            started: Instant::now(),
+        }
     }
 
     /// Builds a report from an already-measured duration (useful in tests).
@@ -49,7 +54,11 @@ impl ProcessBudget {
         } else {
             elapsed.as_secs_f64() / self.budget.as_secs_f64()
         };
-        ProcessReport { elapsed, budget: self.budget, load }
+        ProcessReport {
+            elapsed,
+            budget: self.budget,
+            load,
+        }
     }
 }
 
@@ -64,7 +73,10 @@ impl Timer {
     /// Stops the timer and returns the report.
     #[inline]
     pub fn finish(self) -> ProcessReport {
-        ProcessBudget { budget: self.budget }.report(self.started.elapsed())
+        ProcessBudget {
+            budget: self.budget,
+        }
+        .report(self.started.elapsed())
     }
 }
 

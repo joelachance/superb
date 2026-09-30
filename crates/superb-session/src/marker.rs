@@ -21,7 +21,12 @@ impl Marker {
 
     /// Creates a marker with a pre-allocated ID.
     pub fn with_id(id: MarkerId, name: impl Into<String>, position: TimePosition) -> Self {
-        Self { id, name: name.into(), position, color: None }
+        Self {
+            id,
+            name: name.into(),
+            position,
+            color: None,
+        }
     }
 
     /// The marker's ID (`MarkerId::INVALID` until added to a session).

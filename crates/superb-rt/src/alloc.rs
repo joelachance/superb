@@ -106,7 +106,11 @@ impl AllocStats {
 
 /// Reads the current thread's counters.
 pub fn stats() -> AllocStats {
-    AllocStats { allocations: read(&ALLOCATIONS), deallocations: read(&DEALLOCATIONS), reallocations: read(&REALLOCATIONS) }
+    AllocStats {
+        allocations: read(&ALLOCATIONS),
+        deallocations: read(&DEALLOCATIONS),
+        reallocations: read(&REALLOCATIONS),
+    }
 }
 
 /// `true` if [`CountingAllocator`] is the active global allocator.

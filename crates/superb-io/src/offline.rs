@@ -98,7 +98,10 @@ mod tests {
         let c = g.add_node(Box::new(ConstantNode::new(1.0, 1)));
         g.set_output(c).unwrap();
         let mut e = Engine::new(g, Transport::new(R, 120.0));
-        assert_eq!(render_prepared(&mut e, 1, 8, 8).unwrap_err(), SuperbError::NotPrepared);
+        assert_eq!(
+            render_prepared(&mut e, 1, 8, 8).unwrap_err(),
+            SuperbError::NotPrepared
+        );
         e.prepare(R, 8).unwrap();
         assert!(render_prepared(&mut e, 1, 9, 8).is_err());
         let out = render_prepared(&mut e, 2, 8, 20).unwrap();

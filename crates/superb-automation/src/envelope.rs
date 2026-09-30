@@ -157,8 +157,7 @@ impl Envelope {
 
     /// Removes every point in `[start, end)` (end exclusive).
     pub fn clear_range(&mut self, start: TimePosition, end: TimePosition) {
-        self.points
-            .retain(|p| p.time < start || p.time >= end);
+        self.points.retain(|p| p.time < start || p.time >= end);
     }
 
     /// Evaluates the envelope at a single sample position.
@@ -177,9 +176,7 @@ impl Envelope {
         }
         // Find right neighbour: first point with time > at.
         // Since at >= first and at < last, there is a segment.
-        let right_idx = self
-            .points
-            .partition_point(|p| p.time <= at);
+        let right_idx = self.points.partition_point(|p| p.time <= at);
         // right_idx is in 1..len because at >= first.time and at < last.time.
         let left = self.points[right_idx - 1];
         let right = self.points[right_idx];
@@ -203,7 +200,13 @@ impl Envelope {
     ///
     /// Returns `true` if a new point was inserted (or an existing one at
     /// the same time was updated to a different value).
-    pub fn record(&mut self, time: TimePosition, value: f32, shape: CurveShape, epsilon: f32) -> bool {
+    pub fn record(
+        &mut self,
+        time: TimePosition,
+        value: f32,
+        shape: CurveShape,
+        epsilon: f32,
+    ) -> bool {
         if let Some(last) = self.points.last() {
             if last.time == time {
                 if (last.value - value).abs() <= epsilon && last.shape == shape {
@@ -228,7 +231,9 @@ impl Envelope {
         // Reject NaN values.
         for p in &points {
             if !p.value.is_finite() {
-                return Err(SuperbError::InvalidArgument { what: "envelope point value" });
+                return Err(SuperbError::InvalidArgument {
+                    what: "envelope point value",
+                });
             }
         }
         // Dedup identical times: keep last.
@@ -281,7 +286,7 @@ fn shape_t(t: f64, tension: f64) -> f64 {
     // Scale tension into a useful exponential coefficient.
     let c = tension * 8.0;
     let exp_c = c.exp();
-    ( (c * t).exp() - 1.0 ) / (exp_c - 1.0)
+    ((c * t).exp() - 1.0) / (exp_c - 1.0)
 }
 
 #[cfg(test)]

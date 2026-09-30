@@ -17,11 +17,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use superb_buffers::PlanarBuffer;
-use superb_core::{
-    BeatPosition, ClipId, NodeId, Result, SuperbError, TimePosition, TrackId,
-};
 #[cfg(feature = "files")]
 use superb_core::SampleRate;
+use superb_core::{BeatPosition, ClipId, NodeId, Result, SuperbError, TimePosition, TrackId};
 use superb_graph::nodes::{BufferPlayerNode, ScheduledNoteEvent, ScheduledSynthNode};
 use superb_io::{offline, Engine};
 use superb_mixer::Mixer;
@@ -68,7 +66,11 @@ impl AudioCache {
     ///
     /// Requires the facade `files` feature (symphonia + rubato).
     #[cfg(feature = "files")]
-    pub fn load(&mut self, path: impl AsRef<Path>, target_rate: SampleRate) -> Result<Arc<PlanarBuffer>> {
+    pub fn load(
+        &mut self,
+        path: impl AsRef<Path>,
+        target_rate: SampleRate,
+    ) -> Result<Arc<PlanarBuffer>> {
         let path = path.as_ref();
         if let Some(existing) = self.get(path) {
             return Ok(existing);
@@ -189,7 +191,11 @@ impl SessionPlayer {
 /// Note-on/off pairs whose onset falls outside `[item.start, item.end)` are
 /// dropped. Off events are clamped to the item end so notes cannot ring
 /// past the clip.
-pub fn schedule_midi_notes(item: &Item, notes: &[MidiNote], tempo: &TempoMap) -> Arc<[ScheduledNoteEvent]> {
+pub fn schedule_midi_notes(
+    item: &Item,
+    notes: &[MidiNote],
+    tempo: &TempoMap,
+) -> Arc<[ScheduledNoteEvent]> {
     let item_start = item.start();
     let item_end = item.end();
     let item_start_beat = tempo.samples_to_beat(item_start).beats();
@@ -249,7 +255,10 @@ pub struct RenderOptions {
 
 impl Default for RenderOptions {
     fn default() -> Self {
-        Self { block_size: 256, channels: 2 }
+        Self {
+            block_size: 256,
+            channels: 2,
+        }
     }
 }
 
@@ -332,7 +341,8 @@ pub fn render_region(
 /// input and output streams and accept clock skew.
 pub mod capture_sketch {
     /// Placeholder so the module is linkable; see the parent docs.
-    pub const ARMED_TRACK_CAPTURE_NOTES: &str = "armed track → InputStream → AudioCache → AddItem → SessionPlayer::wire";
+    pub const ARMED_TRACK_CAPTURE_NOTES: &str =
+        "armed track → InputStream → AudioCache → AddItem → SessionPlayer::wire";
 }
 
 #[cfg(test)]
@@ -351,14 +361,22 @@ mod tests {
     fn wire_skips_empty_and_missing_audio_attaches_cached() {
         let mut session = Session::new("demo", SampleRate::HZ_48K);
         let audio = session.add_track("vox", TrackKind::Audio);
-        let empty_item =
-            Item::new("e", TimePosition::ZERO, TimeDuration::from_samples(100), ItemSource::Empty).unwrap();
+        let empty_item = Item::new(
+            "e",
+            TimePosition::ZERO,
+            TimeDuration::from_samples(100),
+            ItemSource::Empty,
+        )
+        .unwrap();
         session.add_item(audio, empty_item).unwrap();
         let missing = Item::new(
             "m",
             TimePosition::from_samples(100),
             TimeDuration::from_samples(100),
-            ItemSource::Audio { path: PathBuf::from("missing.wav"), offset: TimeDuration::ZERO },
+            ItemSource::Audio {
+                path: PathBuf::from("missing.wav"),
+                offset: TimeDuration::ZERO,
+            },
         )
         .unwrap();
         session.add_item(audio, missing).unwrap();
@@ -366,7 +384,10 @@ mod tests {
             "p",
             TimePosition::from_samples(200),
             TimeDuration::from_samples(100),
-            ItemSource::Audio { path: PathBuf::from("tone.wav"), offset: TimeDuration::ZERO },
+            ItemSource::Audio {
+                path: PathBuf::from("tone.wav"),
+                offset: TimeDuration::ZERO,
+            },
         )
         .unwrap();
         session.add_item(audio, present).unwrap();
@@ -388,7 +409,10 @@ mod tests {
             "take",
             TimePosition::from_samples(100),
             TimeDuration::from_samples(200),
-            ItemSource::Audio { path: PathBuf::from("tone.wav"), offset: TimeDuration::ZERO },
+            ItemSource::Audio {
+                path: PathBuf::from("tone.wav"),
+                offset: TimeDuration::ZERO,
+            },
         )
         .unwrap();
         session.add_item(track, item).unwrap();
@@ -401,7 +425,10 @@ mod tests {
             &cache,
             TimePosition::ZERO,
             400,
-            &RenderOptions { block_size: 64, channels: 2 },
+            &RenderOptions {
+                block_size: 64,
+                channels: 2,
+            },
         )
         .unwrap();
         assert_eq!(audio.frames(), 400);
@@ -423,7 +450,13 @@ mod tests {
     fn render_region_plays_midi_item_through_scheduled_synth() {
         let mut session = Session::new("demo", SampleRate::HZ_48K);
         let track = session.add_track("keys", TrackKind::Midi);
-        let notes = vec![MidiNote { beat: 0.0, length: 0.25, note: 69, velocity: 127, channel: 0 }];
+        let notes = vec![MidiNote {
+            beat: 0.0,
+            length: 0.25,
+            note: 69,
+            velocity: 127,
+            channel: 0,
+        }];
         // 0.25 beat at 120 bpm = 0.125 s = 6000 samples at 48 kHz
         let item = Item::new(
             "n",
@@ -439,7 +472,10 @@ mod tests {
             &AudioCache::new(),
             TimePosition::ZERO,
             12_000,
-            &RenderOptions { block_size: 128, channels: 2 },
+            &RenderOptions {
+                block_size: 128,
+                channels: 2,
+            },
         )
         .unwrap();
         assert!(audio.peak() > 0.2, "peak {}", audio.peak());
@@ -455,7 +491,10 @@ mod tests {
             "take",
             TimePosition::ZERO,
             TimeDuration::from_samples(400),
-            ItemSource::Audio { path: PathBuf::from("tone.wav"), offset: TimeDuration::ZERO },
+            ItemSource::Audio {
+                path: PathBuf::from("tone.wav"),
+                offset: TimeDuration::ZERO,
+            },
         )
         .unwrap();
         session.add_item(vox, item).unwrap();
@@ -465,8 +504,17 @@ mod tests {
     }
 
     fn steady_level(session: &Session, cache: &AudioCache) -> f32 {
-        let audio = render_region(session, cache, TimePosition::ZERO, 400, &RenderOptions { block_size: 64, channels: 2 })
-            .unwrap();
+        let audio = render_region(
+            session,
+            cache,
+            TimePosition::ZERO,
+            400,
+            &RenderOptions {
+                block_size: 64,
+                channels: 2,
+            },
+        )
+        .unwrap();
         // Last sample: gain ramps have settled.
         audio.channel(0)[399].abs()
     }
@@ -482,13 +530,21 @@ mod tests {
         session.track_mut(sub).unwrap().gain_db = -6.0206;
         session.set_track_output(vox, Some(sub)).unwrap();
         let through_bus = steady_level(&session, &cache);
-        assert!((through_bus - direct * 0.5).abs() < 1e-3, "bus {through_bus} vs direct {direct}");
+        assert!(
+            (through_bus - direct * 0.5).abs() < 1e-3,
+            "bus {through_bus} vs direct {direct}"
+        );
 
         // Add a unity post-fader send to a second bus on top: 1.5×.
         let fx = session.add_track("fx", TrackKind::Bus);
-        let send = session.add_send(vox, superb_session::TrackSend::new(fx)).unwrap();
+        let send = session
+            .add_send(vox, superb_session::TrackSend::new(fx))
+            .unwrap();
         let with_send = steady_level(&session, &cache);
-        assert!((with_send - direct * 1.5).abs() < 1e-3, "send {with_send} vs direct {direct}");
+        assert!(
+            (with_send - direct * 1.5).abs() < 1e-3,
+            "send {with_send} vs direct {direct}"
+        );
 
         // Disabled send contributes nothing; a bus feeding a muted bus is silent.
         session.send_mut(send).unwrap().enabled = false;
@@ -514,7 +570,13 @@ mod tests {
         .unwrap();
         let tempo = TempoMap::new(SampleRate::HZ_48K, 120.0);
         // note starts 0 beats into item, length 1 beat (= 24000 samples) → clamped to item end
-        let notes = [MidiNote { beat: 0.0, length: 1.0, note: 60, velocity: 80, channel: 0 }];
+        let notes = [MidiNote {
+            beat: 0.0,
+            length: 1.0,
+            note: 60,
+            velocity: 80,
+            channel: 0,
+        }];
         let events = schedule_midi_notes(&item, &notes, &tempo);
         assert_eq!(events.len(), 2);
         assert!(events[0].on);
@@ -531,7 +593,10 @@ mod tests {
             "take",
             TimePosition::ZERO,
             TimeDuration::from_samples(100),
-            ItemSource::Audio { path: PathBuf::from("tone.wav"), offset: TimeDuration::ZERO },
+            ItemSource::Audio {
+                path: PathBuf::from("tone.wav"),
+                offset: TimeDuration::ZERO,
+            },
         )
         .unwrap();
         item.muted = true;

@@ -67,7 +67,12 @@ impl Node for SineNode {
         self.phase = 0.0;
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, _input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        _input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         let amp = self.amplitude.get();
         if amp == 0.0 {
             return ProcessStatus::Silent;
@@ -106,7 +111,11 @@ pub struct GainNode {
 impl GainNode {
     /// Creates a gain stage with an initial linear gain.
     pub fn new(gain: f32, channels: usize) -> Self {
-        Self { gain: Arc::new(AtomicF32::new(gain)), current: gain, channels }
+        Self {
+            gain: Arc::new(AtomicF32::new(gain)),
+            current: gain,
+            channels,
+        }
     }
 
     /// Shared handle to the gain parameter (linear).
@@ -128,7 +137,12 @@ impl Node for GainNode {
         self.current = self.gain.get();
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         let target = self.gain.get();
         let from = self.current;
         self.current = target;
@@ -172,7 +186,12 @@ impl Node for PassThroughNode {
         NodeChannels::symmetric(self.channels)
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         if ctx.input_is_silent {
             return ProcessStatus::Silent;
         }
@@ -200,7 +219,11 @@ pub struct DelayNode {
 impl DelayNode {
     /// Creates a node that delays `channels` channels by `delay` frames.
     pub fn new(delay: usize, channels: usize) -> Self {
-        Self { channels, delay, line: crate::delay::DelayLine::new(channels, delay, 1) }
+        Self {
+            channels,
+            delay,
+            line: crate::delay::DelayLine::new(channels, delay, 1),
+        }
     }
 
     /// The delay in frames.
@@ -226,8 +249,17 @@ impl Node for DelayNode {
         self.line.reset();
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
-        let src = if ctx.input_is_silent { None } else { Some(input) };
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
+        let src = if ctx.input_is_silent {
+            None
+        } else {
+            Some(input)
+        };
         if self.line.process(src, ctx.frames, output) {
             ProcessStatus::Silent
         } else {
@@ -253,7 +285,10 @@ pub struct ConstantNode {
 impl ConstantNode {
     /// Creates a generator that outputs `value` on `channels` channels.
     pub fn new(value: f32, channels: usize) -> Self {
-        Self { value: Arc::new(AtomicF32::new(value)), channels }
+        Self {
+            value: Arc::new(AtomicF32::new(value)),
+            channels,
+        }
     }
 
     /// Shared handle to the value.
@@ -271,7 +306,12 @@ impl Node for ConstantNode {
         NodeChannels::generator(self.channels)
     }
 
-    fn process(&mut self, _ctx: &ProcessContext<'_>, _input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        _ctx: &ProcessContext<'_>,
+        _input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         let v = self.value.get();
         if v == 0.0 {
             return ProcessStatus::Silent;
@@ -306,7 +346,12 @@ impl Node for SilenceNode {
         NodeChannels::generator(self.channels)
     }
 
-    fn process(&mut self, _ctx: &ProcessContext<'_>, _input: &PlanarBuffer, _output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        _ctx: &ProcessContext<'_>,
+        _input: &PlanarBuffer,
+        _output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         ProcessStatus::Silent
     }
 }
@@ -332,7 +377,14 @@ pub struct MonoSynthNode {
 impl MonoSynthNode {
     /// Creates a synth writing to `channels` output channels.
     pub fn new(channels: usize) -> Self {
-        Self { channels, sample_rate: SampleRate::default().as_f64(), phase: 0.0, note: None, amplitude: 0.0, increment: 0.0 }
+        Self {
+            channels,
+            sample_rate: SampleRate::default().as_f64(),
+            phase: 0.0,
+            note: None,
+            amplitude: 0.0,
+            increment: 0.0,
+        }
     }
 
     /// The note currently sounding, if any.
@@ -366,7 +418,11 @@ impl MonoSynthNode {
         for plane in output.planes_mut() {
             let mut phase = start_phase;
             for s in &mut plane[from..to] {
-                *s = if self.amplitude > 0.0 { (phase * core::f64::consts::TAU).sin() as f32 * self.amplitude } else { 0.0 };
+                *s = if self.amplitude > 0.0 {
+                    (phase * core::f64::consts::TAU).sin() as f32 * self.amplitude
+                } else {
+                    0.0
+                };
                 phase += self.increment;
             }
             end_phase = phase;
@@ -397,7 +453,12 @@ impl Node for MonoSynthNode {
         self.amplitude = 0.0;
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, _input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        _input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         let mut cursor = 0usize;
         let mut any_sound = self.amplitude > 0.0;
         for ev in ctx.midi.iter() {
@@ -427,7 +488,13 @@ mod tests {
     use superb_midi::{MidiChannel, MidiEvent, MidiEventBuffer};
 
     fn ctx<'a>(frames: usize, midi: &'a MidiEventBuffer, silent_in: bool) -> ProcessContext<'a> {
-        ProcessContext { sample_rate: SampleRate::HZ_48K, frames, time: BlockTime::free_running(), midi, input_is_silent: silent_in }
+        ProcessContext {
+            sample_rate: SampleRate::HZ_48K,
+            frames,
+            time: BlockTime::free_running(),
+            midi,
+            input_is_silent: silent_in,
+        }
     }
 
     #[test]
@@ -439,7 +506,10 @@ mod tests {
         let mut out = PlanarBuffer::new(2, 64);
         let mut samples = Vec::new();
         for _ in 0..4 {
-            assert_eq!(node.process(&ctx(64, &midi, true), &input, &mut out), ProcessStatus::Normal);
+            assert_eq!(
+                node.process(&ctx(64, &midi, true), &input, &mut out),
+                ProcessStatus::Normal
+            );
             samples.extend_from_slice(out.channel(0));
             assert_eq!(out.channel(0), out.channel(1));
         }
@@ -448,7 +518,10 @@ mod tests {
         assert!(samples[101] > 0.0);
         assert!((samples[25] - 1.0).abs() < 1e-4);
         node.amplitude().set(0.0);
-        assert_eq!(node.process(&ctx(64, &midi, true), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            node.process(&ctx(64, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
         assert_eq!(node.channels(), NodeChannels::generator(2));
     }
 
@@ -470,10 +543,16 @@ mod tests {
             assert!(w[1] < w[0]);
         }
         // fully at zero now -> silent shortcut
-        assert_eq!(node.process(&ctx(8, &midi, false), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            node.process(&ctx(8, &midi, false), &input, &mut out),
+            ProcessStatus::Silent
+        );
         // silent input -> silent output regardless of gain
         node.gain().set(1.0);
-        assert_eq!(node.process(&ctx(8, &midi, true), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            node.process(&ctx(8, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
         node.reset();
         assert_eq!(node.name(), "gain");
     }
@@ -485,18 +564,33 @@ mod tests {
         input.fill(0.3);
         let mut out = PlanarBuffer::new(1, 4);
         let mut p = PassThroughNode::new(1);
-        assert_eq!(p.process(&ctx(4, &midi, false), &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            p.process(&ctx(4, &midi, false), &input, &mut out),
+            ProcessStatus::Normal
+        );
         assert_eq!(out.channel(0), &[0.3; 4]);
-        assert_eq!(p.process(&ctx(4, &midi, true), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            p.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
 
         let mut c = ConstantNode::new(0.7, 1);
-        assert_eq!(c.process(&ctx(4, &midi, true), &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            c.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Normal
+        );
         assert_eq!(out.channel(0), &[0.7; 4]);
         c.value().set(0.0);
-        assert_eq!(c.process(&ctx(4, &midi, true), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            c.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
 
         let mut s = SilenceNode::new(1);
-        assert_eq!(s.process(&ctx(4, &midi, true), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            s.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
         assert_eq!(s.name(), "silence");
         assert_eq!(c.name(), "constant");
     }
@@ -505,32 +599,76 @@ mod tests {
     fn monosynth_starts_and_stops_at_event_frames() {
         let ch = MidiChannel::new(0).unwrap();
         let mut midi = MidiEventBuffer::with_capacity(4);
-        midi.push(MidiEvent { frame: 10, message: MidiMessage::NoteOn { channel: ch, note: 69, velocity: 127 } }).unwrap();
-        midi.push(MidiEvent { frame: 30, message: MidiMessage::NoteOff { channel: ch, note: 69, velocity: 0 } }).unwrap();
+        midi.push(MidiEvent {
+            frame: 10,
+            message: MidiMessage::NoteOn {
+                channel: ch,
+                note: 69,
+                velocity: 127,
+            },
+        })
+        .unwrap();
+        midi.push(MidiEvent {
+            frame: 30,
+            message: MidiMessage::NoteOff {
+                channel: ch,
+                note: 69,
+                velocity: 0,
+            },
+        })
+        .unwrap();
         let mut synth = MonoSynthNode::new(1);
         synth.prepare(SampleRate::HZ_48K, 64);
         let input = PlanarBuffer::new(0, 64);
         let mut out = PlanarBuffer::new(1, 64);
-        assert_eq!(synth.process(&ctx(64, &midi, true), &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            synth.process(&ctx(64, &midi, true), &input, &mut out),
+            ProcessStatus::Normal
+        );
         let s = out.channel(0);
         assert!(s[..10].iter().all(|&x| x == 0.0), "silent before note-on");
-        assert!(s[11..30].iter().any(|&x| x.abs() > 0.01), "sounding after note-on");
+        assert!(
+            s[11..30].iter().any(|&x| x.abs() > 0.01),
+            "sounding after note-on"
+        );
         assert!(s[30..].iter().all(|&x| x == 0.0), "silent after note-off");
         assert_eq!(synth.current_note(), None);
 
         // a note-off for a different note is ignored
         let mut midi = MidiEventBuffer::with_capacity(4);
-        midi.push(MidiEvent { frame: 0, message: MidiMessage::NoteOn { channel: ch, note: 60, velocity: 64 } }).unwrap();
-        midi.push(MidiEvent { frame: 5, message: MidiMessage::NoteOff { channel: ch, note: 61, velocity: 0 } }).unwrap();
+        midi.push(MidiEvent {
+            frame: 0,
+            message: MidiMessage::NoteOn {
+                channel: ch,
+                note: 60,
+                velocity: 64,
+            },
+        })
+        .unwrap();
+        midi.push(MidiEvent {
+            frame: 5,
+            message: MidiMessage::NoteOff {
+                channel: ch,
+                note: 61,
+                velocity: 0,
+            },
+        })
+        .unwrap();
         synth.process(&ctx(64, &midi, true), &input, &mut out);
         assert_eq!(synth.current_note(), Some(60));
         let peak = out.peak();
         assert!((peak - 64.0 / 127.0).abs() < 0.05, "peak {peak}");
 
         let empty = MidiEventBuffer::with_capacity(0);
-        assert_eq!(synth.process(&ctx(64, &empty, true), &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            synth.process(&ctx(64, &empty, true), &input, &mut out),
+            ProcessStatus::Normal
+        );
         synth.reset();
-        assert_eq!(synth.process(&ctx(64, &empty, true), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            synth.process(&ctx(64, &empty, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
         assert!((MonoSynthNode::note_to_hz(69) - 440.0).abs() < 1e-9);
         assert!((MonoSynthNode::note_to_hz(81) - 880.0).abs() < 1e-9);
     }
@@ -542,23 +680,39 @@ mod tests {
             *s = i as f32 * 0.01;
         }
         let mut player = BufferPlayerNode::new(Arc::new(buf), 1);
-        player.set_region(TimePosition::from_samples(50), TimeDuration::from_samples(40), TimeDuration::from_samples(10));
+        player.set_region(
+            TimePosition::from_samples(50),
+            TimeDuration::from_samples(40),
+            TimeDuration::from_samples(10),
+        );
         player.set_gain(2.0);
         let midi = MidiEventBuffer::with_capacity(0);
         let input = PlanarBuffer::new(0, 64);
         let mut out = PlanarBuffer::new(1, 64);
 
         // Not rolling → silent
-        assert_eq!(player.process(&ctx(64, &midi, true), &input, &mut out), ProcessStatus::Silent);
+        assert_eq!(
+            player.process(&ctx(64, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
 
         let rolling = ProcessContext {
             sample_rate: SampleRate::HZ_48K,
             frames: 64,
-            time: BlockTime { start: TimePosition::from_samples(40), rolling: true, wrapped: false, bpm: 120.0, beat_start: Default::default() },
+            time: BlockTime {
+                start: TimePosition::from_samples(40),
+                rolling: true,
+                wrapped: false,
+                bpm: 120.0,
+                beat_start: Default::default(),
+            },
             midi: &midi,
             input_is_silent: true,
         };
-        assert_eq!(player.process(&rolling, &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            player.process(&rolling, &input, &mut out),
+            ProcessStatus::Normal
+        );
         let s = out.channel(0);
         // frames 0..10 are timeline 40..50 → before clip → 0
         assert!(s[..10].iter().all(|&x| x == 0.0));
@@ -574,8 +728,20 @@ mod tests {
     #[test]
     fn scheduled_synth_fires_notes_at_absolute_samples() {
         let events: Arc<[ScheduledNoteEvent]> = Arc::from([
-            ScheduledNoteEvent { sample: 10, on: true, note: 69, velocity: 127, channel: 0 },
-            ScheduledNoteEvent { sample: 30, on: false, note: 69, velocity: 0, channel: 0 },
+            ScheduledNoteEvent {
+                sample: 10,
+                on: true,
+                note: 69,
+                velocity: 127,
+                channel: 0,
+            },
+            ScheduledNoteEvent {
+                sample: 30,
+                on: false,
+                note: 69,
+                velocity: 0,
+                channel: 0,
+            },
         ]);
         let mut synth = ScheduledSynthNode::new(1, events);
         synth.prepare(SampleRate::HZ_48K, 64);
@@ -585,11 +751,20 @@ mod tests {
         let rolling = ProcessContext {
             sample_rate: SampleRate::HZ_48K,
             frames: 64,
-            time: BlockTime { start: TimePosition::ZERO, rolling: true, wrapped: false, bpm: 120.0, beat_start: Default::default() },
+            time: BlockTime {
+                start: TimePosition::ZERO,
+                rolling: true,
+                wrapped: false,
+                bpm: 120.0,
+                beat_start: Default::default(),
+            },
             midi: &midi,
             input_is_silent: true,
         };
-        assert_eq!(synth.process(&rolling, &input, &mut out), ProcessStatus::Normal);
+        assert_eq!(
+            synth.process(&rolling, &input, &mut out),
+            ProcessStatus::Normal
+        );
         let s = out.channel(0);
         assert!(s[..10].iter().all(|&x| x == 0.0));
         assert!(s[11..30].iter().any(|&x| x.abs() > 0.01));
@@ -651,7 +826,12 @@ impl BufferPlayerNode {
     ///   `buffer[buffer_offset]` begins.
     /// * `length` — how many timeline frames to emit (`<= 0` → always silent).
     /// * `buffer_offset` — start frame inside the buffer.
-    pub fn set_region(&mut self, timeline_start: TimePosition, length: TimeDuration, buffer_offset: TimeDuration) {
+    pub fn set_region(
+        &mut self,
+        timeline_start: TimePosition,
+        length: TimeDuration,
+        buffer_offset: TimeDuration,
+    ) {
         self.timeline_start = timeline_start.samples();
         self.length = length.samples();
         self.buffer_offset = buffer_offset.samples().max(0);
@@ -729,7 +909,12 @@ impl Node for BufferPlayerNode {
         NodeChannels::generator(self.channels)
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, _input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        _input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         if self.muted || self.gain == 0.0 || self.length <= 0 || !ctx.time.rolling {
             return ProcessStatus::Silent;
         }
@@ -881,7 +1066,12 @@ impl Node for ScheduledSynthNode {
         self.amplitude = 0.0;
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, _input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        _input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         if !ctx.time.rolling || self.events.is_empty() {
             if self.amplitude == 0.0 {
                 return ProcessStatus::Silent;

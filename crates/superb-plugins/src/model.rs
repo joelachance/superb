@@ -154,7 +154,12 @@ pub trait PluginInstance: Send {
     fn reset(&mut self);
 
     /// Renders one block. `input`/`output` follow [`ports`](Self::ports).
-    fn process(&mut self, ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus;
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus;
 
     /// Processing latency once active.
     fn latency_frames(&self) -> usize;
@@ -180,6 +185,12 @@ mod tests {
         assert!(d.is_audio_effect());
         assert_eq!(PluginFormat::Clap.extension(), "clap");
         assert_eq!(PluginFormat::Vst3.extension(), "vst3");
-        assert_eq!(AudioPortLayout::default(), AudioPortLayout { inputs: 0, outputs: 0 });
+        assert_eq!(
+            AudioPortLayout::default(),
+            AudioPortLayout {
+                inputs: 0,
+                outputs: 0
+            }
+        );
     }
 }

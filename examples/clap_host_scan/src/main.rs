@@ -63,9 +63,20 @@ fn main() -> Result<()> {
             Err(e) => println!("skipping {}: {e}", dir.display()),
         }
     }
-    println!("\nfound {} plugin(s), {} bundle(s) failed to load", report.plugins.len(), report.failures.len());
+    println!(
+        "\nfound {} plugin(s), {} bundle(s) failed to load",
+        report.plugins.len(),
+        report.failures.len()
+    );
     for d in &report.plugins {
-        println!("  {:<40} {:<24} v{:<8} [{}]  {}", d.id, d.name, d.version, d.features.join(", "), d.path.display());
+        println!(
+            "  {:<40} {:<24} v{:<8} [{}]  {}",
+            d.id,
+            d.name,
+            d.version,
+            d.features.join(", "),
+            d.path.display()
+        );
     }
     for (path, why) in &report.failures {
         println!("  ! {}: {why}", path.display());
@@ -92,13 +103,22 @@ fn main() -> Result<()> {
         // unwrap_or: if the param has no current value, print NaN instead of panicking.
         let value = plugin.param_value(p.id).unwrap_or(f64::NAN);
         // Build a short flag string from the param's boolean attributes.
-        let flags = [(p.automatable, "auto"), (p.stepped, "stepped"), (p.hidden, "hidden"), (p.readonly, "ro"), (p.bypass, "bypass")]
-            .iter()
-            .filter(|(on, _)| *on)
-            .map(|(_, n)| *n)
-            .collect::<Vec<_>>()
-            .join(",");
-        println!("  #{:<6} {:<32} {:>10.4} in [{}, {}] default {} {}", p.id, p.name, value, p.min, p.max, p.default, flags);
+        let flags = [
+            (p.automatable, "auto"),
+            (p.stepped, "stepped"),
+            (p.hidden, "hidden"),
+            (p.readonly, "ro"),
+            (p.bypass, "bypass"),
+        ]
+        .iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, n)| *n)
+        .collect::<Vec<_>>()
+        .join(",");
+        println!(
+            "  #{:<6} {:<32} {:>10.4} in [{}, {}] default {} {}",
+            p.id, p.name, value, p.min, p.max, p.default, flags
+        );
     }
 
     // Offline graph: sine → plugin → output, then render 1 second at 48 kHz.
@@ -106,7 +126,11 @@ fn main() -> Result<()> {
     let channels = plugin.ports().outputs.max(1);
     let mut graph = AudioGraph::new();
     // Box::new(...) heap-allocates a concrete node so the graph can store dyn Node.
-    let osc = graph.add_node(Box::new(SineNode::new(440.0, 0.5, plugin.ports().inputs.max(1))));
+    let osc = graph.add_node(Box::new(SineNode::new(
+        440.0,
+        0.5,
+        plugin.ports().inputs.max(1),
+    )));
     // PluginNode adapts PluginInstance to the graph's Node trait (another Box).
     let fx = graph.add_node(Box::new(PluginNode::new(Box::new(plugin))));
     if graph.connect(osc, fx).is_err() {
@@ -118,7 +142,13 @@ fn main() -> Result<()> {
     // render(engine, rate, block_size, frame_count) → PlanarBuffer of audio.
     let audio = offline::render(&mut engine, rate, 256, rate.hz() as usize)?;
     let latency = engine.processor().latency_frames();
-    println!("\nrendered {} frames x {} ch through the plugin: peak {:.4}, reported latency {} frames", audio.frames(), audio.channels(), audio.peak(), latency);
+    println!(
+        "\nrendered {} frames x {} ch through the plugin: peak {:.4}, reported latency {} frames",
+        audio.frames(),
+        audio.channels(),
+        audio.peak(),
+        latency
+    );
     // Silence the unused-variable warning without changing behavior.
     let _ = channels;
     Ok(())

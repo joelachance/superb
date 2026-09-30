@@ -59,7 +59,10 @@ pub trait Command<T>: Any + Send {
     /// `next` as a separate command inside the same undo step, which is
     /// always correct but uses more memory. Use
     /// [`downcast`](dyn Command::downcast) to look inside `next`.
-    fn merge(&mut self, next: Box<dyn Command<T>>) -> core::result::Result<(), Box<dyn Command<T>>> {
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<T>>,
+    ) -> core::result::Result<(), Box<dyn Command<T>>> {
         Err(next)
     }
 }
@@ -107,7 +110,10 @@ impl<T: 'static> dyn Command<T> {
 
 impl<T: 'static> core::fmt::Debug for dyn Command<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Command").field("label", &self.label()).field("key", &self.coalesce_key()).finish()
+        f.debug_struct("Command")
+            .field("label", &self.label())
+            .field("key", &self.coalesce_key())
+            .finish()
     }
 }
 
@@ -139,7 +145,14 @@ impl<T, V> PropertyEdit<T, V> {
         get: impl Fn(&T) -> V + Send + Sync + 'static,
         set: impl Fn(&mut T, V) -> Result<()> + Send + Sync + 'static,
     ) -> Self {
-        Self { label: label.into(), key, previous: None, value, get: Arc::new(get), set: Arc::new(set) }
+        Self {
+            label: label.into(),
+            key,
+            previous: None,
+            value,
+            get: Arc::new(get),
+            set: Arc::new(set),
+        }
     }
 
     /// The value this edit stores.
@@ -176,7 +189,10 @@ impl<T: 'static, V: Clone + Send + 'static> Command<T> for PropertyEdit<T, V> {
         self.key
     }
 
-    fn merge(&mut self, next: Box<dyn Command<T>>) -> core::result::Result<(), Box<dyn Command<T>>> {
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<T>>,
+    ) -> core::result::Result<(), Box<dyn Command<T>>> {
         let next = next.downcast::<Self>()?;
         self.value = next.value;
         Ok(())
@@ -248,10 +264,18 @@ mod tests {
     #[test]
     fn property_edit_round_trips_and_merges() {
         let key = CoalesceKey::new(7, 42);
-        let mk = |v: i32| PropertyEdit::new("set", Some(key), v, |d: &Doc| d.n, |d: &mut Doc, v| {
-            d.n = v;
-            Ok(())
-        });
+        let mk = |v: i32| {
+            PropertyEdit::new(
+                "set",
+                Some(key),
+                v,
+                |d: &Doc| d.n,
+                |d: &mut Doc, v| {
+                    d.n = v;
+                    Ok(())
+                },
+            )
+        };
         let mut doc = Doc { n: 10 };
         let mut e1 = mk(20);
         assert!(e1.previous().is_none());
@@ -282,9 +306,13 @@ mod tests {
     #[test]
     fn property_edit_propagates_setter_errors() {
         let mut doc = Doc { n: 1 };
-        let mut e = PropertyEdit::new("bad", None, 5, |d: &Doc| d.n, |_: &mut Doc, _| {
-            Err(superb_core::SuperbError::InvalidArgument { what: "n" })
-        });
+        let mut e = PropertyEdit::new(
+            "bad",
+            None,
+            5,
+            |d: &Doc| d.n,
+            |_: &mut Doc, _| Err(superb_core::SuperbError::InvalidArgument { what: "n" }),
+        );
         assert!(e.apply(&mut doc).is_err());
         assert!(e.previous().is_none());
         assert_eq!(doc.n, 1);

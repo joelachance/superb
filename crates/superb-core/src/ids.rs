@@ -28,13 +28,17 @@ impl Default for IdGenerator {
 impl IdGenerator {
     /// Creates a generator whose first ID is `1`.
     pub const fn new() -> Self {
-        Self { next: AtomicU64::new(1) }
+        Self {
+            next: AtomicU64::new(1),
+        }
     }
 
     /// Creates a generator that starts at `first`. Panics if `first == 0`.
     pub fn starting_at(first: RawId) -> Self {
         assert!(first != 0, "0 is reserved as the invalid id");
-        Self { next: AtomicU64::new(first) }
+        Self {
+            next: AtomicU64::new(first),
+        }
     }
 
     /// Returns the next raw ID. Lock-free and safe from any thread.

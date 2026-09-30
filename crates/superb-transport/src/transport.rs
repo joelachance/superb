@@ -36,7 +36,9 @@ impl LoopRange {
     /// Creates a loop range. Fails unless `start < end`.
     pub fn new(start: TimePosition, end: TimePosition) -> Result<Self> {
         if start >= end {
-            return Err(SuperbError::InvalidArgument { what: "loop range (start must be < end)" });
+            return Err(SuperbError::InvalidArgument {
+                what: "loop range (start must be < end)",
+            });
         }
         Ok(Self { start, end })
     }
@@ -108,14 +110,27 @@ impl Iterator for Segments {
             Some(l) if self.cursor < l.end() => {
                 let to_end = (l.end().samples() - self.cursor.samples()) as usize;
                 if to_end > self.remaining {
-                    (self.remaining, self.cursor.offset(self.remaining as i64), false)
+                    (
+                        self.remaining,
+                        self.cursor.offset(self.remaining as i64),
+                        false,
+                    )
                 } else {
                     (to_end, l.start(), true)
                 }
             }
-            _ => (self.remaining, self.cursor.offset(self.remaining as i64), false),
+            _ => (
+                self.remaining,
+                self.cursor.offset(self.remaining as i64),
+                false,
+            ),
         };
-        let seg = Segment { block_offset: self.offset, frames, start: self.cursor, wrapped: self.wrapped };
+        let seg = Segment {
+            block_offset: self.offset,
+            frames,
+            start: self.cursor,
+            wrapped: self.wrapped,
+        };
         self.offset += frames;
         self.remaining -= frames;
         self.cursor = next;
@@ -166,7 +181,13 @@ impl Transport {
 
     /// Creates a stopped transport at position zero using an existing map.
     pub fn with_tempo_map(tempo_map: TempoMap) -> Self {
-        Self { state: TransportState::Stopped, position: TimePosition::ZERO, loop_range: None, loop_enabled: false, tempo_map }
+        Self {
+            state: TransportState::Stopped,
+            position: TimePosition::ZERO,
+            loop_range: None,
+            loop_enabled: false,
+            tempo_map,
+        }
     }
 
     /// Current state.
@@ -281,8 +302,18 @@ impl Transport {
     /// the transport is stopped, the playhead does not move and a single
     /// segment at the current position is returned. Audio-thread safe.
     pub fn advance(&mut self, frames: usize) -> Segments {
-        let loop_range = if self.state.is_rolling() { self.active_loop() } else { None };
-        let segs = Segments { cursor: self.position, remaining: frames, offset: 0, loop_range, wrapped: false };
+        let loop_range = if self.state.is_rolling() {
+            self.active_loop()
+        } else {
+            None
+        };
+        let segs = Segments {
+            cursor: self.position,
+            remaining: frames,
+            offset: 0,
+            loop_range,
+            wrapped: false,
+        };
         if self.state.is_rolling() {
             let mut walker = segs.clone();
             let mut end = self.position;
@@ -334,7 +365,9 @@ mod tests {
     }
 
     fn collect(t: &mut Transport, frames: usize) -> Vec<(i64, usize, usize, bool)> {
-        t.advance(frames).map(|s| (s.start.samples(), s.frames, s.block_offset, s.wrapped)).collect()
+        t.advance(frames)
+            .map(|s| (s.start.samples(), s.frames, s.block_offset, s.wrapped))
+            .collect()
     }
 
     #[test]
@@ -414,7 +447,12 @@ mod tests {
         let segs = collect(&mut t, 10);
         assert_eq!(
             segs,
-            vec![(10, 3, 0, false), (10, 3, 3, true), (10, 3, 6, true), (10, 1, 9, true)]
+            vec![
+                (10, 3, 0, false),
+                (10, 3, 3, true),
+                (10, 3, 6, true),
+                (10, 1, 9, true)
+            ]
         );
         assert_eq!(t.position(), pos(11));
     }
@@ -429,7 +467,10 @@ mod tests {
         t.play();
         assert_eq!(collect(&mut t, 100), vec![(800, 100, 0, false)]);
         t.seek(pos(1_950));
-        assert_eq!(collect(&mut t, 100), vec![(1_950, 50, 0, false), (1_000, 50, 50, true)]);
+        assert_eq!(
+            collect(&mut t, 100),
+            vec![(1_950, 50, 0, false), (1_000, 50, 50, true)]
+        );
         // after the loop: never wraps back
         t.seek(pos(2_000));
         assert_eq!(collect(&mut t, 100), vec![(2_000, 100, 0, false)]);
@@ -484,12 +525,21 @@ mod tests {
         let snap = t.snapshot();
         assert_eq!(snap.seconds, 2.0);
         assert!((snap.beat.beats() - 4.0).abs() < 1e-9);
-        assert_eq!(snap.bbt, Bbt { bar: 2, beat: 1, tick: 0 });
+        assert_eq!(
+            snap.bbt,
+            Bbt {
+                bar: 2,
+                beat: 1,
+                tick: 0
+            }
+        );
         assert_eq!(snap.bpm, 120.0);
         assert!(!snap.looping);
         assert_eq!(snap.state, TransportState::Stopped);
 
-        t.tempo_map_mut().add_tempo(BeatPosition::new(4.0), 60.0).unwrap();
+        t.tempo_map_mut()
+            .add_tempo(BeatPosition::new(4.0), 60.0)
+            .unwrap();
         t.play();
         let _ = t.advance(48_000); // 1 s at 60 bpm = 1 beat
         assert!((t.beat_position().beats() - 5.0).abs() < 1e-9);
@@ -497,7 +547,12 @@ mod tests {
 
     #[test]
     fn segment_end_helper() {
-        let s = Segment { block_offset: 0, frames: 10, start: pos(5), wrapped: false };
+        let s = Segment {
+            block_offset: 0,
+            frames: 10,
+            start: pos(5),
+            wrapped: false,
+        };
         assert_eq!(s.end(), pos(15));
     }
 }

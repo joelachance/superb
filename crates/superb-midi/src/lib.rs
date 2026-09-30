@@ -77,7 +77,10 @@ mod cross_thread_tests {
             for i in 0..N {
                 let note = (i % 128) as u8;
                 let message = MidiMessage::note_on(channel, note, 100).unwrap();
-                let mut event = TimestampedMessage { timestamp_us: i, message };
+                let mut event = TimestampedMessage {
+                    timestamp_us: i,
+                    message,
+                };
                 loop {
                     match tx.push(event) {
                         Ok(()) => break,

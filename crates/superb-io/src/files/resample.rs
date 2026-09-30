@@ -44,7 +44,9 @@ pub fn resample(audio: &PlanarBuffer, from: SampleRate, to: SampleRate) -> Resul
     let channels = audio.channels();
     let frames = audio.frames();
     if channels == 0 {
-        return Err(SuperbError::InvalidArgument { what: "resample channels" });
+        return Err(SuperbError::InvalidArgument {
+            what: "resample channels",
+        });
     }
     if from == to {
         let mut out = PlanarBuffer::new(channels, frames);
@@ -55,20 +57,34 @@ pub fn resample(audio: &PlanarBuffer, from: SampleRate, to: SampleRate) -> Resul
         return Ok(PlanarBuffer::new(channels, 0));
     }
 
-    let mut resampler = Fft::<f32>::new(from.hz() as usize, to.hz() as usize, CHUNK, channels, FixedSync::Input)
-        .map_err(|e| rerr("resampler construction", e))?;
+    let mut resampler = Fft::<f32>::new(
+        from.hz() as usize,
+        to.hz() as usize,
+        CHUNK,
+        channels,
+        FixedSync::Input,
+    )
+    .map_err(|e| rerr("resampler construction", e))?;
     let delay = resampler.output_delay();
     let wanted = resampled_frames(frames, from, to);
 
     let planes: Vec<&[f32]> = audio.planes().collect();
-    let input = SequentialSliceOfSlices::new(&planes, channels, frames).map_err(|e| rerr("resampler input", e))?;
+    let input = SequentialSliceOfSlices::new(&planes, channels, frames)
+        .map_err(|e| rerr("resampler input", e))?;
 
     // Everything the resampler emits, including the start-up delay we trim
     // off afterwards and the tail we flush with silence.
-    let mut collected: Vec<Vec<f32>> = (0..channels).map(|_| Vec::with_capacity(wanted + delay + CHUNK)).collect();
+    let mut collected: Vec<Vec<f32>> = (0..channels)
+        .map(|_| Vec::with_capacity(wanted + delay + CHUNK))
+        .collect();
     let mut scratch: Vec<Vec<f32>> = vec![Vec::new(); channels];
     let mut consumed = 0usize;
-    let mut indexing = Indexing { input_offset: 0, output_offset: 0, partial_len: None, active_channels_mask: None };
+    let mut indexing = Indexing {
+        input_offset: 0,
+        output_offset: 0,
+        partial_len: None,
+        active_channels_mask: None,
+    };
 
     while collected[0].len() < wanted + delay {
         let need = resampler.input_frames_next();
@@ -97,7 +113,8 @@ pub fn resample(audio: &PlanarBuffer, from: SampleRate, to: SampleRate) -> Resul
 
     let mut out = PlanarBuffer::new(channels, wanted);
     for (ch, plane) in collected.iter().enumerate() {
-        out.channel_mut(ch).copy_from_slice(&plane[delay..delay + wanted]);
+        out.channel_mut(ch)
+            .copy_from_slice(&plane[delay..delay + wanted]);
     }
     Ok(out)
 }
@@ -124,8 +141,14 @@ mod tests {
 
     #[test]
     fn frame_count_rule() {
-        assert_eq!(resampled_frames(48_000, SampleRate::HZ_48K, SampleRate::CD), 44_100);
-        assert_eq!(resampled_frames(1_000, SampleRate::HZ_48K, SampleRate::CD), 919); // 918.75 rounds up
+        assert_eq!(
+            resampled_frames(48_000, SampleRate::HZ_48K, SampleRate::CD),
+            44_100
+        );
+        assert_eq!(
+            resampled_frames(1_000, SampleRate::HZ_48K, SampleRate::CD),
+            919
+        ); // 918.75 rounds up
         assert_eq!(resampled_frames(7, SampleRate::CD, SampleRate::CD), 7);
         assert_eq!(resampled_frames(0, SampleRate::CD, SampleRate::HZ_96K), 0);
     }
@@ -164,11 +187,21 @@ mod tests {
         let (a, b) = (2.0 * a / n, 2.0 * b / n);
         let amplitude = (a * a + b * b).sqrt();
         let phase = b.atan2(a);
-        assert!((amplitude - 0.5).abs() < 0.01, "fitted amplitude {amplitude}");
+        assert!(
+            (amplitude - 0.5).abs() < 0.01,
+            "fitted amplitude {amplitude}"
+        );
         assert!(phase.abs() < 0.1, "residual phase {phase} rad");
         // Continuity: consecutive samples never jump more than the slope allows.
         let max_step = 0.5 * TAU * 1_000.0 / 44_100.0 * 1.05;
-        let violations: Vec<_> = out.channel(0).windows(2).enumerate().skip(100).filter(|(_, w)| (w[1] - w[0]).abs() > max_step).take(5).collect();
+        let violations: Vec<_> = out
+            .channel(0)
+            .windows(2)
+            .enumerate()
+            .skip(100)
+            .filter(|(_, w)| (w[1] - w[0]).abs() > max_step)
+            .take(5)
+            .collect();
         assert!(violations.is_empty(), "steps too large at {violations:?}");
     }
 
@@ -176,7 +209,10 @@ mod tests {
     fn up_44k1_to_96k_short_clip() {
         let src = sine(220.0, SampleRate::CD, 1_000, 1);
         let out = resample(&src, SampleRate::CD, SampleRate::HZ_96K).unwrap();
-        assert_eq!(out.frames(), resampled_frames(1_000, SampleRate::CD, SampleRate::HZ_96K));
+        assert_eq!(
+            out.frames(),
+            resampled_frames(1_000, SampleRate::CD, SampleRate::HZ_96K)
+        );
         assert_eq!(out.frames(), 2_177); // 2176.87 rounds up
         assert!(out.peak() > 0.4 && out.peak() < 0.6);
     }
@@ -192,7 +228,12 @@ mod tests {
 
     #[test]
     fn edge_cases() {
-        assert!(resample(&PlanarBuffer::new(0, 10), SampleRate::CD, SampleRate::HZ_48K).is_err());
+        assert!(resample(
+            &PlanarBuffer::new(0, 10),
+            SampleRate::CD,
+            SampleRate::HZ_48K
+        )
+        .is_err());
         let empty = resample(&PlanarBuffer::new(2, 0), SampleRate::CD, SampleRate::HZ_48K).unwrap();
         assert_eq!((empty.channels(), empty.frames()), (2, 0));
     }

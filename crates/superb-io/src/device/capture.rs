@@ -61,8 +61,15 @@ impl CaptureProducer {
     /// Panics in debug if `block` has more frames than the pre-allocated
     /// capacity or a different channel count.
     pub fn push(&mut self, block: &PlanarBuffer, block_start_us: u64) -> bool {
-        debug_assert_eq!(block.channels(), self.channels(), "capture channel mismatch");
-        debug_assert!(block.frames() <= self.max_frames(), "capture block exceeds capacity");
+        debug_assert_eq!(
+            block.channels(),
+            self.channels(),
+            "capture channel mismatch"
+        );
+        debug_assert!(
+            block.frames() <= self.max_frames(),
+            "capture block exceeds capacity"
+        );
         let Some(mut slot) = self.free.pop() else {
             self.dropped.fetch_add(1, Ordering::Relaxed);
             return false;
@@ -169,15 +176,26 @@ impl CaptureConsumer {
 ///
 /// # Errors
 /// Returns [`SuperbError::InvalidArgument`] if any argument is zero.
-pub fn capture_queue(channels: usize, max_block_frames: usize, capacity: usize) -> Result<(CaptureProducer, CaptureConsumer)> {
+pub fn capture_queue(
+    channels: usize,
+    max_block_frames: usize,
+    capacity: usize,
+) -> Result<(CaptureProducer, CaptureConsumer)> {
     if channels == 0 || max_block_frames == 0 || capacity == 0 {
-        return Err(SuperbError::InvalidArgument { what: "capture_queue" });
+        return Err(SuperbError::InvalidArgument {
+            what: "capture_queue",
+        });
     }
     let (mut free_tx, free_rx) = spsc::channel::<CaptureBlock>(capacity);
     let (filled_tx, filled_rx) = spsc::channel::<CaptureBlock>(capacity);
     for _ in 0..capacity {
-        let block = CaptureBlock { buffer: PlanarBuffer::new(channels, max_block_frames), block_start_us: 0 };
-        free_tx.push(block).map_err(|_| SuperbError::Message("capture_queue: free ring rejected block".into()))?;
+        let block = CaptureBlock {
+            buffer: PlanarBuffer::new(channels, max_block_frames),
+            block_start_us: 0,
+        };
+        free_tx
+            .push(block)
+            .map_err(|_| SuperbError::Message("capture_queue: free ring rejected block".into()))?;
     }
     let dropped = Arc::new(AtomicU64::new(0));
     let producer = CaptureProducer {
@@ -187,7 +205,11 @@ pub fn capture_queue(channels: usize, max_block_frames: usize, capacity: usize) 
         channels,
         max_frames: max_block_frames,
     };
-    let consumer = CaptureConsumer { free: free_tx, filled: filled_rx, dropped };
+    let consumer = CaptureConsumer {
+        free: free_tx,
+        filled: filled_rx,
+        dropped,
+    };
     Ok((producer, consumer))
 }
 

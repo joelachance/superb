@@ -75,7 +75,12 @@ impl Item {
     /// Creates an item with no ID yet (the session assigns one on
     /// [`Session::add_item`](crate::Session::add_item)). Fails unless
     /// `length > 0`.
-    pub fn new(name: impl Into<String>, start: TimePosition, length: TimeDuration, source: ItemSource) -> Result<Self> {
+    pub fn new(
+        name: impl Into<String>,
+        start: TimePosition,
+        length: TimeDuration,
+        source: ItemSource,
+    ) -> Result<Self> {
         Self::with_id(ClipId::INVALID, name, start, length, source)
     }
 
@@ -148,7 +153,9 @@ impl Item {
 
 fn check_length(length: TimeDuration) -> Result<()> {
     if length.samples() <= 0 {
-        return Err(SuperbError::InvalidArgument { what: "item length (must be > 0)" });
+        return Err(SuperbError::InvalidArgument {
+            what: "item length (must be > 0)",
+        });
     }
     Ok(())
 }
@@ -180,7 +187,13 @@ impl TrackSend {
     /// A unity, post-fader, enabled send with a pre-allocated ID (see
     /// [`Session::allocate_send_id`](crate::Session::allocate_send_id)).
     pub fn with_id(id: SendId, bus: TrackId) -> Self {
-        Self { id, bus, level_db: 0.0, pre_fader: false, enabled: true }
+        Self {
+            id,
+            bus,
+            level_db: 0.0,
+            pre_fader: false,
+            enabled: true,
+        }
     }
 
     /// Sets the level in dB (builder style).
@@ -300,11 +313,16 @@ impl Track {
 
     /// End of the last item, or zero for an empty track.
     pub fn end(&self) -> TimePosition {
-        self.items.iter().map(Item::end).max().unwrap_or(TimePosition::ZERO)
+        self.items
+            .iter()
+            .map(Item::end)
+            .max()
+            .unwrap_or(TimePosition::ZERO)
     }
 
     pub(crate) fn sort_items(&mut self) {
-        self.items.sort_by(|a, b| a.start.cmp(&b.start).then(a.id.cmp(&b.id)));
+        self.items
+            .sort_by(|a, b| a.start.cmp(&b.start).then(a.id.cmp(&b.id)));
     }
 }
 
@@ -313,7 +331,13 @@ mod tests {
     use super::*;
 
     fn item(start: i64, len: i64) -> Item {
-        Item::new("i", TimePosition::from_samples(start), TimeDuration::from_samples(len), ItemSource::Empty).unwrap()
+        Item::new(
+            "i",
+            TimePosition::from_samples(start),
+            TimeDuration::from_samples(len),
+            ItemSource::Empty,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -334,8 +358,20 @@ mod tests {
 
     #[test]
     fn item_length_is_validated() {
-        assert!(Item::new("x", TimePosition::ZERO, TimeDuration::ZERO, ItemSource::Empty).is_err());
-        assert!(Item::new("x", TimePosition::ZERO, TimeDuration::from_samples(-5), ItemSource::Empty).is_err());
+        assert!(Item::new(
+            "x",
+            TimePosition::ZERO,
+            TimeDuration::ZERO,
+            ItemSource::Empty
+        )
+        .is_err());
+        assert!(Item::new(
+            "x",
+            TimePosition::ZERO,
+            TimeDuration::from_samples(-5),
+            ItemSource::Empty
+        )
+        .is_err());
         let mut a = item(0, 10);
         assert!(a.set_length(TimeDuration::ZERO).is_err());
         a.set_length(TimeDuration::from_samples(20)).unwrap();
@@ -350,7 +386,9 @@ mod tests {
         assert_eq!(s.id(), SendId::INVALID);
         assert_eq!(s.bus(), bus);
         assert_eq!((s.level_db, s.pre_fader, s.enabled), (0.0, false, true));
-        let s = TrackSend::with_id(SendId::from_raw(3), bus).level_db(-6.0).pre_fader();
+        let s = TrackSend::with_id(SendId::from_raw(3), bus)
+            .level_db(-6.0)
+            .pre_fader();
         assert_eq!(s.id(), SendId::from_raw(3));
         assert_eq!((s.level_db, s.pre_fader, s.enabled), (-6.0, true, true));
     }

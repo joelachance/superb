@@ -107,6 +107,9 @@ mod licence_boundary {
                     .any(|l| l.contains(&needle))
             })
             .collect();
-        assert!(offenders.is_empty(), "{needle} referenced outside decode.rs: {offenders:?}");
+        assert!(
+            offenders.is_empty(),
+            "{needle} referenced outside decode.rs: {offenders:?}"
+        );
     }
 }

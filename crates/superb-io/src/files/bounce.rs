@@ -28,7 +28,10 @@ pub fn bounce<P: BlockProcessor>(
     total_frames: usize,
 ) -> Result<AudioFile> {
     let buffer = offline::render(engine, sample_rate, block_size, total_frames)?;
-    Ok(AudioFile { buffer, sample_rate })
+    Ok(AudioFile {
+        buffer,
+        sample_rate,
+    })
 }
 
 /// Renders `total_frames` from `engine` and writes them to `path` as WAV.

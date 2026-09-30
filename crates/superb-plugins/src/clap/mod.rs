@@ -26,16 +26,19 @@ use std::sync::Arc;
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::entry::clap_plugin_entry;
 use clap_sys::events::{
-    clap_event_header, clap_event_midi, clap_event_note, clap_event_param_value, clap_event_transport,
-    clap_input_events, clap_output_events, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_OFF,
-    CLAP_EVENT_NOTE_ON, CLAP_EVENT_PARAM_VALUE, CLAP_EVENT_TRANSPORT, CLAP_TRANSPORT_HAS_BEATS_TIMELINE,
-    CLAP_TRANSPORT_HAS_SECONDS_TIMELINE, CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_IS_PLAYING,
+    clap_event_header, clap_event_midi, clap_event_note, clap_event_param_value,
+    clap_event_transport, clap_input_events, clap_output_events, CLAP_CORE_EVENT_SPACE_ID,
+    CLAP_EVENT_MIDI, CLAP_EVENT_NOTE_OFF, CLAP_EVENT_NOTE_ON, CLAP_EVENT_PARAM_VALUE,
+    CLAP_EVENT_TRANSPORT, CLAP_TRANSPORT_HAS_BEATS_TIMELINE, CLAP_TRANSPORT_HAS_SECONDS_TIMELINE,
+    CLAP_TRANSPORT_HAS_TEMPO, CLAP_TRANSPORT_IS_PLAYING,
 };
-use clap_sys::ext::audio_ports::{clap_audio_port_info, clap_plugin_audio_ports, CLAP_EXT_AUDIO_PORTS};
+use clap_sys::ext::audio_ports::{
+    clap_audio_port_info, clap_plugin_audio_ports, CLAP_EXT_AUDIO_PORTS,
+};
 use clap_sys::ext::latency::{clap_plugin_latency, CLAP_EXT_LATENCY};
 use clap_sys::ext::params::{
-    clap_param_info, clap_plugin_params, CLAP_EXT_PARAMS, CLAP_PARAM_IS_AUTOMATABLE, CLAP_PARAM_IS_BYPASS,
-    CLAP_PARAM_IS_HIDDEN, CLAP_PARAM_IS_READONLY, CLAP_PARAM_IS_STEPPED,
+    clap_param_info, clap_plugin_params, CLAP_EXT_PARAMS, CLAP_PARAM_IS_AUTOMATABLE,
+    CLAP_PARAM_IS_BYPASS, CLAP_PARAM_IS_HIDDEN, CLAP_PARAM_IS_READONLY, CLAP_PARAM_IS_STEPPED,
 };
 use clap_sys::ext::state::{clap_plugin_state, CLAP_EXT_STATE};
 use clap_sys::factory::plugin_factory::{clap_plugin_factory, CLAP_PLUGIN_FACTORY_ID};
@@ -84,7 +87,11 @@ unsafe fn c_to_string(p: *const c_char) -> String {
 
 /// Converts a NUL-padded fixed array into a `String`.
 fn fixed_to_string(buf: &[c_char]) -> String {
-    let bytes: Vec<u8> = buf.iter().take_while(|&&c| c != 0).map(|&c| c as u8).collect();
+    let bytes: Vec<u8> = buf
+        .iter()
+        .take_while(|&&c| c != 0)
+        .map(|&c| c as u8)
+        .collect();
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
@@ -167,7 +174,10 @@ impl ClapBundle {
     /// Wraps an entry point that is already linked into the process
     /// (statically linked plugins, tests). `path` is what the plugin is told
     /// as its bundle path.
-    pub fn from_entry(entry: &'static clap_plugin_entry, path: impl Into<PathBuf>) -> Result<Arc<Self>> {
+    pub fn from_entry(
+        entry: &'static clap_plugin_entry,
+        path: impl Into<PathBuf>,
+    ) -> Result<Arc<Self>> {
         // SAFETY: a `'static` reference is valid for the whole program.
         let bundle = unsafe { Self::init(entry, path.into(), None) }?;
         Ok(Arc::new(bundle))
@@ -175,7 +185,11 @@ impl ClapBundle {
 
     /// # Safety
     /// `entry` must stay valid for as long as the returned bundle lives.
-    unsafe fn init(entry: *const clap_plugin_entry, path: PathBuf, library: Option<libloading::Library>) -> Result<Self> {
+    unsafe fn init(
+        entry: *const clap_plugin_entry,
+        path: PathBuf,
+        library: Option<libloading::Library>,
+    ) -> Result<Self> {
         // SAFETY: guaranteed by the caller.
         let e = unsafe { &*entry };
         if !clap_version_is_compatible(e.clap_version) {
@@ -187,15 +201,19 @@ impl ClapBundle {
                 e.clap_version.revision
             )));
         }
-        let c_path = CString::new(path.to_string_lossy().as_bytes()).map_err(|_| msg("bundle path contains NUL"))?;
+        let c_path = CString::new(path.to_string_lossy().as_bytes())
+            .map_err(|_| msg("bundle path contains NUL"))?;
         let init = e.init.ok_or_else(|| msg("clap_entry.init is missing"))?;
         // SAFETY: calling the entry's init with a valid path string, once.
         if !unsafe { init(c_path.as_ptr()) } {
             return Err(msg(format!("{}: clap_entry.init failed", path.display())));
         }
-        let get_factory = e.get_factory.ok_or_else(|| msg("clap_entry.get_factory is missing"))?;
+        let get_factory = e
+            .get_factory
+            .ok_or_else(|| msg("clap_entry.get_factory is missing"))?;
         // SAFETY: the entry is initialised; the factory ID is the standard one.
-        let factory = unsafe { get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) } as *const clap_plugin_factory;
+        let factory =
+            unsafe { get_factory(CLAP_PLUGIN_FACTORY_ID.as_ptr()) } as *const clap_plugin_factory;
         if factory.is_null() {
             if let Some(deinit) = e.deinit {
                 // SAFETY: balancing the successful init above.
@@ -203,7 +221,12 @@ impl ClapBundle {
             }
             return Err(msg(format!("{}: no plugin factory", path.display())));
         }
-        Ok(Self { path, entry, factory, _library: library })
+        Ok(Self {
+            path,
+            entry,
+            factory,
+            _library: library,
+        })
     }
 
     /// Path the bundle was loaded from.
@@ -239,7 +262,12 @@ impl ClapBundle {
             .descriptors()
             .into_iter()
             .find(|d| d.id == plugin_id)
-            .ok_or_else(|| msg(format!("{}: no plugin with id '{plugin_id}'", self.path.display())))?;
+            .ok_or_else(|| {
+                msg(format!(
+                    "{}: no plugin with id '{plugin_id}'",
+                    self.path.display()
+                ))
+            })?;
         let host_data = Box::new(HostData::default());
         let host = Box::new(clap_host {
             clap_version: CLAP_VERSION,
@@ -256,12 +284,17 @@ impl ClapBundle {
         let c_id = CString::new(plugin_id).map_err(|_| msg("plugin id contains NUL"))?;
         // SAFETY: `factory` is valid while the bundle lives.
         let f = unsafe { &*self.factory };
-        let create = f.create_plugin.ok_or_else(|| msg("factory.create_plugin is missing"))?;
+        let create = f
+            .create_plugin
+            .ok_or_else(|| msg("factory.create_plugin is missing"))?;
         // SAFETY: the host struct lives in a `Box` owned by the returned
         // instance, so its address stays valid for the plugin's lifetime.
         let plugin = unsafe { create(self.factory, &*host, c_id.as_ptr()) };
         if plugin.is_null() {
-            return Err(msg(format!("{}: create_plugin('{plugin_id}') returned null", self.path.display())));
+            return Err(msg(format!(
+                "{}: create_plugin('{plugin_id}') returned null",
+                self.path.display()
+            )));
         }
         // SAFETY: non-null plugin returned by the factory.
         let p = unsafe { &*plugin };
@@ -272,7 +305,10 @@ impl ClapBundle {
                 // SAFETY: destroying a plugin whose init failed, as the ABI requires.
                 unsafe { destroy(plugin) };
             }
-            return Err(msg(format!("{}: plugin '{plugin_id}' failed to init", self.path.display())));
+            return Err(msg(format!(
+                "{}: plugin '{plugin_id}' failed to init",
+                self.path.display()
+            )));
         }
         let ext = |id: &CStr| -> *const c_void {
             match p.get_extension {
@@ -323,19 +359,27 @@ impl Drop for ClapBundle {
 
 impl core::fmt::Debug for ClapBundle {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("ClapBundle").field("path", &self.path).finish()
+        f.debug_struct("ClapBundle")
+            .field("path", &self.path)
+            .finish()
     }
 }
 
 /// On macOS a `.clap` is a bundle directory; the loadable object is inside.
 fn resolve_binary(path: &Path) -> Result<PathBuf> {
     if path.is_dir() {
-        let stem = path.file_stem().map(|s| s.to_os_string()).ok_or_else(|| msg("bundle path has no name"))?;
+        let stem = path
+            .file_stem()
+            .map(|s| s.to_os_string())
+            .ok_or_else(|| msg("bundle path has no name"))?;
         let inner = path.join("Contents/MacOS").join(stem);
         if inner.is_file() {
             return Ok(inner);
         }
-        return Err(msg(format!("{}: bundle directory has no Contents/MacOS binary", path.display())));
+        return Err(msg(format!(
+            "{}: bundle directory has no Contents/MacOS binary",
+            path.display()
+        )));
     }
     if !path.is_file() {
         return Err(msg(format!("{}: not found", path.display())));
@@ -377,7 +421,10 @@ unsafe fn host_data<'a>(host: *const clap_host) -> Option<&'a HostData> {
     unsafe { ((*host).host_data as *const HostData).as_ref() }
 }
 
-unsafe extern "C" fn host_get_extension(_host: *const clap_host, _id: *const c_char) -> *const c_void {
+unsafe extern "C" fn host_get_extension(
+    _host: *const clap_host,
+    _id: *const c_char,
+) -> *const c_void {
     ptr::null()
 }
 
@@ -424,12 +471,22 @@ impl ClapEvent {
 }
 
 fn header(size: usize, time: u32, type_: u16) -> clap_event_header {
-    clap_event_header { size: size as u32, time, space_id: CLAP_CORE_EVENT_SPACE_ID, type_, flags: 0 }
+    clap_event_header {
+        size: size as u32,
+        time,
+        space_id: CLAP_CORE_EVENT_SPACE_ID,
+        type_,
+        flags: 0,
+    }
 }
 
 fn event_from_midi(ev: &MidiEvent) -> ClapEvent {
     match ev.message {
-        MidiMessage::NoteOn { channel, note, velocity } => ClapEvent::Note(clap_event_note {
+        MidiMessage::NoteOn {
+            channel,
+            note,
+            velocity,
+        } => ClapEvent::Note(clap_event_note {
             header: header(size_of::<clap_event_note>(), ev.frame, CLAP_EVENT_NOTE_ON),
             note_id: -1,
             port_index: 0,
@@ -437,7 +494,11 @@ fn event_from_midi(ev: &MidiEvent) -> ClapEvent {
             key: note as i16,
             velocity: velocity as f64 / 127.0,
         }),
-        MidiMessage::NoteOff { channel, note, velocity } => ClapEvent::Note(clap_event_note {
+        MidiMessage::NoteOff {
+            channel,
+            note,
+            velocity,
+        } => ClapEvent::Note(clap_event_note {
             header: header(size_of::<clap_event_note>(), ev.frame, CLAP_EVENT_NOTE_OFF),
             note_id: -1,
             port_index: 0,
@@ -448,7 +509,11 @@ fn event_from_midi(ev: &MidiEvent) -> ClapEvent {
         ref other => {
             let mut data = [0u8; 3];
             other.to_bytes(&mut data);
-            ClapEvent::Midi(clap_event_midi { header: header(size_of::<clap_event_midi>(), ev.frame, CLAP_EVENT_MIDI), port_index: 0, data })
+            ClapEvent::Midi(clap_event_midi {
+                header: header(size_of::<clap_event_midi>(), ev.frame, CLAP_EVENT_MIDI),
+                port_index: 0,
+                data,
+            })
         }
     }
 }
@@ -459,18 +524,30 @@ unsafe extern "C" fn in_events_size(list: *const clap_input_events) -> u32 {
     events.len() as u32
 }
 
-unsafe extern "C" fn in_events_get(list: *const clap_input_events, index: u32) -> *const clap_event_header {
+unsafe extern "C" fn in_events_get(
+    list: *const clap_input_events,
+    index: u32,
+) -> *const clap_event_header {
     // SAFETY: as in `in_events_size`.
     let events = unsafe { &*((*list).ctx as *const Vec<ClapEvent>) };
-    events.get(index as usize).map_or(ptr::null(), ClapEvent::header)
+    events
+        .get(index as usize)
+        .map_or(ptr::null(), ClapEvent::header)
 }
 
-unsafe extern "C" fn out_events_try_push(_list: *const clap_output_events, _event: *const clap_event_header) -> bool {
+unsafe extern "C" fn out_events_try_push(
+    _list: *const clap_output_events,
+    _event: *const clap_event_header,
+) -> bool {
     // Output events (parameter gestures, note ends) are accepted and dropped.
     true
 }
 
-unsafe extern "C" fn ostream_write(stream: *const clap_ostream, buffer: *const c_void, size: u64) -> i64 {
+unsafe extern "C" fn ostream_write(
+    stream: *const clap_ostream,
+    buffer: *const c_void,
+    size: u64,
+) -> i64 {
     // SAFETY: `ctx` is the `Vec<u8>` set by `save_state`; the plugin hands
     // us `size` readable bytes.
     let out = unsafe { &mut *((*stream).ctx as *mut Vec<u8>) };
@@ -484,7 +561,11 @@ struct ReadCursor<'a> {
     pos: usize,
 }
 
-unsafe extern "C" fn istream_read(stream: *const clap_istream, buffer: *mut c_void, size: u64) -> i64 {
+unsafe extern "C" fn istream_read(
+    stream: *const clap_istream,
+    buffer: *mut c_void,
+    size: u64,
+) -> i64 {
     // SAFETY: `ctx` is the `ReadCursor` set by `load_state`; the plugin hands
     // us `size` writable bytes.
     let cursor = unsafe { &mut *((*stream).ctx as *mut ReadCursor<'_>) };
@@ -496,7 +577,9 @@ unsafe extern "C" fn istream_read(stream: *const clap_istream, buffer: *mut c_vo
 }
 
 fn transport_event(ctx: &ProcessContext<'_>) -> clap_event_transport {
-    let mut flags = CLAP_TRANSPORT_HAS_TEMPO | CLAP_TRANSPORT_HAS_BEATS_TIMELINE | CLAP_TRANSPORT_HAS_SECONDS_TIMELINE;
+    let mut flags = CLAP_TRANSPORT_HAS_TEMPO
+        | CLAP_TRANSPORT_HAS_BEATS_TIMELINE
+        | CLAP_TRANSPORT_HAS_SECONDS_TIMELINE;
     if ctx.time.rolling {
         flags |= CLAP_TRANSPORT_IS_PLAYING;
     }
@@ -640,7 +723,10 @@ impl ClapPlugin {
 
     fn refresh_ports(&mut self) {
         // Without the extension CLAP mandates nothing; assume a stereo effect.
-        self.ports = AudioPortLayout { inputs: 2, outputs: 2 };
+        self.ports = AudioPortLayout {
+            inputs: 2,
+            outputs: 2,
+        };
         if self.ext_audio_ports.is_null() {
             return;
         }
@@ -661,7 +747,10 @@ impl ClapPlugin {
                 0
             }
         };
-        self.ports = AudioPortLayout { inputs: channels(true), outputs: channels(false) };
+        self.ports = AudioPortLayout {
+            inputs: channels(true),
+            outputs: channels(false),
+        };
     }
 
     fn refresh_latency(&mut self) {
@@ -689,7 +778,10 @@ impl ClapPlugin {
                 size: Some(in_events_size),
                 get: Some(in_events_get),
             };
-            let out_list = clap_output_events { ctx: ptr::null_mut(), try_push: Some(out_events_try_push) };
+            let out_list = clap_output_events {
+                ctx: ptr::null_mut(),
+                try_push: Some(out_events_try_push),
+            };
             // SAFETY: both lists point at stack data that outlives the call.
             unsafe { flush(self.plugin, &in_list, &out_list) };
         }
@@ -725,23 +817,41 @@ impl PluginInstance for ClapPlugin {
             return Err(msg("plugin has no params extension"));
         }
         // SAFETY: extension pointer from the plugin.
-        let get_value = unsafe { (*self.ext_params).get_value }.ok_or_else(|| msg("params.get_value is missing"))?;
+        let get_value = unsafe { (*self.ext_params).get_value }
+            .ok_or_else(|| msg("params.get_value is missing"))?;
         let mut value = 0.0;
         // SAFETY: `value` is a valid out-parameter.
         if unsafe { get_value(self.plugin, id, &mut value) } {
             Ok(value)
         } else {
-            Err(SuperbError::NotFound { kind: "param", id: id as u64 })
+            Err(SuperbError::NotFound {
+                kind: "param",
+                id: id as u64,
+            })
         }
     }
 
     fn set_param(&mut self, id: u32, value: f64) -> Result<()> {
-        let index = self.params.iter().position(|p| p.id == id).ok_or(SuperbError::NotFound { kind: "param", id: id as u64 })?;
+        let index = self
+            .params
+            .iter()
+            .position(|p| p.id == id)
+            .ok_or(SuperbError::NotFound {
+                kind: "param",
+                id: id as u64,
+            })?;
         if self.events.len() >= self.events.capacity() {
-            return Err(SuperbError::CapacityExceeded { what: "plugin event queue", capacity: self.events.capacity() });
+            return Err(SuperbError::CapacityExceeded {
+                what: "plugin event queue",
+                capacity: self.events.capacity(),
+            });
         }
         self.events.push(ClapEvent::Param(clap_event_param_value {
-            header: header(size_of::<clap_event_param_value>(), 0, CLAP_EVENT_PARAM_VALUE),
+            header: header(
+                size_of::<clap_event_param_value>(),
+                0,
+                CLAP_EVENT_PARAM_VALUE,
+            ),
             param_id: id,
             cookie: self.cookies[index],
             note_id: -1,
@@ -764,7 +874,8 @@ impl PluginInstance for ClapPlugin {
             return Err(SuperbError::InvalidArgument { what: "max_frames" });
         }
         // SAFETY: `plugin` is valid until `drop`.
-        let activate = unsafe { (*self.plugin).activate }.ok_or_else(|| msg("plugin.activate is missing"))?;
+        let activate =
+            unsafe { (*self.plugin).activate }.ok_or_else(|| msg("plugin.activate is missing"))?;
         // SAFETY: activate on an inactive plugin, main thread.
         if !unsafe { activate(self.plugin, sample_rate.as_f64(), 1, max_frames as u32) } {
             return Err(msg(format!("{}: activate failed", self.descriptor.name)));
@@ -803,7 +914,12 @@ impl PluginInstance for ClapPlugin {
         }
     }
 
-    fn process(&mut self, ctx: &ProcessContext<'_>, input: &PlanarBuffer, output: &mut PlanarBuffer) -> ProcessStatus {
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
         if !self.active {
             return ProcessStatus::Silent;
         }
@@ -836,11 +952,18 @@ impl PluginInstance for ClapPlugin {
             self.in_ptrs.push(input.channel(ch).as_ptr() as *mut f32);
         }
         self.out_ptrs.clear();
-        for plane in output.planes_mut().take(self.ports.outputs.min(MAX_CHANNELS)) {
+        for plane in output
+            .planes_mut()
+            .take(self.ports.outputs.min(MAX_CHANNELS))
+        {
             self.out_ptrs.push(plane.as_mut_ptr());
         }
         let in_channels = self.in_ptrs.len();
-        let constant_mask = if ctx.input_is_silent && in_channels > 0 { u64::MAX >> (64 - in_channels) } else { 0 };
+        let constant_mask = if ctx.input_is_silent && in_channels > 0 {
+            u64::MAX >> (64 - in_channels)
+        } else {
+            0
+        };
         let in_buf = clap_audio_buffer {
             data32: self.in_ptrs.as_mut_ptr(),
             data64: ptr::null_mut(),
@@ -861,7 +984,10 @@ impl PluginInstance for ClapPlugin {
             size: Some(in_events_size),
             get: Some(in_events_get),
         };
-        let out_list = clap_output_events { ctx: ptr::null_mut(), try_push: Some(out_events_try_push) };
+        let out_list = clap_output_events {
+            ctx: ptr::null_mut(),
+            try_push: Some(out_events_try_push),
+        };
         let proc_desc = clap_process {
             steady_time: self.steady_time,
             frames_count: ctx.frames as u32,
@@ -901,7 +1027,10 @@ impl PluginInstance for ClapPlugin {
         // SAFETY: extension pointer from the plugin.
         let save = unsafe { (*self.ext_state).save }.ok_or_else(|| msg("state.save is missing"))?;
         let mut out = Vec::new();
-        let stream = clap_ostream { ctx: &mut out as *mut Vec<u8> as *mut c_void, write: Some(ostream_write) };
+        let stream = clap_ostream {
+            ctx: &mut out as *mut Vec<u8> as *mut c_void,
+            write: Some(ostream_write),
+        };
         // SAFETY: the stream points at `out`, which outlives the call.
         if unsafe { save(self.plugin, &stream) } {
             Ok(out)
@@ -916,8 +1045,14 @@ impl PluginInstance for ClapPlugin {
         }
         // SAFETY: extension pointer from the plugin.
         let load = unsafe { (*self.ext_state).load }.ok_or_else(|| msg("state.load is missing"))?;
-        let mut cursor = ReadCursor { data: bytes, pos: 0 };
-        let stream = clap_istream { ctx: &mut cursor as *mut ReadCursor<'_> as *mut c_void, read: Some(istream_read) };
+        let mut cursor = ReadCursor {
+            data: bytes,
+            pos: 0,
+        };
+        let stream = clap_istream {
+            ctx: &mut cursor as *mut ReadCursor<'_> as *mut c_void,
+            read: Some(istream_read),
+        };
         // SAFETY: the stream points at `cursor`, which outlives the call.
         if unsafe { load(self.plugin, &stream) } {
             Ok(())
@@ -972,7 +1107,16 @@ mod tests {
     }
 
     fn ctx<'a>(midi: &'a MidiEventBuffer, frames: usize, silent: bool) -> ProcessContext<'a> {
-        ProcessContext { sample_rate: R, frames, time: BlockTime { rolling: true, ..BlockTime::free_running() }, midi, input_is_silent: silent }
+        ProcessContext {
+            sample_rate: R,
+            frames,
+            time: BlockTime {
+                rolling: true,
+                ..BlockTime::free_running()
+            },
+            midi,
+            input_is_silent: silent,
+        }
     }
 
     fn ramp(frames: usize) -> PlanarBuffer {
@@ -1011,10 +1155,25 @@ mod tests {
         let b = bundle();
         let mut p = b.instantiate(TEST_PLUGIN_ID).unwrap();
         assert_eq!(test_plugin::live_instances(), 1);
-        assert_eq!(p.ports(), AudioPortLayout { inputs: 2, outputs: 2 });
+        assert_eq!(
+            p.ports(),
+            AudioPortLayout {
+                inputs: 2,
+                outputs: 2
+            }
+        );
         assert_eq!(p.params().len(), 2);
         let gain = &p.params()[0];
-        assert_eq!((gain.id, gain.name.as_str(), gain.min, gain.max, gain.default), (7, "Gain", 0.0, 2.0, 1.0));
+        assert_eq!(
+            (
+                gain.id,
+                gain.name.as_str(),
+                gain.min,
+                gain.max,
+                gain.default
+            ),
+            (7, "Gain", 0.0, 2.0, 1.0)
+        );
         assert!(gain.automatable && !gain.readonly && !gain.hidden);
         assert_eq!(p.params()[1].module, "Diagnostics");
         assert!(p.params()[1].readonly && p.params()[1].hidden);
@@ -1027,7 +1186,10 @@ mod tests {
         assert!(p.is_active());
         assert_eq!(p.latency_frames(), 16);
         assert!(p.activate(R, 0).is_err());
-        assert!(!p.is_active(), "a failed re-activate leaves the plugin inactive");
+        assert!(
+            !p.is_active(),
+            "a failed re-activate leaves the plugin inactive"
+        );
         assert!(p.supports_state());
         assert!(format!("{p:?}").contains(TEST_PLUGIN_ID));
         drop(p);
@@ -1049,22 +1211,34 @@ mod tests {
         let midi = MidiEventBuffer::with_capacity(0);
         let input = ramp(8);
         let mut output = PlanarBuffer::new(2, 8);
-        assert_eq!(p.process(&ctx(&midi, 8, false), &input, &mut output), ProcessStatus::Normal);
+        assert_eq!(
+            p.process(&ctx(&midi, 8, false), &input, &mut output),
+            ProcessStatus::Normal
+        );
         assert_eq!(p.param_value(7).unwrap(), 0.5);
         assert_eq!(output.channel(0), &[0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]);
         assert_eq!(output.channel(1)[7], -4.0);
-        assert_eq!(p.last_process_status(), clap_sys::process::CLAP_PROCESS_CONTINUE);
+        assert_eq!(
+            p.last_process_status(),
+            clap_sys::process::CLAP_PROCESS_CONTINUE
+        );
         assert_eq!(p.process_errors(), 0);
         assert!(test_plugin::saw_transport_playing());
         assert_eq!(test_plugin::blocks_processed() - blocks_before, 1);
 
         // Silent input: constant mask set, plugin reports sleep -> Silent.
-        assert_eq!(p.process(&ctx(&midi, 8, true), &input, &mut output), ProcessStatus::Silent);
+        assert_eq!(
+            p.process(&ctx(&midi, 8, true), &input, &mut output),
+            ProcessStatus::Silent
+        );
         assert_eq!(p.last_process_status(), CLAP_PROCESS_SLEEP);
 
         p.reset();
         p.deactivate();
-        assert_eq!(p.process(&ctx(&midi, 8, false), &input, &mut output), ProcessStatus::Silent);
+        assert_eq!(
+            p.process(&ctx(&midi, 8, false), &input, &mut output),
+            ProcessStatus::Silent
+        );
         assert_eq!(p.take_requests(), HostRequests::default());
     }
 
@@ -1077,20 +1251,52 @@ mod tests {
         p.activate(R, 16).unwrap();
         let ch = MidiChannel::new(3).unwrap();
         let mut midi = MidiEventBuffer::with_capacity(8);
-        midi.push(MidiEvent { frame: 2, message: MidiMessage::NoteOn { channel: ch, note: 60, velocity: 127 } }).unwrap();
-        midi.push(MidiEvent { frame: 5, message: MidiMessage::NoteOff { channel: ch, note: 60, velocity: 0 } }).unwrap();
-        midi.push(MidiEvent { frame: 9, message: MidiMessage::ControlChange { channel: ch, controller: 1, value: 64 } }).unwrap();
+        midi.push(MidiEvent {
+            frame: 2,
+            message: MidiMessage::NoteOn {
+                channel: ch,
+                note: 60,
+                velocity: 127,
+            },
+        })
+        .unwrap();
+        midi.push(MidiEvent {
+            frame: 5,
+            message: MidiMessage::NoteOff {
+                channel: ch,
+                note: 60,
+                velocity: 0,
+            },
+        })
+        .unwrap();
+        midi.push(MidiEvent {
+            frame: 9,
+            message: MidiMessage::ControlChange {
+                channel: ch,
+                controller: 1,
+                value: 64,
+            },
+        })
+        .unwrap();
         let input = ramp(16);
         let mut output = PlanarBuffer::new(2, 16);
         p.process(&ctx(&midi, 16, false), &input, &mut output);
-        assert_eq!(p.param_value(8).unwrap(), 1.0, "one note-on counted (hidden diagnostic param)");
+        assert_eq!(
+            p.param_value(8).unwrap(),
+            1.0,
+            "one note-on counted (hidden diagnostic param)"
+        );
         assert_eq!(test_plugin::last_note(), (3, 60, 2));
         assert_eq!(test_plugin::raw_midi_seen() - raw_before, 1);
         // Requests raised by the plugin surface through the host flags.
         test_plugin::ask_for_restart();
         let req = p.take_requests();
         assert!(req.restart && !req.process && !req.callback);
-        assert_eq!(p.take_requests(), HostRequests::default(), "cleared on read");
+        assert_eq!(
+            p.take_requests(),
+            HostRequests::default(),
+            "cleared on read"
+        );
         p.on_main_thread();
     }
 
@@ -1106,7 +1312,10 @@ mod tests {
         assert_eq!(c.param_value(7).unwrap(), 1.0);
         c.load_state(&state).unwrap();
         assert_eq!(c.param_value(7).unwrap(), 1.75);
-        assert!(c.load_state(&state[..3]).is_err(), "short stream is rejected by the plugin");
+        assert!(
+            c.load_state(&state[..3]).is_err(),
+            "short stream is rejected by the plugin"
+        );
         assert_eq!(test_plugin::live_instances(), 2);
         drop(a);
         drop(c);
@@ -1127,13 +1336,27 @@ mod tests {
         g.connect(src, fx).unwrap();
         g.set_output(fx).unwrap();
         g.prepare(R, 32).unwrap();
-        assert_eq!(g.latency_frames(), 16, "reported through Node::latency_frames after activation");
+        assert_eq!(
+            g.latency_frames(),
+            16,
+            "reported through Node::latency_frames after activation"
+        );
         tx.push(crate::ParamChange { id: 7, value: 2.0 }).unwrap();
-        g.process(BlockTime::free_running(), 32, &MidiEventBuffer::with_capacity(0)).unwrap();
+        g.process(
+            BlockTime::free_running(),
+            32,
+            &MidiEventBuffer::with_capacity(0),
+        )
+        .unwrap();
         assert_eq!(g.output().channel(1), &[2.0; 32]);
         // The bundle outlives the graph's instance: dropping our Arc first is fine.
         drop(b);
-        g.process(BlockTime::free_running(), 32, &MidiEventBuffer::with_capacity(0)).unwrap();
+        g.process(
+            BlockTime::free_running(),
+            32,
+            &MidiEventBuffer::with_capacity(0),
+        )
+        .unwrap();
         drop(g);
         assert_eq!(test_plugin::live_instances(), 0);
     }
@@ -1148,7 +1371,10 @@ mod tests {
         assert!(ClapBundle::load(&file).is_err());
         let bundle_dir = dir.join("empty.clap");
         std::fs::create_dir_all(&bundle_dir).unwrap();
-        assert!(ClapBundle::load(&bundle_dir).unwrap_err().to_string().contains("Contents/MacOS"));
+        assert!(ClapBundle::load(&bundle_dir)
+            .unwrap_err()
+            .to_string()
+            .contains("Contents/MacOS"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

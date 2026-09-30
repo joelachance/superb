@@ -98,8 +98,17 @@ impl TempoMap {
     pub fn new(rate: SampleRate, bpm: f64) -> Self {
         let mut map = Self {
             rate,
-            tempos: vec![TempoPoint { beat: BeatPosition::ZERO, bpm: 120.0, ramp: false, seconds: 0.0 }],
-            meters: vec![MeterPoint { bar: 1, signature: TimeSignature::FOUR_FOUR, beat: BeatPosition::ZERO }],
+            tempos: vec![TempoPoint {
+                beat: BeatPosition::ZERO,
+                bpm: 120.0,
+                ramp: false,
+                seconds: 0.0,
+            }],
+            meters: vec![MeterPoint {
+                bar: 1,
+                signature: TimeSignature::FOUR_FOUR,
+                beat: BeatPosition::ZERO,
+            }],
         };
         map.set_initial_tempo(bpm).expect("invalid initial tempo");
         map
@@ -165,13 +174,19 @@ impl TempoMap {
 
     /// Sets or clears the ramp flag of the tempo point at exactly `beat`.
     pub fn set_tempo_ramp(&mut self, beat: BeatPosition, ramp: bool) -> Result<()> {
-        match self.tempos.binary_search_by(|p| p.beat.partial_cmp(&beat).expect("finite")) {
+        match self
+            .tempos
+            .binary_search_by(|p| p.beat.partial_cmp(&beat).expect("finite"))
+        {
             Ok(i) => {
                 self.tempos[i].ramp = ramp;
                 self.rebuild();
                 Ok(())
             }
-            Err(_) => Err(SuperbError::NotFound { kind: "tempo point", id: 0 }),
+            Err(_) => Err(SuperbError::NotFound {
+                kind: "tempo point",
+                id: 0,
+            }),
         }
     }
 
@@ -180,12 +195,23 @@ impl TempoMap {
         if !beat.is_finite() || beat.beats() < 0.0 {
             return Err(SuperbError::InvalidArgument { what: "tempo beat" });
         }
-        match self.tempos.binary_search_by(|p| p.beat.partial_cmp(&beat).expect("finite")) {
+        match self
+            .tempos
+            .binary_search_by(|p| p.beat.partial_cmp(&beat).expect("finite"))
+        {
             Ok(i) => {
                 self.tempos[i].bpm = bpm;
                 self.tempos[i].ramp = ramp;
             }
-            Err(i) => self.tempos.insert(i, TempoPoint { beat, bpm, ramp, seconds: 0.0 }),
+            Err(i) => self.tempos.insert(
+                i,
+                TempoPoint {
+                    beat,
+                    bpm,
+                    ramp,
+                    seconds: 0.0,
+                },
+            ),
         }
         self.rebuild();
         Ok(())
@@ -194,15 +220,23 @@ impl TempoMap {
     /// Removes the tempo change at exactly `beat`. The point at beat zero cannot be removed.
     pub fn remove_tempo(&mut self, beat: BeatPosition) -> Result<()> {
         if beat == BeatPosition::ZERO {
-            return Err(SuperbError::InvalidArgument { what: "cannot remove initial tempo" });
+            return Err(SuperbError::InvalidArgument {
+                what: "cannot remove initial tempo",
+            });
         }
-        match self.tempos.binary_search_by(|p| p.beat.partial_cmp(&beat).expect("finite")) {
+        match self
+            .tempos
+            .binary_search_by(|p| p.beat.partial_cmp(&beat).expect("finite"))
+        {
             Ok(i) => {
                 self.tempos.remove(i);
                 self.rebuild();
                 Ok(())
             }
-            Err(_) => Err(SuperbError::NotFound { kind: "tempo point", id: 0 }),
+            Err(_) => Err(SuperbError::NotFound {
+                kind: "tempo point",
+                id: 0,
+            }),
         }
     }
 
@@ -217,7 +251,8 @@ impl TempoMap {
         let p = &self.tempos[i];
         match self.tempos.get(i + 1) {
             Some(n) if p.ramp => {
-                let t = ((beat.beats() - p.beat.beats()) / (n.beat.beats() - p.beat.beats())).clamp(0.0, 1.0);
+                let t = ((beat.beats() - p.beat.beats()) / (n.beat.beats() - p.beat.beats()))
+                    .clamp(0.0, 1.0);
                 p.bpm + (n.bpm - p.bpm) * t
             }
             _ => p.bpm,
@@ -231,11 +266,20 @@ impl TempoMap {
     /// Adds (or replaces) a meter change starting at 1-based `bar`.
     pub fn add_meter(&mut self, bar: u32, signature: TimeSignature) -> Result<()> {
         if bar == 0 {
-            return Err(SuperbError::InvalidArgument { what: "bar (1-based)" });
+            return Err(SuperbError::InvalidArgument {
+                what: "bar (1-based)",
+            });
         }
         match self.meters.binary_search_by_key(&bar, |m| m.bar) {
             Ok(i) => self.meters[i].signature = signature,
-            Err(i) => self.meters.insert(i, MeterPoint { bar, signature, beat: BeatPosition::ZERO }),
+            Err(i) => self.meters.insert(
+                i,
+                MeterPoint {
+                    bar,
+                    signature,
+                    beat: BeatPosition::ZERO,
+                },
+            ),
         }
         self.rebuild();
         Ok(())
@@ -244,7 +288,9 @@ impl TempoMap {
     /// Removes the meter change at `bar`. Bar 1 cannot be removed.
     pub fn remove_meter(&mut self, bar: u32) -> Result<()> {
         if bar <= 1 {
-            return Err(SuperbError::InvalidArgument { what: "cannot remove initial meter" });
+            return Err(SuperbError::InvalidArgument {
+                what: "cannot remove initial meter",
+            });
         }
         match self.meters.binary_search_by_key(&bar, |m| m.bar) {
             Ok(i) => {
@@ -252,7 +298,10 @@ impl TempoMap {
                 self.rebuild();
                 Ok(())
             }
-            Err(_) => Err(SuperbError::NotFound { kind: "meter point", id: bar as u64 }),
+            Err(_) => Err(SuperbError::NotFound {
+                kind: "meter point",
+                id: bar as u64,
+            }),
         }
     }
 
@@ -279,13 +328,18 @@ impl TempoMap {
 
     /// Beat position at `seconds` (negative seconds extrapolate the first tempo).
     pub fn seconds_to_beat(&self, seconds: f64) -> BeatPosition {
-        let idx = match self.tempos.binary_search_by(|p| p.seconds.partial_cmp(&seconds).expect("finite")) {
+        let idx = match self
+            .tempos
+            .binary_search_by(|p| p.seconds.partial_cmp(&seconds).expect("finite"))
+        {
             Ok(i) => i,
             Err(0) => 0,
             Err(i) => i - 1,
         };
         let p = &self.tempos[idx];
-        BeatPosition::new(p.beat.beats() + beats_in_segment(p, self.tempos.get(idx + 1), seconds - p.seconds))
+        BeatPosition::new(
+            p.beat.beats() + beats_in_segment(p, self.tempos.get(idx + 1), seconds - p.seconds),
+        )
     }
 
     /// Sample position of `beat` (rounded to the nearest sample).
@@ -306,7 +360,11 @@ impl TempoMap {
     /// Converts a beat position to bars/beats/ticks. Negative beats clamp to `1.1.000`.
     pub fn beat_to_bbt(&self, beat: BeatPosition) -> Bbt {
         if beat.beats() <= 0.0 {
-            return Bbt { bar: 1, beat: 1, tick: 0 };
+            return Bbt {
+                bar: 1,
+                beat: 1,
+                tick: 0,
+            };
         }
         let m = &self.meters[self.meter_index_for_beat(beat)];
         let bar_len = m.signature.bar_length().beats();
@@ -329,13 +387,19 @@ impl TempoMap {
                 bar_idx += 1;
             }
         }
-        Bbt { bar: m.bar + bar_idx, beat: beat_idx + 1, tick }
+        Bbt {
+            bar: m.bar + bar_idx,
+            beat: beat_idx + 1,
+            tick,
+        }
     }
 
     /// Converts bars/beats/ticks to a beat position.
     pub fn bbt_to_beat(&self, bbt: Bbt) -> Result<BeatPosition> {
         if bbt.bar == 0 || bbt.beat == 0 {
-            return Err(SuperbError::InvalidArgument { what: "bbt (1-based bar/beat)" });
+            return Err(SuperbError::InvalidArgument {
+                what: "bbt (1-based bar/beat)",
+            });
         }
         let idx = match self.meters.binary_search_by_key(&bbt.bar, |m| m.bar) {
             Ok(i) => i,
@@ -356,7 +420,12 @@ impl TempoMap {
     /// Beat position of the start of the bar containing `beat`.
     pub fn bar_start(&self, beat: BeatPosition) -> BeatPosition {
         let bbt = self.beat_to_bbt(beat);
-        self.bbt_to_beat(Bbt { bar: bbt.bar, beat: 1, tick: 0 }).expect("valid bbt")
+        self.bbt_to_beat(Bbt {
+            bar: bbt.bar,
+            beat: 1,
+            tick: 0,
+        })
+        .expect("valid bbt")
     }
 
     // ------------------------------------------------------------------
@@ -364,7 +433,10 @@ impl TempoMap {
     // ------------------------------------------------------------------
 
     fn tempo_index_for_beat(&self, beat: BeatPosition) -> usize {
-        match self.tempos.binary_search_by(|p| p.beat.partial_cmp(&beat).expect("finite")) {
+        match self
+            .tempos
+            .binary_search_by(|p| p.beat.partial_cmp(&beat).expect("finite"))
+        {
             Ok(i) => i,
             Err(0) => 0,
             Err(i) => i - 1,
@@ -372,7 +444,10 @@ impl TempoMap {
     }
 
     fn meter_index_for_beat(&self, beat: BeatPosition) -> usize {
-        match self.meters.binary_search_by(|m| m.beat.partial_cmp(&beat).expect("finite")) {
+        match self
+            .meters
+            .binary_search_by(|m| m.beat.partial_cmp(&beat).expect("finite"))
+        {
             Ok(i) => i,
             Err(0) => 0,
             Err(i) => i - 1,
@@ -394,7 +469,8 @@ impl TempoMap {
         for i in 0..self.meters.len() {
             if i > 0 {
                 let prev = self.meters[i - 1];
-                beat += (self.meters[i].bar - prev.bar) as f64 * prev.signature.bar_length().beats();
+                beat +=
+                    (self.meters[i].bar - prev.bar) as f64 * prev.signature.bar_length().beats();
             }
             self.meters[i].beat = BeatPosition::new(beat);
         }
@@ -416,9 +492,19 @@ mod tests {
         let map = TempoMap::new(R48, 120.0);
         assert!(approx(map.beat_to_seconds(BeatPosition::new(4.0)), 2.0));
         assert!(approx(map.seconds_to_beat(2.0).beats(), 4.0));
-        assert_eq!(map.beat_to_samples(BeatPosition::new(1.0)).samples(), 24_000);
-        assert!(approx(map.samples_to_beat(TimePosition::from_samples(96_000)).beats(), 4.0));
-        assert!(approx(map.samples_per_beat_at(BeatPosition::ZERO), 24_000.0));
+        assert_eq!(
+            map.beat_to_samples(BeatPosition::new(1.0)).samples(),
+            24_000
+        );
+        assert!(approx(
+            map.samples_to_beat(TimePosition::from_samples(96_000))
+                .beats(),
+            4.0
+        ));
+        assert!(approx(
+            map.samples_per_beat_at(BeatPosition::ZERO),
+            24_000.0
+        ));
         assert_eq!(map.tempo_at(BeatPosition::new(1e9)), 120.0);
     }
 
@@ -448,7 +534,11 @@ mod tests {
     fn round_trip_through_many_tempo_changes() {
         let mut map = TempoMap::new(R48, 100.0);
         for i in 1..50 {
-            map.add_tempo(BeatPosition::new(i as f64 * 3.0), 60.0 + (i % 7) as f64 * 17.0).unwrap();
+            map.add_tempo(
+                BeatPosition::new(i as f64 * 3.0),
+                60.0 + (i % 7) as f64 * 17.0,
+            )
+            .unwrap();
         }
         for i in 0..2000 {
             let beat = BeatPosition::new(i as f64 * 0.0773);
@@ -476,12 +566,21 @@ mod tests {
         assert!(approx(map.tempo_at(BeatPosition::new(1.0)), 105.0));
         assert!(approx(map.tempo_at(BeatPosition::new(2.0)), 90.0));
         assert!(approx(map.tempo_at(BeatPosition::new(4.0)), 60.0));
-        assert!(approx(map.tempo_at(BeatPosition::new(9.0)), 60.0), "held after the last point");
-        assert!(approx(map.tempo_at(BeatPosition::new(-3.0)), 120.0), "held before beat zero");
+        assert!(
+            approx(map.tempo_at(BeatPosition::new(9.0)), 60.0),
+            "held after the last point"
+        );
+        assert!(
+            approx(map.tempo_at(BeatPosition::new(-3.0)), 120.0),
+            "held before beat zero"
+        );
         // ∫0^4 60 / (120 - 15β) dβ = 4 ln 2 seconds.
         let s4 = map.beat_to_seconds(BeatPosition::new(4.0));
         assert!(approx(s4, 4.0 * 2f64.ln()), "{s4}");
-        assert!(approx(map.beat_to_seconds(BeatPosition::new(8.0)), s4 + 4.0));
+        assert!(approx(
+            map.beat_to_seconds(BeatPosition::new(8.0)),
+            s4 + 4.0
+        ));
         assert!(approx(map.seconds_to_beat(s4).beats(), 4.0));
         assert!(approx(map.seconds_to_beat(s4 + 4.0).beats(), 8.0));
         // Midway in time is *later* than midway in beats (tempo is slowing).
@@ -492,9 +591,15 @@ mod tests {
         // Ramp up as well as down, and a "ramp" between equal tempos is constant.
         map.add_tempo_ramp(BeatPosition::new(4.0), 60.0).unwrap();
         map.add_tempo(BeatPosition::new(8.0), 120.0).unwrap();
-        assert!(approx(map.beat_to_seconds(BeatPosition::new(8.0)), 2.0 * s4));
+        assert!(approx(
+            map.beat_to_seconds(BeatPosition::new(8.0)),
+            2.0 * s4
+        ));
         map.add_tempo(BeatPosition::new(8.0), 60.0).unwrap();
-        assert!(approx(map.beat_to_seconds(BeatPosition::new(8.0)), s4 + 4.0));
+        assert!(approx(
+            map.beat_to_seconds(BeatPosition::new(8.0)),
+            s4 + 4.0
+        ));
         // Clearing the flag restores the piecewise-constant behaviour.
         map.set_tempo_ramp(BeatPosition::ZERO, false).unwrap();
         assert!(approx(map.beat_to_seconds(BeatPosition::new(4.0)), 2.0));
@@ -514,9 +619,11 @@ mod tests {
         for i in 1..40 {
             let bpm = 50.0 + ((i * 37) % 150) as f64;
             if i % 3 == 0 {
-                map.add_tempo(BeatPosition::new(i as f64 * 2.5), bpm).unwrap();
+                map.add_tempo(BeatPosition::new(i as f64 * 2.5), bpm)
+                    .unwrap();
             } else {
-                map.add_tempo_ramp(BeatPosition::new(i as f64 * 2.5), bpm).unwrap();
+                map.add_tempo_ramp(BeatPosition::new(i as f64 * 2.5), bpm)
+                    .unwrap();
             }
         }
         let mut last_s = f64::NEG_INFINITY;
@@ -526,7 +633,10 @@ mod tests {
             assert!(s > last_s, "seconds must increase with beats");
             last_s = s;
             let back = map.seconds_to_beat(s);
-            assert!((back.beats() - beat.beats()).abs() < 1e-8, "beat {beat} -> {s} s -> {back}");
+            assert!(
+                (back.beats() - beat.beats()).abs() < 1e-8,
+                "beat {beat} -> {s} s -> {back}"
+            );
             let samples = map.beat_to_samples(beat);
             assert!((map.samples_to_beat(samples).beats() - beat.beats()).abs() < 1e-3);
         }
@@ -537,7 +647,14 @@ mod tests {
         let map = TempoMap::new(R48, 120.0);
         assert!(approx(map.beat_to_seconds(BeatPosition::new(-2.0)), -1.0));
         assert!(approx(map.seconds_to_beat(-1.0).beats(), -2.0));
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(-1.0)), Bbt { bar: 1, beat: 1, tick: 0 });
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(-1.0)),
+            Bbt {
+                bar: 1,
+                beat: 1,
+                tick: 0
+            }
+        );
     }
 
     #[test]
@@ -554,17 +671,72 @@ mod tests {
     #[test]
     fn bbt_in_four_four() {
         let map = TempoMap::new(R48, 120.0);
-        assert_eq!(map.beat_to_bbt(BeatPosition::ZERO), Bbt { bar: 1, beat: 1, tick: 0 });
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(4.0)), Bbt { bar: 2, beat: 1, tick: 0 });
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(5.5)), Bbt { bar: 2, beat: 2, tick: 480 });
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(7.9994)), Bbt { bar: 2, beat: 4, tick: 959 });
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::ZERO),
+            Bbt {
+                bar: 1,
+                beat: 1,
+                tick: 0
+            }
+        );
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(4.0)),
+            Bbt {
+                bar: 2,
+                beat: 1,
+                tick: 0
+            }
+        );
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(5.5)),
+            Bbt {
+                bar: 2,
+                beat: 2,
+                tick: 480
+            }
+        );
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(7.9994)),
+            Bbt {
+                bar: 2,
+                beat: 4,
+                tick: 959
+            }
+        );
         // rounding at the very end of a beat carries into the next bar
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(7.999_999_9)), Bbt { bar: 3, beat: 1, tick: 0 });
-        let b = map.bbt_to_beat(Bbt { bar: 3, beat: 4, tick: 240 }).unwrap();
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(7.999_999_9)),
+            Bbt {
+                bar: 3,
+                beat: 1,
+                tick: 0
+            }
+        );
+        let b = map
+            .bbt_to_beat(Bbt {
+                bar: 3,
+                beat: 4,
+                tick: 240,
+            })
+            .unwrap();
         assert!(approx(b.beats(), 8.0 + 3.0 + 0.25));
         assert_eq!(map.bar_start(BeatPosition::new(9.7)).beats(), 8.0);
-        assert!(map.bbt_to_beat(Bbt { bar: 0, beat: 1, tick: 0 }).is_err());
-        assert_eq!(Bbt { bar: 3, beat: 4, tick: 7 }.to_string(), "3.4.007");
+        assert!(map
+            .bbt_to_beat(Bbt {
+                bar: 0,
+                beat: 1,
+                tick: 0
+            })
+            .is_err());
+        assert_eq!(
+            Bbt {
+                bar: 3,
+                beat: 4,
+                tick: 7
+            }
+            .to_string(),
+            "3.4.007"
+        );
     }
 
     #[test]
@@ -572,25 +744,86 @@ mod tests {
         let mut map = TempoMap::new(R48, 120.0);
         // bars 1-2 in 4/4 (8 quarter notes), bar 3 onwards in 3/4
         map.add_meter(3, TimeSignature::new(3, 4).unwrap()).unwrap();
-        assert_eq!(map.meter_at(BeatPosition::new(7.9)), TimeSignature::FOUR_FOUR);
+        assert_eq!(
+            map.meter_at(BeatPosition::new(7.9)),
+            TimeSignature::FOUR_FOUR
+        );
         assert_eq!(map.meter_at(BeatPosition::new(8.0)).numerator(), 3);
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(8.0)), Bbt { bar: 3, beat: 1, tick: 0 });
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(11.0)), Bbt { bar: 4, beat: 1, tick: 0 });
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(13.0)), Bbt { bar: 4, beat: 3, tick: 0 });
-        assert!(approx(map.bbt_to_beat(Bbt { bar: 5, beat: 1, tick: 0 }).unwrap().beats(), 14.0));
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(8.0)),
+            Bbt {
+                bar: 3,
+                beat: 1,
+                tick: 0
+            }
+        );
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(11.0)),
+            Bbt {
+                bar: 4,
+                beat: 1,
+                tick: 0
+            }
+        );
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(13.0)),
+            Bbt {
+                bar: 4,
+                beat: 3,
+                tick: 0
+            }
+        );
+        assert!(approx(
+            map.bbt_to_beat(Bbt {
+                bar: 5,
+                beat: 1,
+                tick: 0
+            })
+            .unwrap()
+            .beats(),
+            14.0
+        ));
 
         // 6/8 counts eighth-note beats with 480 ticks each
         map.add_meter(5, TimeSignature::new(6, 8).unwrap()).unwrap();
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(14.5)), Bbt { bar: 5, beat: 2, tick: 0 });
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(14.25)), Bbt { bar: 5, beat: 1, tick: 240 });
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(17.0)), Bbt { bar: 6, beat: 1, tick: 0 });
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(14.5)),
+            Bbt {
+                bar: 5,
+                beat: 2,
+                tick: 0
+            }
+        );
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(14.25)),
+            Bbt {
+                bar: 5,
+                beat: 1,
+                tick: 240
+            }
+        );
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(17.0)),
+            Bbt {
+                bar: 6,
+                beat: 1,
+                tick: 0
+            }
+        );
 
         assert!(map.add_meter(0, TimeSignature::FOUR_FOUR).is_err());
         assert!(map.remove_meter(1).is_err());
         assert!(map.remove_meter(9).is_err());
         map.remove_meter(5).unwrap();
         assert_eq!(map.meter_points().len(), 2);
-        assert_eq!(map.beat_to_bbt(BeatPosition::new(17.0)), Bbt { bar: 6, beat: 1, tick: 0 });
+        assert_eq!(
+            map.beat_to_bbt(BeatPosition::new(17.0)),
+            Bbt {
+                bar: 6,
+                beat: 1,
+                tick: 0
+            }
+        );
     }
 
     #[test]
@@ -602,7 +835,10 @@ mod tests {
             let beat = BeatPosition::new(i as f64 * 0.125);
             let bbt = map.beat_to_bbt(beat);
             let back = map.bbt_to_beat(bbt).unwrap();
-            assert!((back.beats() - beat.beats()).abs() < 1e-9, "{beat} -> {bbt} -> {back}");
+            assert!(
+                (back.beats() - beat.beats()).abs() < 1e-9,
+                "{beat} -> {bbt} -> {back}"
+            );
         }
     }
 
@@ -611,7 +847,10 @@ mod tests {
         let mut map = TempoMap::new(R48, 120.0);
         let one_beat = map.beat_to_samples(BeatPosition::new(1.0));
         map.set_sample_rate(SampleRate::HZ_96K);
-        assert_eq!(map.beat_to_samples(BeatPosition::new(1.0)).samples(), one_beat.samples() * 2);
+        assert_eq!(
+            map.beat_to_samples(BeatPosition::new(1.0)).samples(),
+            one_beat.samples() * 2
+        );
         assert_eq!(map.sample_rate(), SampleRate::HZ_96K);
     }
 }

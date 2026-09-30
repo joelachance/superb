@@ -90,11 +90,17 @@ pub fn interleave_slices(planes: &[&[f32]], dst: &mut [f32]) -> Result<()> {
     let frames = planes[0].len();
     for p in planes {
         if p.len() != frames {
-            return Err(SuperbError::FrameMismatch { expected: frames, actual: p.len() });
+            return Err(SuperbError::FrameMismatch {
+                expected: frames,
+                actual: p.len(),
+            });
         }
     }
     if dst.len() != channels * frames {
-        return Err(SuperbError::FrameMismatch { expected: channels * frames, actual: dst.len() });
+        return Err(SuperbError::FrameMismatch {
+            expected: channels * frames,
+            actual: dst.len(),
+        });
     }
     for (ch, plane) in planes.iter().enumerate() {
         for (frame, &sample) in plane.iter().enumerate() {
@@ -109,10 +115,15 @@ pub fn interleave_slices(planes: &[&[f32]], dst: &mut [f32]) -> Result<()> {
 /// `dst` is resized (within its capacity) to `src.len() / channels` frames.
 pub fn deinterleave_slice(src: &[f32], channels: usize, dst: &mut PlanarBuffer) -> Result<()> {
     if channels == 0 || src.len() % channels != 0 {
-        return Err(SuperbError::InvalidArgument { what: "interleaved length not divisible by channels" });
+        return Err(SuperbError::InvalidArgument {
+            what: "interleaved length not divisible by channels",
+        });
     }
     if dst.channels() != channels {
-        return Err(SuperbError::ChannelMismatch { expected: dst.channels(), actual: channels });
+        return Err(SuperbError::ChannelMismatch {
+            expected: dst.channels(),
+            actual: channels,
+        });
     }
     let frames = src.len() / channels;
     dst.set_frames(frames)?;
@@ -139,7 +150,10 @@ mod tests {
         let mut inter = InterleavedBuffer::new(3, 5);
         interleave(&planar, &mut inter);
         // Golden vector: frame-major ordering.
-        assert_eq!(&inter.samples()[..6], &[0.0, 100.0, 200.0, 1.0, 101.0, 201.0]);
+        assert_eq!(
+            &inter.samples()[..6],
+            &[0.0, 100.0, 200.0, 1.0, 101.0, 201.0]
+        );
 
         let mut back = PlanarBuffer::new(3, 5);
         deinterleave(&inter, &mut back);

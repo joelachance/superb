@@ -170,10 +170,14 @@ impl GraphEditor {
     pub fn publish(&mut self) -> Result<()> {
         debug_assert_not_rt("GraphEditor::publish");
         self.try_reclaim();
-        let (sample_rate, max_frames) =
-            self.config.ok_or(SuperbError::InvalidArgument { what: "GraphEditor::configure was not called" })?;
+        let (sample_rate, max_frames) = self.config.ok_or(SuperbError::InvalidArgument {
+            what: "GraphEditor::configure was not called",
+        })?;
         if self.swaps.is_full() {
-            return Err(SuperbError::CapacityExceeded { what: "graph swap queue", capacity: self.swaps.capacity() });
+            return Err(SuperbError::CapacityExceeded {
+                what: "graph swap queue",
+                capacity: self.swaps.capacity(),
+            });
         }
         self.draft.prepare(sample_rate, max_frames)?;
         let ready = mem::take(&mut self.draft);
@@ -184,7 +188,10 @@ impl GraphEditor {
             }
             Err(GraphCommand::Swap(back)) => {
                 self.draft = *back;
-                Err(SuperbError::CapacityExceeded { what: "graph swap queue", capacity: self.swaps.capacity() })
+                Err(SuperbError::CapacityExceeded {
+                    what: "graph swap queue",
+                    capacity: self.swaps.capacity(),
+                })
             }
         }
     }
@@ -239,7 +246,8 @@ impl GraphEditor {
 
     /// Published graphs not yet applied or rejected.
     pub fn pending_count(&self) -> u64 {
-        self.published.saturating_sub(self.applied_count() + self.rejected_count())
+        self.published
+            .saturating_sub(self.applied_count() + self.rejected_count())
     }
 
     /// Retired graphs dropped or taken back so far.
@@ -337,7 +345,12 @@ impl LiveGraph {
     }
 
     /// Applies pending swaps, then processes the active graph. Allocation-free.
-    pub fn process(&mut self, time: BlockTime, frames: usize, midi: &MidiEventBuffer) -> Result<()> {
+    pub fn process(
+        &mut self,
+        time: BlockTime,
+        frames: usize,
+        midi: &MidiEventBuffer,
+    ) -> Result<()> {
         self.apply_pending();
         self.active.process(time, frames, midi)
     }
@@ -489,11 +502,14 @@ mod tests {
     }
 
     fn run(live: &mut LiveGraph, frames: usize) {
-        live.process(BlockTime::free_running(), frames, &no_midi()).unwrap();
+        live.process(BlockTime::free_running(), frames, &no_midi())
+            .unwrap();
     }
 
     fn publish_constant(editor: &mut GraphEditor, value: f32) {
-        let c = editor.graph_mut().add_node(Box::new(ConstantNode::new(value, 1)));
+        let c = editor
+            .graph_mut()
+            .add_node(Box::new(ConstantNode::new(value, 1)));
         editor.graph_mut().set_output(c).unwrap();
         editor.publish().unwrap();
     }
@@ -508,7 +524,12 @@ mod tests {
         fn channels(&self) -> NodeChannels {
             NodeChannels::generator(1)
         }
-        fn process(&mut self, _: &ProcessContext<'_>, _: &PlanarBuffer, out: &mut PlanarBuffer) -> ProcessStatus {
+        fn process(
+            &mut self,
+            _: &ProcessContext<'_>,
+            _: &PlanarBuffer,
+            out: &mut PlanarBuffer,
+        ) -> ProcessStatus {
             out.fill(1.0);
             ProcessStatus::Normal
         }
@@ -527,7 +548,10 @@ mod tests {
     fn publish_then_process_swaps_and_changes_output() {
         let (mut editor, mut live) = live_pair();
         editor.configure(R, 64);
-        assert_eq!(live.process(BlockTime::free_running(), 64, &no_midi()), Err(SuperbError::NotPrepared));
+        assert_eq!(
+            live.process(BlockTime::free_running(), 64, &no_midi()),
+            Err(SuperbError::NotPrepared)
+        );
 
         publish_constant(&mut editor, 0.25);
         assert!(live.has_pending());
@@ -554,7 +578,9 @@ mod tests {
     fn edits_land_mid_stream_without_stopping() {
         let (mut editor, mut live) = live_pair();
         editor.configure(R, 32);
-        let s = editor.graph_mut().add_node(Box::new(SineNode::new(1_000.0, 1.0, 1)));
+        let s = editor
+            .graph_mut()
+            .add_node(Box::new(SineNode::new(1_000.0, 1.0, 1)));
         let g = editor.graph_mut().add_node(Box::new(GainNode::new(0.5, 1)));
         editor.graph_mut().connect(s, g).unwrap();
         editor.graph_mut().set_output(g).unwrap();
@@ -565,9 +591,13 @@ mod tests {
             if block == 20 {
                 // Structural edit while the "stream" is running: a new chain
                 // with a different gain, no stop/prepare on the live side.
-                let s = editor.graph_mut().add_node(Box::new(SineNode::new(1_000.0, 1.0, 1)));
+                let s = editor
+                    .graph_mut()
+                    .add_node(Box::new(SineNode::new(1_000.0, 1.0, 1)));
                 let g = editor.graph_mut().add_node(Box::new(GainNode::new(0.1, 1)));
-                let p = editor.graph_mut().add_node(Box::new(PassThroughNode::new(1)));
+                let p = editor
+                    .graph_mut()
+                    .add_node(Box::new(PassThroughNode::new(1)));
                 editor.graph_mut().connect(s, g).unwrap();
                 editor.graph_mut().connect(g, p).unwrap();
                 editor.graph_mut().set_output(p).unwrap();
@@ -587,9 +617,14 @@ mod tests {
     #[test]
     fn publish_requires_configure_and_prepares_the_draft() {
         let (mut editor, mut live) = live_pair();
-        let c = editor.graph_mut().add_node(Box::new(ConstantNode::new(1.0, 1)));
+        let c = editor
+            .graph_mut()
+            .add_node(Box::new(ConstantNode::new(1.0, 1)));
         editor.graph_mut().set_output(c).unwrap();
-        assert!(matches!(editor.publish(), Err(SuperbError::InvalidArgument { .. })));
+        assert!(matches!(
+            editor.publish(),
+            Err(SuperbError::InvalidArgument { .. })
+        ));
         // Draft untouched by the failed publish.
         assert_eq!(editor.graph().node_count(), 1);
         assert!(editor.graph().is_dirty());
@@ -606,9 +641,14 @@ mod tests {
 
         // A prepare failure (max_frames == 0) leaves the draft intact.
         editor.configure(R, 0);
-        let c = editor.graph_mut().add_node(Box::new(ConstantNode::new(1.0, 1)));
+        let c = editor
+            .graph_mut()
+            .add_node(Box::new(ConstantNode::new(1.0, 1)));
         editor.graph_mut().set_output(c).unwrap();
-        assert!(matches!(editor.publish(), Err(SuperbError::InvalidArgument { .. })));
+        assert!(matches!(
+            editor.publish(),
+            Err(SuperbError::InvalidArgument { .. })
+        ));
         assert_eq!(editor.graph().node_count(), 1);
     }
 
@@ -618,9 +658,14 @@ mod tests {
         editor.configure(R, 8);
         publish_constant(&mut editor, 0.1);
         assert!(editor.is_busy());
-        let c = editor.graph_mut().add_node(Box::new(ConstantNode::new(0.2, 1)));
+        let c = editor
+            .graph_mut()
+            .add_node(Box::new(ConstantNode::new(0.2, 1)));
         editor.graph_mut().set_output(c).unwrap();
-        assert!(matches!(editor.publish(), Err(SuperbError::CapacityExceeded { .. })));
+        assert!(matches!(
+            editor.publish(),
+            Err(SuperbError::CapacityExceeded { .. })
+        ));
         assert_eq!(editor.graph().node_count(), 1);
         assert_eq!(editor.published_count(), 1);
         // Once the audio thread consumes the swap, the retry succeeds.
@@ -651,7 +696,12 @@ mod tests {
     fn retired_graphs_are_dropped_on_the_control_thread_only() {
         let drops = Arc::new(AtomicUsize::new(0));
         let on_rt = Arc::new(AtomicBool::new(false));
-        let probe = || Box::new(DropProbe { drops: Arc::clone(&drops), dropped_on_rt: Arc::clone(&on_rt) });
+        let probe = || {
+            Box::new(DropProbe {
+                drops: Arc::clone(&drops),
+                dropped_on_rt: Arc::clone(&on_rt),
+            })
+        };
 
         let (mut editor, mut live) = live_pair();
         editor.configure(R, 8);
@@ -749,8 +799,12 @@ mod tests {
     #[test]
     fn draft_still_rejects_cycles_and_bad_edges() {
         let (mut editor, _live) = live_pair();
-        let a = editor.graph_mut().add_node(Box::new(PassThroughNode::new(1)));
-        let b = editor.graph_mut().add_node(Box::new(PassThroughNode::new(1)));
+        let a = editor
+            .graph_mut()
+            .add_node(Box::new(PassThroughNode::new(1)));
+        let b = editor
+            .graph_mut()
+            .add_node(Box::new(PassThroughNode::new(1)));
         editor.graph_mut().connect(a, b).unwrap();
         assert_eq!(editor.graph_mut().connect(b, a), Err(SuperbError::Cycle));
         assert!(editor.graph_mut().connect(a, b).is_err());

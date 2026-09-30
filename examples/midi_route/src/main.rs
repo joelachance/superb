@@ -51,8 +51,15 @@ fn main() -> Result<()> {
     let channel = MidiChannel::new(0).unwrap();
     let note_on_us = engine.stream_clock_us() + 5_000;
     // map_err converts a full-queue push failure into SuperbError.
-    tx.push(TimestampedMessage { timestamp_us: note_on_us, message: MidiMessage::NoteOn { channel, note: 69, velocity: 127 } })
-        .map_err(|_| SuperbError::Message("midi queue full".into()))?;
+    tx.push(TimestampedMessage {
+        timestamp_us: note_on_us,
+        message: MidiMessage::NoteOn {
+            channel,
+            note: 69,
+            velocity: 127,
+        },
+    })
+    .map_err(|_| SuperbError::Message("midi queue full".into()))?;
 
     // PlanarBuffer: separate Vec per channel (not interleaved LRLR...).
     let mut out = PlanarBuffer::new(1, block);
@@ -75,8 +82,15 @@ fn main() -> Result<()> {
 
     // Second block: a note-off 2.5 ms in (frame 120).
     let note_off_us = engine.stream_clock_us() + 2_500;
-    tx.push(TimestampedMessage { timestamp_us: note_off_us, message: MidiMessage::NoteOff { channel, note: 69, velocity: 0 } })
-        .map_err(|_| SuperbError::Message("midi queue full".into()))?;
+    tx.push(TimestampedMessage {
+        timestamp_us: note_off_us,
+        message: MidiMessage::NoteOff {
+            channel,
+            note: 69,
+            velocity: 0,
+        },
+    })
+    .map_err(|_| SuperbError::Message("midi queue full".into()))?;
     engine.render(&mut out)?;
     // rposition finds the last non-zero sample index from the end.
     let last_sound = out.channel(0).iter().rposition(|&s| s != 0.0);

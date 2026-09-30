@@ -85,7 +85,9 @@ pub fn scan_directory(dir: impl AsRef<Path>, format: PluginFormat) -> Result<Sca
         return Err(crate::vst3::unsupported());
     }
     if !cfg!(feature = "clap") {
-        return Err(SuperbError::Message("CLAP hosting is disabled (feature `clap`)".into()));
+        return Err(SuperbError::Message(
+            "CLAP hosting is disabled (feature `clap`)".into(),
+        ));
     }
     let mut report = ScanReport::default();
     let mut bundles = Vec::new();
@@ -114,7 +116,10 @@ pub fn scan_default(format: PluginFormat) -> Result<ScanReport> {
 fn collect_bundles(dir: &Path, ext: &str, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     for entry in std::fs::read_dir(dir)? {
         let path = entry?.path();
-        if path.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext)) {
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(ext))
+        {
             // A `.clap` is a shared library on Linux/Windows and a directory
             // bundle on macOS; either way we stop descending here.
             out.push(path);
@@ -135,7 +140,10 @@ fn load_descriptors(bundle: &Path, _format: PluginFormat, report: &mut ScanRepor
 
 #[cfg(not(feature = "clap"))]
 fn load_descriptors(bundle: &Path, _format: PluginFormat, report: &mut ScanReport) {
-    report.failures.push((bundle.to_path_buf(), "CLAP hosting is disabled (feature `clap`)".into()));
+    report.failures.push((
+        bundle.to_path_buf(),
+        "CLAP hosting is disabled (feature `clap`)".into(),
+    ));
 }
 
 #[cfg(test)]
@@ -148,17 +156,25 @@ mod tests {
         let paths = default_search_paths(PluginFormat::Clap);
         assert!(paths.contains(&PathBuf::from("/tmp/superb-clap-a")));
         assert!(paths.contains(&PathBuf::from("/tmp/superb-clap-b")));
-        assert!(paths.len() >= 3, "platform defaults follow the env entries: {paths:?}");
+        assert!(
+            paths.len() >= 3,
+            "platform defaults follow the env entries: {paths:?}"
+        );
         assert!(paths.iter().all(|p| !p.as_os_str().is_empty()));
         let vst3 = default_search_paths(PluginFormat::Vst3);
         assert!(!vst3.is_empty());
-        assert!(vst3.iter().any(|p| p.to_string_lossy().to_ascii_lowercase().contains("vst3")));
+        assert!(vst3
+            .iter()
+            .any(|p| p.to_string_lossy().to_ascii_lowercase().contains("vst3")));
     }
 
     #[test]
     fn vst3_scanning_is_unsupported() {
         let dir = std::env::temp_dir();
-        assert_eq!(scan_directory(&dir, PluginFormat::Vst3).unwrap_err(), crate::vst3::unsupported());
+        assert_eq!(
+            scan_directory(&dir, PluginFormat::Vst3).unwrap_err(),
+            crate::vst3::unsupported()
+        );
     }
 
     #[cfg(feature = "clap")]
@@ -167,7 +183,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("superb-plugins-scan-{}", std::process::id()));
         let nested = dir.join("nested");
         std::fs::create_dir_all(&nested).unwrap();
-        std::fs::write(nested.join("not-a-plugin.clap"), b"definitely not an ELF file").unwrap();
+        std::fs::write(
+            nested.join("not-a-plugin.clap"),
+            b"definitely not an ELF file",
+        )
+        .unwrap();
         std::fs::write(dir.join("ignored.txt"), b"").unwrap();
         let report = scan_directory(&dir, PluginFormat::Clap).unwrap();
         assert!(report.plugins.is_empty());
@@ -175,7 +195,10 @@ mod tests {
         assert!(report.failures[0].0.ends_with("not-a-plugin.clap"));
         assert!(!report.failures[0].1.is_empty());
         std::fs::remove_dir_all(&dir).unwrap();
-        assert!(scan_directory(&dir, PluginFormat::Clap).is_err(), "unreadable directory");
+        assert!(
+            scan_directory(&dir, PluginFormat::Clap).is_err(),
+            "unreadable directory"
+        );
         // scan_default only visits directories that exist; never fails on CLAP.
         std::env::set_var("CLAP_PATH", dir.to_string_lossy().to_string());
         assert!(scan_default(PluginFormat::Clap).is_ok());

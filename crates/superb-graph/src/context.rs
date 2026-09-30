@@ -24,12 +24,24 @@ impl BlockTime {
     ///
     /// Use for free-running synths, offline unit tests and device warm-up.
     pub const fn free_running() -> Self {
-        Self { start: TimePosition::ZERO, rolling: false, wrapped: false, bpm: 120.0, beat_start: BeatPosition::ZERO }
+        Self {
+            start: TimePosition::ZERO,
+            rolling: false,
+            wrapped: false,
+            bpm: 120.0,
+            beat_start: BeatPosition::ZERO,
+        }
     }
 
     /// A stopped block at `position`.
     pub const fn stopped_at(position: TimePosition, bpm: f64) -> Self {
-        Self { start: position, rolling: false, wrapped: false, bpm, beat_start: BeatPosition::ZERO }
+        Self {
+            start: position,
+            rolling: false,
+            wrapped: false,
+            bpm,
+            beat_start: BeatPosition::ZERO,
+        }
     }
 
     /// Builds block time from a transport and one of the segments it produced.
@@ -98,8 +110,16 @@ mod tests {
     #[test]
     fn from_transport_carries_tempo_and_wrap() {
         let mut t = Transport::new(SampleRate::HZ_48K, 120.0);
-        t.tempo_map_mut().add_tempo(BeatPosition::new(2.0), 60.0).unwrap();
-        t.set_loop(Some(LoopRange::new(TimePosition::from_samples(0), TimePosition::from_samples(60_000)).unwrap()));
+        t.tempo_map_mut()
+            .add_tempo(BeatPosition::new(2.0), 60.0)
+            .unwrap();
+        t.set_loop(Some(
+            LoopRange::new(
+                TimePosition::from_samples(0),
+                TimePosition::from_samples(60_000),
+            )
+            .unwrap(),
+        ));
         t.set_loop_enabled(true);
         t.seek(TimePosition::from_samples(59_000));
         t.play();
@@ -119,12 +139,19 @@ mod tests {
 
     #[test]
     fn advanced_by_moves_time_and_beats() {
-        let bt = BlockTime { bpm: 120.0, rolling: true, ..BlockTime::free_running() };
+        let bt = BlockTime {
+            bpm: 120.0,
+            rolling: true,
+            ..BlockTime::free_running()
+        };
         let next = bt.advanced_by(24_000, SampleRate::HZ_48K);
         assert_eq!(next.start.samples(), 24_000);
         assert!((next.beat_start.beats() - 1.0).abs() < 1e-9);
         assert!(next.rolling);
         assert_eq!(BlockTime::default(), BlockTime::free_running());
-        assert_eq!(BlockTime::stopped_at(TimePosition::from_samples(7), 90.0).bpm, 90.0);
+        assert_eq!(
+            BlockTime::stopped_at(TimePosition::from_samples(7), 90.0).bpm,
+            90.0
+        );
     }
 }

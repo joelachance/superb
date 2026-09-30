@@ -15,8 +15,13 @@ use super::{deinterleave_from_device, stream_instant_us, validate_io_config, Dev
 /// Lists input devices of the default host.
 pub fn input_devices() -> Result<Vec<DeviceInfo>> {
     let host = cpal::default_host();
-    let default_name = host.default_input_device().and_then(|d| d.description().ok()).map(|d| d.name().to_owned());
-    let devices = host.input_devices().map_err(|e| SuperbError::Message(format!("enumerate devices: {e}")))?;
+    let default_name = host
+        .default_input_device()
+        .and_then(|d| d.description().ok())
+        .map(|d| d.name().to_owned());
+    let devices = host
+        .input_devices()
+        .map_err(|e| SuperbError::Message(format!("enumerate devices: {e}")))?;
     Ok(devices
         .filter_map(|d| {
             let desc = d.description().ok()?;
@@ -54,7 +59,13 @@ pub struct InputConfig {
 impl Default for InputConfig {
     fn default() -> Self {
         // Ask for stereo; [`pick_supported_input`] falls back to mono when needed.
-        Self { device_name: None, sample_rate: SampleRate::HZ_48K, channels: 2, buffer_frames: None, max_block_frames: 4096 }
+        Self {
+            device_name: None,
+            sample_rate: SampleRate::HZ_48K,
+            channels: 2,
+            buffer_frames: None,
+            max_block_frames: 4096,
+        }
     }
 }
 
@@ -97,11 +108,20 @@ impl InputStream {
             Some(name) => host
                 .input_devices()
                 .map_err(|e| SuperbError::Message(format!("enumerate devices: {e}")))?
-                .find(|d| d.description().map(|desc| desc.name() == name).unwrap_or(false))
+                .find(|d| {
+                    d.description()
+                        .map(|desc| desc.name() == name)
+                        .unwrap_or(false)
+                })
                 .ok_or_else(|| SuperbError::Message(format!("input device '{name}' not found")))?,
-            None => host.default_input_device().ok_or_else(|| SuperbError::Message("no default input device".into()))?,
+            None => host
+                .default_input_device()
+                .ok_or_else(|| SuperbError::Message("no default input device".into()))?,
         };
-        let device_name = device.description().map(|d| d.name().to_owned()).unwrap_or_else(|_| "unknown".into());
+        let device_name = device
+            .description()
+            .map(|d| d.name().to_owned())
+            .unwrap_or_else(|_| "unknown".into());
 
         let (chosen, channels, sample_rate) = pick_supported_input(&device, &device_name, config)?;
         let sample_format = chosen.sample_format();
@@ -116,22 +136,62 @@ impl InputStream {
         let err_cb = |e: cpal::Error| eprintln!("superb-io input stream error: {e}");
         let timeout = Some(Duration::from_secs(2));
         let stream = match sample_format {
-            SampleFormat::F32 => {
-                build_input::<f32, _>(&device, &stream_config, channels, max_block, capture, err_cb, timeout, callbacks_cb)?
+            SampleFormat::F32 => build_input::<f32, _>(
+                &device,
+                &stream_config,
+                channels,
+                max_block,
+                capture,
+                err_cb,
+                timeout,
+                callbacks_cb,
+            )?,
+            SampleFormat::I16 => build_input::<i16, _>(
+                &device,
+                &stream_config,
+                channels,
+                max_block,
+                capture,
+                err_cb,
+                timeout,
+                callbacks_cb,
+            )?,
+            SampleFormat::U16 => build_input::<u16, _>(
+                &device,
+                &stream_config,
+                channels,
+                max_block,
+                capture,
+                err_cb,
+                timeout,
+                callbacks_cb,
+            )?,
+            SampleFormat::I32 => build_input::<i32, _>(
+                &device,
+                &stream_config,
+                channels,
+                max_block,
+                capture,
+                err_cb,
+                timeout,
+                callbacks_cb,
+            )?,
+            other => {
+                return Err(SuperbError::Message(format!(
+                    "unsupported device sample format {other:?}"
+                )))
             }
-            SampleFormat::I16 => {
-                build_input::<i16, _>(&device, &stream_config, channels, max_block, capture, err_cb, timeout, callbacks_cb)?
-            }
-            SampleFormat::U16 => {
-                build_input::<u16, _>(&device, &stream_config, channels, max_block, capture, err_cb, timeout, callbacks_cb)?
-            }
-            SampleFormat::I32 => {
-                build_input::<i32, _>(&device, &stream_config, channels, max_block, capture, err_cb, timeout, callbacks_cb)?
-            }
-            other => return Err(SuperbError::Message(format!("unsupported device sample format {other:?}"))),
         };
-        stream.play().map_err(|e| SuperbError::Message(format!("start stream: {e}")))?;
-        Ok(Self { stream, sample_rate, channels, device_name, callbacks })
+        stream
+            .play()
+            .map_err(|e| SuperbError::Message(format!("start stream: {e}")))?;
+        Ok(Self {
+            stream,
+            sample_rate,
+            channels,
+            device_name,
+            callbacks,
+        })
     }
 
     /// Opens a capture stream that pushes planar blocks into `producer`.
@@ -146,12 +206,16 @@ impl InputStream {
 
     /// Resumes a paused stream.
     pub fn play(&self) -> Result<()> {
-        self.stream.play().map_err(|e| SuperbError::Message(format!("play: {e}")))
+        self.stream
+            .play()
+            .map_err(|e| SuperbError::Message(format!("play: {e}")))
     }
 
     /// Pauses the stream (not supported by every backend).
     pub fn pause(&self) -> Result<()> {
-        self.stream.pause().map_err(|e| SuperbError::Message(format!("pause: {e}")))
+        self.stream
+            .pause()
+            .map_err(|e| SuperbError::Message(format!("pause: {e}")))
     }
 
     /// Sample rate the stream runs at.
@@ -174,7 +238,6 @@ impl InputStream {
         self.callbacks.load(Ordering::Relaxed)
     }
 }
-
 
 /// Prefer stereo when the device supports it, otherwise mono / device default.
 ///
@@ -284,8 +347,12 @@ where
 /// `capacity` is the number of pre-allocated [`super::CaptureBlock`]s in the
 /// free/filled pair. Returns the running stream and the consumer end for the
 /// control / engine thread.
-pub fn run_capture(config: &InputConfig, capacity: usize) -> Result<(InputStream, super::CaptureConsumer)> {
-    let (producer, consumer) = super::capture_queue(config.channels, config.max_block_frames, capacity)?;
+pub fn run_capture(
+    config: &InputConfig,
+    capacity: usize,
+) -> Result<(InputStream, super::CaptureConsumer)> {
+    let (producer, consumer) =
+        super::capture_queue(config.channels, config.max_block_frames, capacity)?;
     let stream = InputStream::open_to_queue(config, producer)?;
     Ok((stream, consumer))
 }
@@ -303,9 +370,15 @@ mod tests {
 
     #[test]
     fn config_validation_does_not_need_a_device() {
-        let bad = InputConfig { channels: 0, ..InputConfig::default() };
+        let bad = InputConfig {
+            channels: 0,
+            ..InputConfig::default()
+        };
         assert!(InputStream::open(&bad, |_| {}).is_err());
-        let bad = InputConfig { max_block_frames: 0, ..InputConfig::default() };
+        let bad = InputConfig {
+            max_block_frames: 0,
+            ..InputConfig::default()
+        };
         assert!(InputStream::open(&bad, |_| {}).is_err());
         assert!(InputStream::open_timed(&bad, |_, _| {}).is_err());
     }
@@ -313,7 +386,10 @@ mod tests {
     #[test]
     fn open_to_queue_rejects_bad_config_without_device() {
         let (tx, _rx) = capture_queue(2, 64, 4).unwrap();
-        let bad = InputConfig { channels: 0, ..InputConfig::default() };
+        let bad = InputConfig {
+            channels: 0,
+            ..InputConfig::default()
+        };
         assert!(InputStream::open_to_queue(&bad, tx).is_err());
     }
 
@@ -343,7 +419,11 @@ mod tests {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let seen_cb = Arc::clone(&seen);
         let capture = move |block: &PlanarBuffer, us: u64| {
-            seen_cb.lock().unwrap().push((us, block.channel(0).to_vec(), block.channel(1).to_vec()));
+            seen_cb.lock().unwrap().push((
+                us,
+                block.channel(0).to_vec(),
+                block.channel(1).to_vec(),
+            ));
         };
         let interleaved = [0.5f32, -0.5, 0.25, -0.25];
         let mut planar = PlanarBuffer::new(2, 4);
@@ -360,7 +440,11 @@ mod tests {
     #[test]
     #[ignore = "requires a real audio input device"]
     fn captures_from_the_default_device() {
-        let config = InputConfig { channels: 1, max_block_frames: 512, ..InputConfig::default() };
+        let config = InputConfig {
+            channels: 1,
+            max_block_frames: 512,
+            ..InputConfig::default()
+        };
         let (stream, mut rx) = run_capture(&config, 8).unwrap();
         std::thread::sleep(Duration::from_millis(500));
         assert!(stream.callbacks() > 0);

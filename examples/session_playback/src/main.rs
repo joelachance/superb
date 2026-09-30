@@ -38,7 +38,10 @@ fn main() -> Result<()> {
         "take",
         TimePosition::from_samples(12_000),
         TimeDuration::from_samples(24_000),
-        ItemSource::Audio { path: PathBuf::from("tone.wav"), offset: TimeDuration::ZERO },
+        ItemSource::Audio {
+            path: PathBuf::from("tone.wav"),
+            offset: TimeDuration::ZERO,
+        },
     )?;
     session.add_item(vox, take)?;
 
@@ -52,7 +55,13 @@ fn main() -> Result<()> {
         TimeDuration::from_samples(48_000),
         ItemSource::Midi {
             // note 69 = A4; length 0.5 beats at session tempo.
-            notes: vec![MidiNote { beat: 0.0, length: 0.5, note: 69, velocity: 100, channel: 0 }],
+            notes: vec![MidiNote {
+                beat: 0.0,
+                length: 0.5,
+                note: 69,
+                velocity: 100,
+                channel: 0,
+            }],
         },
     )?;
     session.add_item(keys, note)?;
@@ -75,17 +84,24 @@ fn main() -> Result<()> {
     );
 
     let frames = 48_000; // 1 second
-    // render_region wires session → mixer offline and returns PlanarBuffer.
+                         // render_region wires session → mixer offline and returns PlanarBuffer.
     let audio = render_region(
         &session,
         &cache,
         TimePosition::ZERO,
         frames,
-        &RenderOptions { block_size: 256, channels: 2 },
+        &RenderOptions {
+            block_size: 256,
+            channels: 2,
+        },
     )?;
 
     let path = "session_playback.wav";
     wav::write(path, &audio, rate, WavFormat::Float32)?;
-    println!("wrote {path}: {} frames, peak {:.3}", audio.frames(), audio.peak());
+    println!(
+        "wrote {path}: {} frames, peak {:.3}",
+        audio.frames(),
+        audio.peak()
+    );
     Ok(())
 }

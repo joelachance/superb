@@ -93,7 +93,10 @@ impl AudioFile {
         if target == self.sample_rate {
             return Ok(self.clone());
         }
-        Ok(AudioFile { buffer: resample(&self.buffer, self.sample_rate, target)?, sample_rate: target })
+        Ok(AudioFile {
+            buffer: resample(&self.buffer, self.sample_rate, target)?,
+            sample_rate: target,
+        })
     }
 
     /// Writes this file as WAV; see [`export_wav`].

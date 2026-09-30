@@ -35,7 +35,15 @@ fn process_is_allocation_free() {
 
     let ch = MidiChannel::new(0).unwrap();
     let mut midi = MidiEventBuffer::with_capacity(8);
-    midi.push(MidiEvent { frame: 3, message: MidiMessage::NoteOn { channel: ch, note: 60, velocity: 100 } }).unwrap();
+    midi.push(MidiEvent {
+        frame: 3,
+        message: MidiMessage::NoteOn {
+            channel: ch,
+            note: 60,
+            velocity: 100,
+        },
+    })
+    .unwrap();
     let gain_handle = match graph.node_mut(gain) {
         Ok(_) => (),
         Err(e) => panic!("{e}"),
@@ -43,9 +51,14 @@ fn process_is_allocation_free() {
     let _ = gain_handle;
 
     // Warm-up call (first-time lazy initialisation, if any, happens here).
-    graph.process(BlockTime::free_running(), 512, &midi).unwrap();
+    graph
+        .process(BlockTime::free_running(), 512, &midi)
+        .unwrap();
 
-    let mut time = BlockTime { rolling: true, ..BlockTime::free_running() };
+    let mut time = BlockTime {
+        rolling: true,
+        ..BlockTime::free_running()
+    };
     superb_rt::assert_no_alloc(|| {
         for i in 0..64 {
             let frames = if i % 3 == 0 { 512 } else { 480 };
@@ -55,7 +68,10 @@ fn process_is_allocation_free() {
             assert_eq!(out.frames(), frames);
             assert!(out.peak() > 0.0);
         }
-        assert!(graph.stats().delayed_mixes > 0, "the compensated edge is live");
+        assert!(
+            graph.stats().delayed_mixes > 0,
+            "the compensated edge is live"
+        );
         graph.reset();
         graph.process(time, 480, &midi).unwrap();
         let _ = TimePosition::ZERO;

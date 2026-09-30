@@ -34,7 +34,11 @@ impl FrameMapper {
     /// Creates a mapper for the given sample rate. The block is initially
     /// empty (`frames == 0`); call [`FrameMapper::set_block`] before use.
     pub fn new(sample_rate: SampleRate) -> Self {
-        Self { sample_rate, block_start_us: 0, frames: 0 }
+        Self {
+            sample_rate,
+            block_start_us: 0,
+            frames: 0,
+        }
     }
 
     /// Configures the current process block: `block_start_us` is the
@@ -105,7 +109,7 @@ mod tests {
         let rate = SampleRate::new(48_000).unwrap();
         let mut mapper = FrameMapper::new(rate);
         mapper.set_block(0, 480); // 480 frames = 10ms at 48k
-        // Halfway through the block (5ms = 5000us) should land near frame 240.
+                                  // Halfway through the block (5ms = 5000us) should land near frame 240.
         assert_eq!(mapper.frame_for(5_000), 240);
         // Exactly 1 sample period in.
         assert_eq!(mapper.frame_for(21), 1); // 1_000_000/48_000 ~= 20.83us per sample

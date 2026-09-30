@@ -16,7 +16,9 @@ use symphonia::core::codecs::CodecParameters;
 use symphonia::core::errors::Error as SymError;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, TrackType};
-use symphonia::core::io::{MediaSource, MediaSourceStream, MediaSourceStreamOptions, ReadOnlySource};
+use symphonia::core::io::{
+    MediaSource, MediaSourceStream, MediaSourceStreamOptions, ReadOnlySource,
+};
 use symphonia::core::meta::MetadataOptions;
 
 use superb_buffers::PlanarBuffer;
@@ -37,8 +39,14 @@ pub(super) fn decode_path(path: &Path) -> Result<AudioFile> {
     decode_source(Box::new(file), &hint)
 }
 
-pub(super) fn decode_reader<R: Read + Send + Sync>(reader: R, extension_hint: Option<&str>) -> Result<AudioFile> {
-    decode_source(Box::new(ReadOnlySource::new(reader)), &hint_from(extension_hint))
+pub(super) fn decode_reader<R: Read + Send + Sync>(
+    reader: R,
+    extension_hint: Option<&str>,
+) -> Result<AudioFile> {
+    decode_source(
+        Box::new(ReadOnlySource::new(reader)),
+        &hint_from(extension_hint),
+    )
 }
 
 pub(super) fn decode_vec(bytes: Vec<u8>, extension_hint: Option<&str>) -> Result<AudioFile> {
@@ -56,7 +64,12 @@ fn hint_from(extension: Option<&str>) -> Hint {
 fn decode_source<'s>(source: Box<dyn MediaSource + 's>, hint: &Hint) -> Result<AudioFile> {
     let stream = MediaSourceStream::new(source, MediaSourceStreamOptions::default());
     let mut reader: Box<dyn FormatReader + 's> = symphonia::default::get_probe()
-        .probe(hint, stream, FormatOptions::default(), MetadataOptions::default())
+        .probe(
+            hint,
+            stream,
+            FormatOptions::default(),
+            MetadataOptions::default(),
+        )
         .map_err(|e| err("unrecognised audio container", e))?;
 
     let track = reader
@@ -65,7 +78,11 @@ fn decode_source<'s>(source: Box<dyn MediaSource + 's>, hint: &Hint) -> Result<A
     let track_id = track.id;
     let params = match &track.codec_params {
         Some(CodecParameters::Audio(p)) => p.clone(),
-        _ => return Err(SuperbError::Message("audio track has no usable codec parameters".into())),
+        _ => {
+            return Err(SuperbError::Message(
+                "audio track has no usable codec parameters".into(),
+            ))
+        }
     };
     let declared_rate = params.sample_rate;
     let declared_frames = track.num_frames.map(|n| n as usize);
@@ -85,7 +102,11 @@ fn decode_source<'s>(source: Box<dyn MediaSource + 's>, hint: &Hint) -> Result<A
         let packet = match reader.next_packet() {
             Ok(Some(p)) => p,
             Ok(None) => break,
-            Err(SymError::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof && packets > 0 => break,
+            Err(SymError::IoError(e))
+                if e.kind() == std::io::ErrorKind::UnexpectedEof && packets > 0 =>
+            {
+                break
+            }
             Err(SymError::ResetRequired) => {
                 decoder.reset();
                 continue;
@@ -113,7 +134,10 @@ fn decode_source<'s>(source: Box<dyn MediaSource + 's>, hint: &Hint) -> Result<A
         }
         decoded.copy_to_vecs_planar::<f32>(&mut scratch);
         if planes.is_empty() {
-            planes = scratch.iter().map(|p| Vec::with_capacity(declared_frames.unwrap_or(p.len()))).collect();
+            planes = scratch
+                .iter()
+                .map(|p| Vec::with_capacity(declared_frames.unwrap_or(p.len())))
+                .collect();
         } else if planes.len() != scratch.len() {
             return Err(SuperbError::Message(format!(
                 "channel count changed mid-stream ({} -> {})",
@@ -126,12 +150,19 @@ fn decode_source<'s>(source: Box<dyn MediaSource + 's>, hint: &Hint) -> Result<A
         }
     }
 
-    let hz = rate_hz.ok_or_else(|| SuperbError::Message("audio file declares no sample rate".into()))?;
+    let hz =
+        rate_hz.ok_or_else(|| SuperbError::Message("audio file declares no sample rate".into()))?;
     let sample_rate = SampleRate::new(hz)?;
     if planes.is_empty() {
         let channels = params.channels.map(|c| c.count()).unwrap_or(1).max(1);
-        return Ok(AudioFile { buffer: PlanarBuffer::new(channels, 0), sample_rate });
+        return Ok(AudioFile {
+            buffer: PlanarBuffer::new(channels, 0),
+            sample_rate,
+        });
     }
     let refs: Vec<&[f32]> = planes.iter().map(|p| p.as_slice()).collect();
-    Ok(AudioFile { buffer: PlanarBuffer::from_planes(&refs)?, sample_rate })
+    Ok(AudioFile {
+        buffer: PlanarBuffer::from_planes(&refs)?,
+        sample_rate,
+    })
 }

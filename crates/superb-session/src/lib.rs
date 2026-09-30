@@ -56,7 +56,7 @@ mod track;
 pub use marker::Marker;
 pub use session::Session;
 pub use snapshot::{
-    ItemSnapshot, MarkerSnapshot, MeterSnapshot, SendSnapshot, SessionSnapshot, TempoPointSnapshot, TempoSnapshot,
-    TrackSnapshot, FORMAT_VERSION,
+    ItemSnapshot, MarkerSnapshot, MeterSnapshot, SendSnapshot, SessionSnapshot, TempoPointSnapshot,
+    TempoSnapshot, TrackSnapshot, FORMAT_VERSION,
 };
 pub use track::{Item, ItemSource, MidiNote, Track, TrackKind, TrackSend};

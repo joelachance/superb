@@ -45,7 +45,11 @@ fn main() -> Result<()> {
     // run_engine moves the engine into the audio callback thread.
     let config = OutputConfig::default();
     let stream = run_engine(&config, engine)?;
-    println!("playing on '{}' @ {} ...", stream.device_name(), stream.sample_rate());
+    println!(
+        "playing on '{}' @ {} ...",
+        stream.device_name(),
+        stream.sample_rate()
+    );
     // Keep this thread alive while the stream plays; Drop stops the stream.
     std::thread::sleep(Duration::from_secs(3));
     println!(

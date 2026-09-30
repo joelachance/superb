@@ -30,7 +30,9 @@ fn main() -> Result<()> {
 
     // graph_mut() borrows the mixer's graph so we can add DSP nodes.
     // SineNode(freq_hz, amplitude, channels); Box::new for the Node trait object.
-    let osc = mixer.graph_mut().add_node(Box::new(SineNode::new(330.0, 0.6, 2)));
+    let osc = mixer
+        .graph_mut()
+        .add_node(Box::new(SineNode::new(330.0, 0.6, 2)));
     // Wire the oscillator into this track's input (not straight to master).
     mixer.connect_source(osc, track)?;
     // track_params returns a handle to the strip; set_gain_db is a fader in dB.
@@ -43,8 +45,20 @@ fn main() -> Result<()> {
     let bounced = "decode_bounce_48k.wav";
     // bounce_wav: render `frames` of audio in `block`-sized chunks, write WAV.
     // rate.hz() as usize * 2 ≈ two seconds at 48 kHz.
-    let rendered = bounce_wav(&mut engine, rate, 256, rate.hz() as usize * 2, bounced, WavFormat::Float32)?;
-    println!("bounced  {bounced}: {} frames, {} ch, peak {:.3}", rendered.frames(), rendered.channels(), rendered.peak());
+    let rendered = bounce_wav(
+        &mut engine,
+        rate,
+        256,
+        rate.hz() as usize * 2,
+        bounced,
+        WavFormat::Float32,
+    )?;
+    println!(
+        "bounced  {bounced}: {} frames, {} ch, peak {:.3}",
+        rendered.frames(),
+        rendered.channels(),
+        rendered.peak()
+    );
 
     // decode reads the file back into an AudioFile (buffer + sample rate metadata).
     let file = decode(bounced)?;
@@ -60,14 +74,26 @@ fn main() -> Result<()> {
     let target = SampleRate::CD;
     let converted = file.resampled_to(target)?;
     // Sanity-check frame math against the helper used by the resampler.
-    assert_eq!(converted.frames(), resampled_frames(file.frames(), file.sample_rate, target));
+    assert_eq!(
+        converted.frames(),
+        resampled_frames(file.frames(), file.sample_rate, target)
+    );
     let out = "decode_bounce_44k1.wav";
     // Pcm16 = 16-bit integer WAV (what CD-style files usually use).
     converted.write_wav(out, WavFormat::Pcm16)?;
-    println!("exported {out}: {} frames @ {}, peak {:.3}", converted.frames(), converted.sample_rate, converted.buffer.peak());
+    println!(
+        "exported {out}: {} frames @ {}, peak {:.3}",
+        converted.frames(),
+        converted.sample_rate,
+        converted.buffer.peak()
+    );
 
     // Round-trip check: decode the CD-rate file and print its rate.
     let check = decode(out)?;
-    println!("re-read  {out}: {} frames @ {}", check.frames(), check.sample_rate);
+    println!(
+        "re-read  {out}: {} frames @ {}",
+        check.frames(),
+        check.sample_rate
+    );
     Ok(())
 }

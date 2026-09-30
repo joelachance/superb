@@ -38,12 +38,15 @@ pub struct MidiPortInfo {
 /// be initialised (for example, no ALSA sequencer is available). This is
 /// expected in headless CI environments.
 pub fn list_input_ports() -> Result<Vec<MidiPortInfo>> {
-    let midi_in = MidiInput::new("superb-midi-list")
-        .map_err(|e| SuperbError::Message(format!("failed to initialise MIDI input backend: {e}")))?;
+    let midi_in = MidiInput::new("superb-midi-list").map_err(|e| {
+        SuperbError::Message(format!("failed to initialise MIDI input backend: {e}"))
+    })?;
     let ports = midi_in.ports();
     let mut out = Vec::with_capacity(ports.len());
     for (index, port) in ports.iter().enumerate() {
-        let name = midi_in.port_name(port).unwrap_or_else(|_| format!("port {index}"));
+        let name = midi_in
+            .port_name(port)
+            .unwrap_or_else(|_| format!("port {index}"));
         out.push(MidiPortInfo { index, name });
     }
     Ok(out)
@@ -75,16 +78,23 @@ impl MidiInputBridge {
     /// Returns [`SuperbError::Message`] if the MIDI backend cannot be
     /// initialised or the port cannot be opened, or
     /// [`SuperbError::NotFound`] if `port_index` is out of range.
-    pub fn connect(port_index: usize, queue_capacity: usize) -> Result<(MidiInputBridge, Consumer<TimestampedMessage>)> {
-        let mut midi_in = MidiInput::new("superb-midi-input")
-            .map_err(|e| SuperbError::Message(format!("failed to initialise MIDI input backend: {e}")))?;
+    pub fn connect(
+        port_index: usize,
+        queue_capacity: usize,
+    ) -> Result<(MidiInputBridge, Consumer<TimestampedMessage>)> {
+        let mut midi_in = MidiInput::new("superb-midi-input").map_err(|e| {
+            SuperbError::Message(format!("failed to initialise MIDI input backend: {e}"))
+        })?;
         midi_in.ignore(Ignore::None);
 
         let ports = midi_in.ports();
-        let port = ports
-            .get(port_index)
-            .ok_or(SuperbError::NotFound { kind: "midi_input_port", id: port_index as u64 })?;
-        let port_name = midi_in.port_name(port).unwrap_or_else(|_| format!("port {port_index}"));
+        let port = ports.get(port_index).ok_or(SuperbError::NotFound {
+            kind: "midi_input_port",
+            id: port_index as u64,
+        })?;
+        let port_name = midi_in
+            .port_name(port)
+            .unwrap_or_else(|_| format!("port {port_index}"));
 
         let (mut producer, consumer) = spsc::channel::<TimestampedMessage>(queue_capacity);
         let dropped = Arc::new(AtomicUsize::new(0));
@@ -96,7 +106,10 @@ impl MidiInputBridge {
                 "superb-midi-in",
                 move |timestamp_us, bytes, _data: &mut ()| {
                     if let Ok(message) = MidiMessage::from_bytes(bytes) {
-                        let event = TimestampedMessage { timestamp_us, message };
+                        let event = TimestampedMessage {
+                            timestamp_us,
+                            message,
+                        };
                         if producer.push(event).is_err() {
                             dropped_in_callback.fetch_add(1, Ordering::Relaxed);
                         }
@@ -104,9 +117,18 @@ impl MidiInputBridge {
                 },
                 (),
             )
-            .map_err(|e| SuperbError::Message(format!("failed to connect to MIDI input port: {e}")))?;
+            .map_err(|e| {
+                SuperbError::Message(format!("failed to connect to MIDI input port: {e}"))
+            })?;
 
-        Ok((MidiInputBridge { connection, port_name, dropped }, consumer))
+        Ok((
+            MidiInputBridge {
+                connection,
+                port_name,
+                dropped,
+            },
+            consumer,
+        ))
     }
 
     /// Name of the connected port.
@@ -135,7 +157,10 @@ mod tests {
         // only has to report a sensible, human-readable error on failure.
         match list_input_ports() {
             Ok(_ports) => {}
-            Err(e) => assert!(matches!(e, SuperbError::Message(_)), "unexpected error variant: {e:?}"),
+            Err(e) => assert!(
+                matches!(e, SuperbError::Message(_)),
+                "unexpected error variant: {e:?}"
+            ),
         }
     }
 
@@ -154,6 +179,12 @@ mod tests {
     #[ignore = "requires a real MIDI input device and backend, not available in CI"]
     fn connect_rejects_out_of_range_port_index() {
         let err = MidiInputBridge::connect(usize::MAX, 8).err().unwrap();
-        assert!(matches!(err, SuperbError::NotFound { kind: "midi_input_port", .. }));
+        assert!(matches!(
+            err,
+            SuperbError::NotFound {
+                kind: "midi_input_port",
+                ..
+            }
+        ));
     }
 }

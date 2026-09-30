@@ -158,19 +158,14 @@ impl AutomationLane {
     fn write_block(&mut self, block_start: TimePosition) -> usize {
         let sample = block_start.samples();
         if let Some(last) = self.last_write_sample {
-            if self.write_interval_samples > 0
-                && sample - last < self.write_interval_samples
-            {
+            if self.write_interval_samples > 0 && sample - last < self.write_interval_samples {
                 return 0;
             }
         }
         let value = self.target.get();
-        let changed = self.envelope.record(
-            block_start,
-            value,
-            CurveShape::Linear,
-            RECORD_EPSILON,
-        );
+        let changed = self
+            .envelope
+            .record(block_start, value, CurveShape::Linear, RECORD_EPSILON);
         self.last_write_sample = Some(sample);
         usize::from(changed)
     }
@@ -418,8 +413,8 @@ mod tests {
         lane.set_mode(AutomationMode::Write);
         assert_eq!(lane.apply_block(TimePosition::ZERO, 64, false, None), 0);
         assert!(lane.envelope().is_empty() || lane.envelope().len() == 2); // ramp points only
-        // Write should not have added a 0.33 point at 0 — wait, envelope already has ramp.
-        // Ensure no point with value 0.33:
+                                                                           // Write should not have added a 0.33 point at 0 — wait, envelope already has ramp.
+                                                                           // Ensure no point with value 0.33:
         assert!(lane
             .envelope()
             .points()
@@ -440,11 +435,20 @@ mod tests {
         lane.set_mode(AutomationMode::Write);
         lane.set_write_interval_samples(100);
         target.set(0.1);
-        assert_eq!(lane.apply_block(TimePosition::from_samples(0), 1, true, None), 1);
+        assert_eq!(
+            lane.apply_block(TimePosition::from_samples(0), 1, true, None),
+            1
+        );
         target.set(0.2);
-        assert_eq!(lane.apply_block(TimePosition::from_samples(50), 1, true, None), 0);
+        assert_eq!(
+            lane.apply_block(TimePosition::from_samples(50), 1, true, None),
+            0
+        );
         target.set(0.3);
-        assert_eq!(lane.apply_block(TimePosition::from_samples(100), 1, true, None), 1);
+        assert_eq!(
+            lane.apply_block(TimePosition::from_samples(100), 1, true, None),
+            1
+        );
         assert_eq!(lane.envelope().len(), 2);
     }
 }
