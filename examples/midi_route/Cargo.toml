@@ -1,0 +1,10 @@
+[package]
+name = "midi_route"
+description = "Offline example: route external MIDI to one of two synths with a MIDI edge and place a queued note sample-accurately"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+superb = { workspace = true }

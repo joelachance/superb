@@ -1,0 +1,71 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/superb-core",
+    "crates/superb-buffers",
+    "crates/superb-rt",
+    "crates/superb-transport",
+    "crates/superb-midi",
+    "crates/superb-graph",
+    "crates/superb-io",
+    "crates/superb-mixer",
+    "crates/superb-automation",
+    "crates/superb-undo",
+    "crates/superb-session",
+    "crates/superb-plugins",
+    "crates/superb",
+    "examples/sine_through_graph",
+    "examples/midi_monitor",
+    "examples/play_sine_device",
+    "examples/automation_gain_ramp",
+    "examples/live_graph_edit",
+    "examples/midi_route",
+    "examples/session_undo",
+    "examples/decode_bounce",
+    "examples/clap_host_scan",
+    "examples/session_playback",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "Apache-2.0 OR MIT"
+repository = "https://github.com/superb-audio/superb-sdk"
+authors = ["Superb SDK contributors"]
+keywords = ["audio", "daw", "realtime", "midi"]
+categories = ["multimedia::audio"]
+
+[workspace.dependencies]
+# Internal crates
+superb-core = { path = "crates/superb-core", version = "0.1.0" }
+superb-buffers = { path = "crates/superb-buffers", version = "0.1.0" }
+superb-rt = { path = "crates/superb-rt", version = "0.1.0" }
+superb-transport = { path = "crates/superb-transport", version = "0.1.0" }
+superb-midi = { path = "crates/superb-midi", version = "0.1.0" }
+superb-graph = { path = "crates/superb-graph", version = "0.1.0" }
+superb-io = { path = "crates/superb-io", version = "0.1.0" }
+superb-mixer = { path = "crates/superb-mixer", version = "0.1.0" }
+superb-automation = { path = "crates/superb-automation", version = "0.1.0" }
+superb-undo = { path = "crates/superb-undo", version = "0.1.0" }
+superb-session = { path = "crates/superb-session", version = "0.1.0" }
+superb-plugins = { path = "crates/superb-plugins", version = "0.1.0" }
+superb = { path = "crates/superb", version = "0.1.0" }
+
+# Third-party dependencies. Every default-feature dependency is Apache-2.0,
+# MIT, or ISC; the one MPL-2.0 crate (symphonia) is opt-in and isolated.
+cpal = "0.18"     # Apache-2.0
+midir = "0.11"    # MIT
+dasp_sample = "0.11"  # Apache-2.0 OR MIT
+serde = { version = "1", features = ["derive"] }  # Apache-2.0 OR MIT (session snapshots)
+serde_json = "1"                                   # Apache-2.0 OR MIT (session files)
+# File I/O (superb-io feature `files`). symphonia is MPL-2.0 (file-level
+# copyleft): it is only ever imported from crates/superb-io/src/files/decode.rs.
+symphonia = { version = "0.6", default-features = false, features = ["wav", "flac", "pcm"] }
+rubato = "4"      # MIT OR Apache-2.0 (offline resampling); 5.x needs rustc 1.87
+# Plugin hosting (superb-plugins feature `clap`, on by default there).
+clap-sys = "0.5"       # MIT/Apache-2.0 — raw CLAP ABI bindings
+libloading = "0.7"     # ISC — dlopen for .clap bundles
+
+[profile.release]
+debug = 1

@@ -1,0 +1,6 @@
+/target
+**/*.rs.bk
+*.wav
+!docs/**/*.wav
+*.superb.json
+/.claude/

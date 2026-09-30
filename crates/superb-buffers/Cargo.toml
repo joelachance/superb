@@ -1,0 +1,15 @@
+[package]
+name = "superb-buffers"
+description = "Superb DAW SDK: planar/interleaved f32 audio blocks, silence, gain and sample-format conversion"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+superb-core = { workspace = true }
+dasp_sample = { workspace = true }

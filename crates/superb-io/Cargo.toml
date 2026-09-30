@@ -1,0 +1,30 @@
+[package]
+name = "superb-io"
+description = "Superb DAW SDK: engine block loop, offline rendering, WAV I/O, file decode/resample/bounce (feature `files`) and cpal input/output streams (feature `devices`)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = []
+# Real audio devices through cpal (Apache-2.0). Needs ALSA headers on Linux.
+devices = ["dep:cpal"]
+# File decoding (symphonia, MPL-2.0, confined to src/files/decode.rs),
+# resampling (rubato, MIT) and bounce helpers. Pure Rust, no hardware.
+files = ["dep:symphonia", "dep:rubato"]
+
+[dependencies]
+superb-core = { workspace = true }
+superb-buffers = { workspace = true }
+superb-rt = { workspace = true }
+superb-transport = { workspace = true }
+superb-midi = { workspace = true }
+superb-graph = { workspace = true }
+cpal = { workspace = true, optional = true }
+symphonia = { workspace = true, optional = true }
+rubato = { workspace = true, optional = true }

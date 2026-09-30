@@ -1,0 +1,13 @@
+[package]
+name = "session_undo"
+description = "Superb example: build a session document with undoable commands, save it as JSON, reload it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+superb-core = { workspace = true }
+superb-session = { workspace = true }
+superb-undo = { workspace = true }

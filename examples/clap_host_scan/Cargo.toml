@@ -1,0 +1,15 @@
+[package]
+name = "clap_host_scan"
+description = "Superb example: scan for CLAP plugins, instantiate one, list its parameters and render through it offline"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+superb-core = { workspace = true }
+superb-graph = { workspace = true }
+superb-io = { workspace = true }
+superb-plugins = { workspace = true }
+superb-transport = { workspace = true }

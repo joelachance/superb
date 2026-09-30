@@ -1,0 +1,25 @@
+[package]
+name = "superb-plugins"
+description = "Superb DAW SDK: plugin hosting — instance model, graph node adapter, CLAP host via clap-sys (VST3 stubbed)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = ["clap"]
+# CLAP hosting through the clap-sys bindings (MIT/Apache-2.0) and libloading (ISC).
+clap = ["dep:clap-sys", "dep:libloading"]
+
+[dependencies]
+superb-core = { workspace = true }
+superb-buffers = { workspace = true }
+superb-rt = { workspace = true }
+superb-midi = { workspace = true }
+superb-graph = { workspace = true }
+clap-sys = { workspace = true, optional = true }
+libloading = { workspace = true, optional = true }

@@ -1,0 +1,17 @@
+[package]
+name = "midi_monitor"
+description = "Prints incoming MIDI from the first hardware input port (requires --features midi-io)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[features]
+midi-io = ["superb/midi-io"]
+
+[[bin]]
+name = "midi_monitor"
+required-features = ["midi-io"]
+
+[dependencies]
+superb = { workspace = true }

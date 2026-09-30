@@ -1,0 +1,10 @@
+[package]
+name = "live_graph_edit"
+description = "Offline example: swap a running audio graph for a new one without stopping the block loop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+superb = { workspace = true }
