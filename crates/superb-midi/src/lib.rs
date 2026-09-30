@@ -20,8 +20,8 @@
 //!   input ports and bridges them into an SPSC queue via the `midir` crate.
 //!
 //! SysEx, MIDI Time Code quarter frames and running status are not
-//! supported yet; see [`MidiMessage::from_bytes`] and `docs/superb-midi.md`
-//! for details and the Phase 2 plan.
+//! supported; see [`MidiMessage::from_bytes`] and `docs/superb-midi.md` for
+//! details.
 //!
 //! ```
 //! use superb_midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};

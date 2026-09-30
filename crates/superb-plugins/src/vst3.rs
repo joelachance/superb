@@ -1,10 +1,10 @@
 //! VST3 hosting — **stub**.
 //!
-//! Hosting VST3 plugins requires the Steinberg VST 3 SDK (or a compatible
-//! re-implementation of its COM-style interfaces). Until that licence is
-//! accepted for this project every entry point here returns
-//! [`unsupported`], and [`AVAILABLE`] is `false`, so applications can show
-//! an honest message instead of an empty plugin list.
+//! Hosting VST3 plugins means binding to the format's COM-style interfaces,
+//! and shipping such a host means accepting the VST 3 SDK licence. Neither
+//! has been done here. Every entry point returns [`unsupported`] and
+//! [`AVAILABLE`] is `false`, so an application can show an honest message
+//! instead of an empty plugin list.
 
 use std::path::Path;
 
@@ -18,7 +18,7 @@ pub const AVAILABLE: bool = false;
 /// The error every VST3 entry point returns.
 pub fn unsupported() -> SuperbError {
     SuperbError::Message(
-        "VST3 hosting is a stub: the Steinberg VST 3 SDK licence has not been accepted for this project (see docs/superb-plugins.md)".into(),
+        "VST3 hosting is not implemented; only CLAP plugins can be loaded (see docs/superb-plugins.md)".into(),
     )
 }
 

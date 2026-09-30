@@ -1,4 +1,4 @@
-//! Offline (and later live) playback of session items onto mixer strips.
+//! Offline playback of session items onto mixer strips.
 //!
 //! Builds on [`crate::bridge::SessionMixerBridge`]: after strips exist,
 //! [`SessionPlayer::wire`] attaches a source node per audible item —
@@ -323,26 +323,6 @@ pub fn render_region(
 
     let mut engine = Engine::new(mixer, transport);
     offline::render(&mut engine, rate, options.block_size, frames)
-}
-
-/// Stretch / sketch: how an armed session track would feed capture later.
-///
-/// Not wired to hardware. Documents the intended control-thread flow:
-/// 1. `SessionMixerBridge::sync` so the armed track has a mixer strip.
-/// 2. Open `superb_io::device::InputStream` / `capture_queue` (feature
-///    `devices`).
-/// 3. On stop, copy the captured planar buffer into an [`AudioCache`] entry
-///    and `AddItem` an `ItemSource::Audio` spanning the punch range.
-/// 4. Re-`SessionPlayer::wire` (or an incremental attach) so the take plays
-///    back on the same strip.
-///
-/// Duplex (simultaneous input + output on one cpal stream) remains a
-/// follow-up on `superb-io::device`; until then, apps can open separate
-/// input and output streams and accept clock skew.
-pub mod capture_sketch {
-    /// Placeholder so the module is linkable; see the parent docs.
-    pub const ARMED_TRACK_CAPTURE_NOTES: &str =
-        "armed track → InputStream → AudioCache → AddItem → SessionPlayer::wire";
 }
 
 #[cfg(test)]

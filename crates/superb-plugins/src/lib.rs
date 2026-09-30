@@ -13,12 +13,12 @@
 //!   list descriptors, instantiate, and drive the plugin through the
 //!   standard extensions (`params`, `state`, `latency`, `audio-ports`).
 //! * [`scan`] — default search paths and directory scanning.
-//! * [`vst3`] — a stub. VST3 hosting stays disabled until the Steinberg
-//!   SDK licence is accepted for this project.
+//! * [`vst3`] — a stub. VST3 hosting is not implemented; every entry point
+//!   reports that instead of failing silently.
 //!
 //! Only [`clap`] contains `unsafe` code (FFI); the crate is
 //! `deny(unsafe_op_in_unsafe_fn)` and every unsafe block states its
-//! invariant. Nothing here copies code from any plugin SDK's host examples.
+//! invariant.
 //!
 //! ```
 //! use superb_core::SampleRate;

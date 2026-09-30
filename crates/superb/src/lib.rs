@@ -1,8 +1,8 @@
 //! # Superb SDK
 //!
 //! An open-source, permissively licensed (Apache-2.0 OR MIT) Rust toolkit
-//! for building a digital audio workstation. This facade re-exports the
-//! Phase 1 crates plus Phase 2 automation so an application can depend on `superb` alone:
+//! for building a digital audio workstation. This facade re-exports every
+//! SDK crate as a module so an application can depend on `superb` alone:
 //!
 //! | module | crate | purpose |
 //! |---|---|---|

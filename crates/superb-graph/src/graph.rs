@@ -636,15 +636,15 @@ impl AudioGraph {
     /// MIDI delivery follows the compiled [`midi_edges`](AudioGraph::midi_edges):
     ///
     /// * **no MIDI edges** — `midi` is broadcast: every node's
-    ///   `ProcessContext::midi` is this buffer (Phase 1 behaviour);
+    ///   `ProcessContext::midi` is this buffer;
     /// * **one or more MIDI edges** — only nodes targeted by a
     ///   [`MidiPort::External`] edge see `midi`; all others see a
     ///   pre-allocated empty buffer.
     ///
     /// The choice is a pointer select per node from a table built in
-    /// `prepare`; the buffer is never copied or filtered (channel filters are
-    /// a later milestone). Fails if the graph is dirty/unprepared or `frames`
-    /// exceeds the prepared maximum.
+    /// `prepare`; the buffer is never copied or filtered by channel. Fails if
+    /// the graph is dirty/unprepared or `frames` exceeds the prepared
+    /// maximum.
     pub fn process(
         &mut self,
         time: BlockTime,

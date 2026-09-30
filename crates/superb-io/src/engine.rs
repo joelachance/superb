@@ -27,8 +27,9 @@ pub struct EngineStats {
 /// block-relative [`MidiEvent::frame`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MidiTiming {
-    /// Every queued message lands at frame 0 of the block it is drained in
-    /// (the Phase 1 behaviour). Timestamps are ignored.
+    /// Every queued message lands at frame 0 of the block it is drained in.
+    /// Timestamps are ignored, which is the right choice when the producer's
+    /// clock is unrelated to the engine's.
     BlockStart,
     /// Timestamps are mapped through a [`FrameMapper`] whose block start is
     /// the engine's **stream clock**: `frames_rendered * 1_000_000 / hz`

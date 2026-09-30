@@ -1,6 +1,6 @@
 [package]
 name = "superb"
-description = "Superb DAW SDK facade: re-exports Phase 1 crates plus Phase 2 automation, undo and session"
+description = "Superb DAW SDK facade: one crate that re-exports every module, plus the session-to-mixer bridge and offline playback"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
