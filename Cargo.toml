@@ -29,7 +29,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.86"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/superb-audio/superb-sdk"
 authors = ["Superb SDK contributors"]
@@ -62,7 +62,7 @@ serde_json = "1"                                   # Apache-2.0 OR MIT (session 
 # File I/O (superb-io feature `files`). symphonia is MPL-2.0 (file-level
 # copyleft): it is only ever imported from crates/superb-io/src/files/decode.rs.
 symphonia = { version = "0.6", default-features = false, features = ["wav", "flac", "pcm"] }
-rubato = "4"      # MIT OR Apache-2.0 (offline resampling); 5.x needs rustc 1.87
+rubato = "4"      # MIT OR Apache-2.0 (offline resampling); 5.x needs rustc 1.87, above our floor
 # Plugin hosting (superb-plugins feature `clap`, on by default there).
 clap-sys = "0.5"       # MIT/Apache-2.0 — raw CLAP ABI bindings
 libloading = "0.7"     # ISC — dlopen for .clap bundles

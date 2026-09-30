@@ -108,7 +108,7 @@ is **MPL-2.0** — a file-level copyleft. Superb keeps it contained:
   only reachable from `decode.rs`.
 
 Resampling uses [rubato](https://crates.io/crates/rubato) 4 (MIT OR
-Apache-2.0; 5.x needs rustc 1.87, above the workspace's 1.85 floor) and
+Apache-2.0; 5.x needs rustc 1.87, above the workspace's 1.86 floor) and
 its `audioadapter` buffers (MIT OR Apache-2.0).
 
 ### Decoding

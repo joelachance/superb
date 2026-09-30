@@ -39,8 +39,8 @@
 //! assert_eq!(doc.gain_db, -3.0);
 //! ```
 
+#![forbid(unsafe_code)]
 #![warn(missing_docs)]
-#![deny(unsafe_op_in_unsafe_fn)]
 
 mod command;
 mod stack;

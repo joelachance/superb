@@ -67,6 +67,8 @@ pub trait Command<T>: Any + Send {
     }
 }
 
+// `Command<T>: Any`, so a `dyn Command<T>` can be upcast to `dyn Any` and
+// the standard library's checked downcasts do the rest. No unsafe needed.
 impl<T: 'static> dyn Command<T> {
     /// `true` if the concrete type of this command is `C`.
     pub fn is<C: Command<T>>(&self) -> bool {
@@ -75,35 +77,23 @@ impl<T: 'static> dyn Command<T> {
 
     /// Borrows the command as its concrete type.
     pub fn downcast_ref<C: Command<T>>(&self) -> Option<&C> {
-        if self.is::<C>() {
-            // SAFETY: the type check above guarantees the vtable belongs to
-            // `C`, so the data pointer points at a `C`. This is the same
-            // pattern `Any::downcast_ref` uses.
-            Some(unsafe { &*(self as *const dyn Command<T> as *const C) })
-        } else {
-            None
-        }
+        (self as &dyn Any).downcast_ref::<C>()
     }
 
     /// Mutably borrows the command as its concrete type.
     pub fn downcast_mut<C: Command<T>>(&mut self) -> Option<&mut C> {
-        if self.is::<C>() {
-            // SAFETY: as in `downcast_ref`.
-            Some(unsafe { &mut *(self as *mut dyn Command<T> as *mut C) })
-        } else {
-            None
-        }
+        (self as &mut dyn Any).downcast_mut::<C>()
     }
 
     /// Converts the boxed command into its concrete type, or hands it back.
     pub fn downcast<C: Command<T>>(self: Box<Self>) -> core::result::Result<Box<C>, Box<Self>> {
-        if self.is::<C>() {
-            let raw = Box::into_raw(self);
-            // SAFETY: the type check guarantees the allocation holds a `C`;
-            // the thin pointer keeps the same address and layout.
-            Ok(unsafe { Box::from_raw(raw as *mut C) })
-        } else {
-            Err(self)
+        if !self.is::<C>() {
+            return Err(self);
+        }
+        let any: Box<dyn Any> = self;
+        match any.downcast::<C>() {
+            Ok(command) => Ok(command),
+            Err(_) => unreachable!("`is::<C>()` held, so the downcast cannot fail"),
         }
     }
 }

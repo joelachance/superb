@@ -76,7 +76,6 @@ to know the document changed; the stack itself stays off-thread.
 
 * No persistent undo history across process restarts (session snapshots
   are the document; the stack is ephemeral).
-* `Command` uses `Any` + a small amount of `unsafe` for downcasting
-  (same pattern as `std::any::Any`); the rest of the crate forbids nothing
-  special beyond `deny(unsafe_op_in_unsafe_fn)`.
+* The crate is `#![forbid(unsafe_code)]`: downcasting goes through
+  `dyn Any` (trait upcasting, Rust 1.86+).
 * Session-facing commands live in `superb_session::commands`, not here.
