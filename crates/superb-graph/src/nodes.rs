@@ -1,9 +1,23 @@
-//! Fixture and utility nodes.
+//! Ready-made graph nodes.
 //!
-//! These are deliberately simple, allocation-free processors used by the
-//! SDK's own tests and examples. Parameters are shared through
-//! `Arc<AtomicF32>` handles so a control thread can change them while the
-//! audio thread processes.
+//! Two groups live here:
+//!
+//! * **Building blocks** an application can use as they are: [`SineNode`]
+//!   (oscillator / test tone), [`GainNode`] (click-free gain ramp),
+//!   [`PassThroughNode`] (a summing point; the mixer builds its buses from
+//!   it), [`DelayNode`] (a fixed delay that reports itself as latency),
+//!   [`MonoSynthNode`] (a one-voice synth driven by live MIDI),
+//!   [`BufferPlayerNode`] (plays audio held in memory at a timeline
+//!   position) and [`ScheduledSynthNode`] (plays a list of notes at
+//!   timeline positions).
+//! * **Test fixtures** with no musical use: [`ConstantNode`] emits a DC
+//!   value and [`SilenceNode`] is always silent. They make graph behaviour
+//!   observable in tests.
+//!
+//! Every node follows the graph's contract: allocate in `prepare`, never in
+//! `process`. Parameters that move while audio runs are shared
+//! `Arc<AtomicF32>` handles so a control thread can change them without
+//! locks.
 
 use std::sync::Arc;
 
@@ -481,298 +495,6 @@ impl Node for MonoSynthNode {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::BlockTime;
-    use superb_midi::{MidiChannel, MidiEvent, MidiEventBuffer};
-
-    fn ctx<'a>(frames: usize, midi: &'a MidiEventBuffer, silent_in: bool) -> ProcessContext<'a> {
-        ProcessContext {
-            sample_rate: SampleRate::HZ_48K,
-            frames,
-            time: BlockTime::free_running(),
-            midi,
-            input_is_silent: silent_in,
-        }
-    }
-
-    #[test]
-    fn sine_is_phase_continuous_and_reacts_to_parameter_handles() {
-        let midi = MidiEventBuffer::with_capacity(0);
-        let mut node = SineNode::new(480.0, 1.0, 2); // exactly 100 samples per cycle
-        node.prepare(SampleRate::HZ_48K, 64);
-        let input = PlanarBuffer::new(0, 64);
-        let mut out = PlanarBuffer::new(2, 64);
-        let mut samples = Vec::new();
-        for _ in 0..4 {
-            assert_eq!(
-                node.process(&ctx(64, &midi, true), &input, &mut out),
-                ProcessStatus::Normal
-            );
-            samples.extend_from_slice(out.channel(0));
-            assert_eq!(out.channel(0), out.channel(1));
-        }
-        // sample 100 is one full cycle: back to ~0 and rising
-        assert!(samples[100].abs() < 1e-4);
-        assert!(samples[101] > 0.0);
-        assert!((samples[25] - 1.0).abs() < 1e-4);
-        node.amplitude().set(0.0);
-        assert_eq!(
-            node.process(&ctx(64, &midi, true), &input, &mut out),
-            ProcessStatus::Silent
-        );
-        assert_eq!(node.channels(), NodeChannels::generator(2));
-    }
-
-    #[test]
-    fn gain_ramps_between_targets_without_jumps() {
-        let midi = MidiEventBuffer::with_capacity(0);
-        let mut node = GainNode::new(1.0, 1);
-        let mut input = PlanarBuffer::new(1, 8);
-        input.fill(1.0);
-        let mut out = PlanarBuffer::new(1, 8);
-        node.process(&ctx(8, &midi, false), &input, &mut out);
-        assert_eq!(out.channel(0), &[1.0; 8]);
-        node.gain().set(0.0);
-        node.process(&ctx(8, &midi, false), &input, &mut out);
-        let ch = out.channel(0);
-        assert_eq!(ch[0], 1.0);
-        assert_eq!(ch[7], 0.0);
-        for w in ch.windows(2) {
-            assert!(w[1] < w[0]);
-        }
-        // fully at zero now -> silent shortcut
-        assert_eq!(
-            node.process(&ctx(8, &midi, false), &input, &mut out),
-            ProcessStatus::Silent
-        );
-        // silent input -> silent output regardless of gain
-        node.gain().set(1.0);
-        assert_eq!(
-            node.process(&ctx(8, &midi, true), &input, &mut out),
-            ProcessStatus::Silent
-        );
-        node.reset();
-        assert_eq!(node.name(), "gain");
-    }
-
-    #[test]
-    fn passthrough_constant_and_silence() {
-        let midi = MidiEventBuffer::with_capacity(0);
-        let mut input = PlanarBuffer::new(1, 4);
-        input.fill(0.3);
-        let mut out = PlanarBuffer::new(1, 4);
-        let mut p = PassThroughNode::new(1);
-        assert_eq!(
-            p.process(&ctx(4, &midi, false), &input, &mut out),
-            ProcessStatus::Normal
-        );
-        assert_eq!(out.channel(0), &[0.3; 4]);
-        assert_eq!(
-            p.process(&ctx(4, &midi, true), &input, &mut out),
-            ProcessStatus::Silent
-        );
-
-        let mut c = ConstantNode::new(0.7, 1);
-        assert_eq!(
-            c.process(&ctx(4, &midi, true), &input, &mut out),
-            ProcessStatus::Normal
-        );
-        assert_eq!(out.channel(0), &[0.7; 4]);
-        c.value().set(0.0);
-        assert_eq!(
-            c.process(&ctx(4, &midi, true), &input, &mut out),
-            ProcessStatus::Silent
-        );
-
-        let mut s = SilenceNode::new(1);
-        assert_eq!(
-            s.process(&ctx(4, &midi, true), &input, &mut out),
-            ProcessStatus::Silent
-        );
-        assert_eq!(s.name(), "silence");
-        assert_eq!(c.name(), "constant");
-    }
-
-    #[test]
-    fn monosynth_starts_and_stops_at_event_frames() {
-        let ch = MidiChannel::new(0).unwrap();
-        let mut midi = MidiEventBuffer::with_capacity(4);
-        midi.push(MidiEvent {
-            frame: 10,
-            message: MidiMessage::NoteOn {
-                channel: ch,
-                note: 69,
-                velocity: 127,
-            },
-        })
-        .unwrap();
-        midi.push(MidiEvent {
-            frame: 30,
-            message: MidiMessage::NoteOff {
-                channel: ch,
-                note: 69,
-                velocity: 0,
-            },
-        })
-        .unwrap();
-        let mut synth = MonoSynthNode::new(1);
-        synth.prepare(SampleRate::HZ_48K, 64);
-        let input = PlanarBuffer::new(0, 64);
-        let mut out = PlanarBuffer::new(1, 64);
-        assert_eq!(
-            synth.process(&ctx(64, &midi, true), &input, &mut out),
-            ProcessStatus::Normal
-        );
-        let s = out.channel(0);
-        assert!(s[..10].iter().all(|&x| x == 0.0), "silent before note-on");
-        assert!(
-            s[11..30].iter().any(|&x| x.abs() > 0.01),
-            "sounding after note-on"
-        );
-        assert!(s[30..].iter().all(|&x| x == 0.0), "silent after note-off");
-        assert_eq!(synth.current_note(), None);
-
-        // a note-off for a different note is ignored
-        let mut midi = MidiEventBuffer::with_capacity(4);
-        midi.push(MidiEvent {
-            frame: 0,
-            message: MidiMessage::NoteOn {
-                channel: ch,
-                note: 60,
-                velocity: 64,
-            },
-        })
-        .unwrap();
-        midi.push(MidiEvent {
-            frame: 5,
-            message: MidiMessage::NoteOff {
-                channel: ch,
-                note: 61,
-                velocity: 0,
-            },
-        })
-        .unwrap();
-        synth.process(&ctx(64, &midi, true), &input, &mut out);
-        assert_eq!(synth.current_note(), Some(60));
-        let peak = out.peak();
-        assert!((peak - 64.0 / 127.0).abs() < 0.05, "peak {peak}");
-
-        let empty = MidiEventBuffer::with_capacity(0);
-        assert_eq!(
-            synth.process(&ctx(64, &empty, true), &input, &mut out),
-            ProcessStatus::Normal
-        );
-        synth.reset();
-        assert_eq!(
-            synth.process(&ctx(64, &empty, true), &input, &mut out),
-            ProcessStatus::Silent
-        );
-        assert!((MonoSynthNode::note_to_hz(69) - 440.0).abs() < 1e-9);
-        assert!((MonoSynthNode::note_to_hz(81) - 880.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn buffer_player_reads_region_with_gain_and_respects_transport() {
-        let mut buf = PlanarBuffer::new(1, 100);
-        for (i, s) in buf.channel_mut(0).iter_mut().enumerate() {
-            *s = i as f32 * 0.01;
-        }
-        let mut player = BufferPlayerNode::new(Arc::new(buf), 1);
-        player.set_region(
-            TimePosition::from_samples(50),
-            TimeDuration::from_samples(40),
-            TimeDuration::from_samples(10),
-        );
-        player.set_gain(2.0);
-        let midi = MidiEventBuffer::with_capacity(0);
-        let input = PlanarBuffer::new(0, 64);
-        let mut out = PlanarBuffer::new(1, 64);
-
-        // Not rolling → silent
-        assert_eq!(
-            player.process(&ctx(64, &midi, true), &input, &mut out),
-            ProcessStatus::Silent
-        );
-
-        let rolling = ProcessContext {
-            sample_rate: SampleRate::HZ_48K,
-            frames: 64,
-            time: BlockTime {
-                start: TimePosition::from_samples(40),
-                rolling: true,
-                wrapped: false,
-                bpm: 120.0,
-                beat_start: Default::default(),
-            },
-            midi: &midi,
-            input_is_silent: true,
-        };
-        assert_eq!(
-            player.process(&rolling, &input, &mut out),
-            ProcessStatus::Normal
-        );
-        let s = out.channel(0);
-        // frames 0..10 are timeline 40..50 → before clip → 0
-        assert!(s[..10].iter().all(|&x| x == 0.0));
-        // frame 10 = timeline 50 = buffer[10] * 2 = 0.10 * 2 = 0.20
-        assert!((s[10] - 0.20).abs() < 1e-5);
-        // frame 49 = timeline 89 = buffer[49] * 2 = 0.49 * 2 = 0.98
-        assert!((s[49] - 0.98).abs() < 1e-5);
-        // frame 50 = timeline 90 = past clip end (50+40=90) → 0
-        assert_eq!(s[50], 0.0);
-        assert_eq!(player.name(), "buffer_player");
-    }
-
-    #[test]
-    fn scheduled_synth_fires_notes_at_absolute_samples() {
-        let events: Arc<[ScheduledNoteEvent]> = Arc::from([
-            ScheduledNoteEvent {
-                sample: 10,
-                on: true,
-                note: 69,
-                velocity: 127,
-                channel: 0,
-            },
-            ScheduledNoteEvent {
-                sample: 30,
-                on: false,
-                note: 69,
-                velocity: 0,
-                channel: 0,
-            },
-        ]);
-        let mut synth = ScheduledSynthNode::new(1, events);
-        synth.prepare(SampleRate::HZ_48K, 64);
-        let midi = MidiEventBuffer::with_capacity(0);
-        let input = PlanarBuffer::new(0, 64);
-        let mut out = PlanarBuffer::new(1, 64);
-        let rolling = ProcessContext {
-            sample_rate: SampleRate::HZ_48K,
-            frames: 64,
-            time: BlockTime {
-                start: TimePosition::ZERO,
-                rolling: true,
-                wrapped: false,
-                bpm: 120.0,
-                beat_start: Default::default(),
-            },
-            midi: &midi,
-            input_is_silent: true,
-        };
-        assert_eq!(
-            synth.process(&rolling, &input, &mut out),
-            ProcessStatus::Normal
-        );
-        let s = out.channel(0);
-        assert!(s[..10].iter().all(|&x| x == 0.0));
-        assert!(s[11..30].iter().any(|&x| x.abs() > 0.01));
-        assert!(s[30..].iter().all(|&x| x == 0.0));
-        assert_eq!(synth.name(), "scheduled_synth");
-    }
-}
-
 // ---------------------------------------------------------------------------
 // BufferPlayerNode
 // ---------------------------------------------------------------------------
@@ -1111,5 +833,297 @@ impl Node for ScheduledSynthNode {
         } else {
             ProcessStatus::Silent
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::BlockTime;
+    use superb_midi::{MidiChannel, MidiEvent, MidiEventBuffer};
+
+    fn ctx<'a>(frames: usize, midi: &'a MidiEventBuffer, silent_in: bool) -> ProcessContext<'a> {
+        ProcessContext {
+            sample_rate: SampleRate::HZ_48K,
+            frames,
+            time: BlockTime::free_running(),
+            midi,
+            input_is_silent: silent_in,
+        }
+    }
+
+    #[test]
+    fn sine_is_phase_continuous_and_reacts_to_parameter_handles() {
+        let midi = MidiEventBuffer::with_capacity(0);
+        let mut node = SineNode::new(480.0, 1.0, 2); // exactly 100 samples per cycle
+        node.prepare(SampleRate::HZ_48K, 64);
+        let input = PlanarBuffer::new(0, 64);
+        let mut out = PlanarBuffer::new(2, 64);
+        let mut samples = Vec::new();
+        for _ in 0..4 {
+            assert_eq!(
+                node.process(&ctx(64, &midi, true), &input, &mut out),
+                ProcessStatus::Normal
+            );
+            samples.extend_from_slice(out.channel(0));
+            assert_eq!(out.channel(0), out.channel(1));
+        }
+        // sample 100 is one full cycle: back to ~0 and rising
+        assert!(samples[100].abs() < 1e-4);
+        assert!(samples[101] > 0.0);
+        assert!((samples[25] - 1.0).abs() < 1e-4);
+        node.amplitude().set(0.0);
+        assert_eq!(
+            node.process(&ctx(64, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
+        assert_eq!(node.channels(), NodeChannels::generator(2));
+    }
+
+    #[test]
+    fn gain_ramps_between_targets_without_jumps() {
+        let midi = MidiEventBuffer::with_capacity(0);
+        let mut node = GainNode::new(1.0, 1);
+        let mut input = PlanarBuffer::new(1, 8);
+        input.fill(1.0);
+        let mut out = PlanarBuffer::new(1, 8);
+        node.process(&ctx(8, &midi, false), &input, &mut out);
+        assert_eq!(out.channel(0), &[1.0; 8]);
+        node.gain().set(0.0);
+        node.process(&ctx(8, &midi, false), &input, &mut out);
+        let ch = out.channel(0);
+        assert_eq!(ch[0], 1.0);
+        assert_eq!(ch[7], 0.0);
+        for w in ch.windows(2) {
+            assert!(w[1] < w[0]);
+        }
+        // fully at zero now -> silent shortcut
+        assert_eq!(
+            node.process(&ctx(8, &midi, false), &input, &mut out),
+            ProcessStatus::Silent
+        );
+        // silent input -> silent output regardless of gain
+        node.gain().set(1.0);
+        assert_eq!(
+            node.process(&ctx(8, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
+        node.reset();
+        assert_eq!(node.name(), "gain");
+    }
+
+    #[test]
+    fn passthrough_constant_and_silence() {
+        let midi = MidiEventBuffer::with_capacity(0);
+        let mut input = PlanarBuffer::new(1, 4);
+        input.fill(0.3);
+        let mut out = PlanarBuffer::new(1, 4);
+        let mut p = PassThroughNode::new(1);
+        assert_eq!(
+            p.process(&ctx(4, &midi, false), &input, &mut out),
+            ProcessStatus::Normal
+        );
+        assert_eq!(out.channel(0), &[0.3; 4]);
+        assert_eq!(
+            p.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
+
+        let mut c = ConstantNode::new(0.7, 1);
+        assert_eq!(
+            c.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Normal
+        );
+        assert_eq!(out.channel(0), &[0.7; 4]);
+        c.value().set(0.0);
+        assert_eq!(
+            c.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
+
+        let mut s = SilenceNode::new(1);
+        assert_eq!(
+            s.process(&ctx(4, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
+        assert_eq!(s.name(), "silence");
+        assert_eq!(c.name(), "constant");
+    }
+
+    #[test]
+    fn monosynth_starts_and_stops_at_event_frames() {
+        let ch = MidiChannel::new(0).unwrap();
+        let mut midi = MidiEventBuffer::with_capacity(4);
+        midi.push(MidiEvent {
+            frame: 10,
+            message: MidiMessage::NoteOn {
+                channel: ch,
+                note: 69,
+                velocity: 127,
+            },
+        })
+        .unwrap();
+        midi.push(MidiEvent {
+            frame: 30,
+            message: MidiMessage::NoteOff {
+                channel: ch,
+                note: 69,
+                velocity: 0,
+            },
+        })
+        .unwrap();
+        let mut synth = MonoSynthNode::new(1);
+        synth.prepare(SampleRate::HZ_48K, 64);
+        let input = PlanarBuffer::new(0, 64);
+        let mut out = PlanarBuffer::new(1, 64);
+        assert_eq!(
+            synth.process(&ctx(64, &midi, true), &input, &mut out),
+            ProcessStatus::Normal
+        );
+        let s = out.channel(0);
+        assert!(s[..10].iter().all(|&x| x == 0.0), "silent before note-on");
+        assert!(
+            s[11..30].iter().any(|&x| x.abs() > 0.01),
+            "sounding after note-on"
+        );
+        assert!(s[30..].iter().all(|&x| x == 0.0), "silent after note-off");
+        assert_eq!(synth.current_note(), None);
+
+        // a note-off for a different note is ignored
+        let mut midi = MidiEventBuffer::with_capacity(4);
+        midi.push(MidiEvent {
+            frame: 0,
+            message: MidiMessage::NoteOn {
+                channel: ch,
+                note: 60,
+                velocity: 64,
+            },
+        })
+        .unwrap();
+        midi.push(MidiEvent {
+            frame: 5,
+            message: MidiMessage::NoteOff {
+                channel: ch,
+                note: 61,
+                velocity: 0,
+            },
+        })
+        .unwrap();
+        synth.process(&ctx(64, &midi, true), &input, &mut out);
+        assert_eq!(synth.current_note(), Some(60));
+        let peak = out.peak();
+        assert!((peak - 64.0 / 127.0).abs() < 0.05, "peak {peak}");
+
+        let empty = MidiEventBuffer::with_capacity(0);
+        assert_eq!(
+            synth.process(&ctx(64, &empty, true), &input, &mut out),
+            ProcessStatus::Normal
+        );
+        synth.reset();
+        assert_eq!(
+            synth.process(&ctx(64, &empty, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
+        assert!((MonoSynthNode::note_to_hz(69) - 440.0).abs() < 1e-9);
+        assert!((MonoSynthNode::note_to_hz(81) - 880.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn buffer_player_reads_region_with_gain_and_respects_transport() {
+        let mut buf = PlanarBuffer::new(1, 100);
+        for (i, s) in buf.channel_mut(0).iter_mut().enumerate() {
+            *s = i as f32 * 0.01;
+        }
+        let mut player = BufferPlayerNode::new(Arc::new(buf), 1);
+        player.set_region(
+            TimePosition::from_samples(50),
+            TimeDuration::from_samples(40),
+            TimeDuration::from_samples(10),
+        );
+        player.set_gain(2.0);
+        let midi = MidiEventBuffer::with_capacity(0);
+        let input = PlanarBuffer::new(0, 64);
+        let mut out = PlanarBuffer::new(1, 64);
+
+        // Not rolling → silent
+        assert_eq!(
+            player.process(&ctx(64, &midi, true), &input, &mut out),
+            ProcessStatus::Silent
+        );
+
+        let rolling = ProcessContext {
+            sample_rate: SampleRate::HZ_48K,
+            frames: 64,
+            time: BlockTime {
+                start: TimePosition::from_samples(40),
+                rolling: true,
+                wrapped: false,
+                bpm: 120.0,
+                beat_start: Default::default(),
+            },
+            midi: &midi,
+            input_is_silent: true,
+        };
+        assert_eq!(
+            player.process(&rolling, &input, &mut out),
+            ProcessStatus::Normal
+        );
+        let s = out.channel(0);
+        // frames 0..10 are timeline 40..50 → before clip → 0
+        assert!(s[..10].iter().all(|&x| x == 0.0));
+        // frame 10 = timeline 50 = buffer[10] * 2 = 0.10 * 2 = 0.20
+        assert!((s[10] - 0.20).abs() < 1e-5);
+        // frame 49 = timeline 89 = buffer[49] * 2 = 0.49 * 2 = 0.98
+        assert!((s[49] - 0.98).abs() < 1e-5);
+        // frame 50 = timeline 90 = past clip end (50+40=90) → 0
+        assert_eq!(s[50], 0.0);
+        assert_eq!(player.name(), "buffer_player");
+    }
+
+    #[test]
+    fn scheduled_synth_fires_notes_at_absolute_samples() {
+        let events: Arc<[ScheduledNoteEvent]> = Arc::from([
+            ScheduledNoteEvent {
+                sample: 10,
+                on: true,
+                note: 69,
+                velocity: 127,
+                channel: 0,
+            },
+            ScheduledNoteEvent {
+                sample: 30,
+                on: false,
+                note: 69,
+                velocity: 0,
+                channel: 0,
+            },
+        ]);
+        let mut synth = ScheduledSynthNode::new(1, events);
+        synth.prepare(SampleRate::HZ_48K, 64);
+        let midi = MidiEventBuffer::with_capacity(0);
+        let input = PlanarBuffer::new(0, 64);
+        let mut out = PlanarBuffer::new(1, 64);
+        let rolling = ProcessContext {
+            sample_rate: SampleRate::HZ_48K,
+            frames: 64,
+            time: BlockTime {
+                start: TimePosition::ZERO,
+                rolling: true,
+                wrapped: false,
+                bpm: 120.0,
+                beat_start: Default::default(),
+            },
+            midi: &midi,
+            input_is_silent: true,
+        };
+        assert_eq!(
+            synth.process(&rolling, &input, &mut out),
+            ProcessStatus::Normal
+        );
+        let s = out.channel(0);
+        assert!(s[..10].iter().all(|&x| x == 0.0));
+        assert!(s[11..30].iter().any(|&x| x.abs() > 0.01));
+        assert!(s[30..].iter().all(|&x| x == 0.0));
+        assert_eq!(synth.name(), "scheduled_synth");
     }
 }
