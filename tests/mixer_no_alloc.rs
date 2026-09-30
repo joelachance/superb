@@ -1,6 +1,6 @@
 //! A prepared mixer processes without heap activity, even while parameters move.
 
-use superb::primitives::graph::nodes::SineNode;
+use superb::primitives::graph::nodes::{GainNode, SineNode};
 use superb::primitives::graph::{BlockProcessor, BlockTime};
 use superb::primitives::midi::MidiEventBuffer;
 use superb::primitives::mixer::{Mixer, SendTap};
@@ -26,6 +26,13 @@ fn mixer_process_is_allocation_free() {
     mixer.connect_source(sb, b).unwrap();
     let send = mixer.add_send(a, fx, 0.3, SendTap::PreFader).unwrap();
     mixer.set_track_output(b, fx).unwrap();
+    // An insert on track a and one on the fx bus are under the proof too.
+    mixer
+        .add_insert(a, Box::new(GainNode::new(0.7, 2)))
+        .unwrap();
+    mixer
+        .add_insert(fx, Box::new(GainNode::new(0.9, 2)))
+        .unwrap();
     mixer.prepare(SampleRate::HZ_48K, 256).unwrap();
 
     let pa = mixer.track_params(a).unwrap();

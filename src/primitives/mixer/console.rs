@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::nodes::PassThroughNode;
-use crate::primitives::graph::{AudioGraph, BlockProcessor, BlockTime};
+use crate::primitives::graph::{AudioGraph, BlockProcessor, BlockTime, Node};
 use crate::primitives::midi::MidiEventBuffer;
 use crate::primitives::realtime::thread::debug_assert_not_rt;
 use crate::primitives::{
@@ -17,10 +17,31 @@ use crate::primitives::mixer::{PanLaw, SendNode, SendParams, StripNode, StripPar
 /// Where a send taps the track signal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SendTap {
-    /// Before the track's fader/pan/mute (from the input summing node).
+    /// After the track's inserts and before its fader/pan/mute.
     PreFader,
     /// After the track strip.
     PostFader,
+}
+
+/// A channel strip: a track or a bus. Both carry an insert chain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum StripId {
+    /// A track's strip.
+    Track(TrackId),
+    /// A bus's strip (the master included).
+    Bus(BusId),
+}
+
+impl From<TrackId> for StripId {
+    fn from(id: TrackId) -> Self {
+        StripId::Track(id)
+    }
+}
+
+impl From<BusId> for StripId {
+    fn from(id: BusId) -> Self {
+        StripId::Bus(id)
+    }
 }
 
 /// Description of a track.
@@ -34,6 +55,8 @@ pub struct TrackInfo {
     pub input_node: NodeId,
     /// Graph node carrying the processed track signal.
     pub strip_node: NodeId,
+    /// Effect nodes between the input and the strip, in signal order.
+    pub inserts: Vec<NodeId>,
     /// Bus the track's output feeds.
     pub output: BusId,
     /// Control surface.
@@ -51,6 +74,8 @@ pub struct BusInfo {
     pub input_node: NodeId,
     /// Graph node carrying the processed bus signal.
     pub strip_node: NodeId,
+    /// Effect nodes between the input and the strip, in signal order.
+    pub inserts: Vec<NodeId>,
     /// Bus this bus feeds (`None` for the master).
     pub output: Option<BusId>,
     /// Control surface.
@@ -117,6 +142,7 @@ impl Mixer {
             name: "master".into(),
             input_node,
             strip_node,
+            inserts: Vec::new(),
             output: None,
             params: master_params,
         }];
@@ -184,6 +210,7 @@ impl Mixer {
             name: name.into(),
             input_node,
             strip_node,
+            inserts: Vec::new(),
             output: self.master,
             params,
         });
@@ -206,6 +233,9 @@ impl Mixer {
         let info = self.tracks.remove(idx);
         if info.params.is_solo() {
             info.params.set_solo(false);
+        }
+        for insert in info.inserts {
+            self.graph.remove_node(insert)?;
         }
         self.graph.remove_node(info.strip_node)?;
         self.graph.remove_node(info.input_node)?;
@@ -282,6 +312,7 @@ impl Mixer {
             name: name.into(),
             input_node,
             strip_node,
+            inserts: Vec::new(),
             output: Some(self.master),
             params,
         });
@@ -326,6 +357,9 @@ impl Mixer {
             self.set_bus_output(b, self.master)?;
         }
         let info = self.buses.remove(idx);
+        for insert in info.inserts {
+            self.graph.remove_node(insert)?;
+        }
         self.graph.remove_node(info.strip_node)?;
         self.graph.remove_node(info.input_node)?;
         Ok(())
@@ -380,6 +414,125 @@ impl Mixer {
     }
 
     // ------------------------------------------------------------------
+    // Inserts
+    // ------------------------------------------------------------------
+
+    /// Adds `node` at the end of a strip's insert chain, so the signal runs
+    /// input → inserts → `node` → fader. Returns the node's graph ID.
+    ///
+    /// The node must accept input; a generator is refused. On a track the
+    /// pre-fader sends move with the chain, so they keep hearing the signal
+    /// after every insert and before the fader. Re-`prepare` afterwards.
+    pub fn add_insert(&mut self, on: impl Into<StripId>, node: Box<dyn Node>) -> Result<NodeId> {
+        debug_assert_not_rt("Mixer::add_insert");
+        let on = on.into();
+        let (input, strip, last) = self.strip_nodes(on)?;
+        if node.channels().inputs == 0 {
+            return Err(SuperbError::ChannelMismatch {
+                expected: 1,
+                actual: 0,
+            });
+        }
+        let prev = last.unwrap_or(input);
+        let id = self.graph.add_node(node);
+        self.graph.disconnect(prev, strip)?;
+        if let Err(e) = self
+            .graph
+            .connect(prev, id)
+            .and_then(|()| self.graph.connect(id, strip))
+        {
+            // Put the strip back the way it was before reporting.
+            let _ = self.graph.remove_node(id);
+            let _ = self.graph.connect(prev, strip);
+            return Err(e);
+        }
+        self.inserts_mut(on)?.push(id);
+        if let StripId::Track(track) = on {
+            for send in self.pre_fader_sends(track) {
+                self.graph.disconnect(prev, send)?;
+                self.graph.connect(id, send)?;
+            }
+        }
+        Ok(id)
+    }
+
+    /// Removes an insert and reconnects its neighbours. Returns the node so
+    /// it can be reused or inspected. Re-`prepare` afterwards.
+    pub fn remove_insert(&mut self, on: impl Into<StripId>, node: NodeId) -> Result<Box<dyn Node>> {
+        debug_assert_not_rt("Mixer::remove_insert");
+        let on = on.into();
+        let (input, strip, _) = self.strip_nodes(on)?;
+        let chain = self.inserts(on)?;
+        let pos = chain
+            .iter()
+            .position(|&n| n == node)
+            .ok_or(SuperbError::NotFound {
+                kind: "insert",
+                id: node.raw(),
+            })?;
+        let prev = if pos == 0 { input } else { chain[pos - 1] };
+        let next = chain.get(pos + 1).copied().unwrap_or(strip);
+        let was_last = pos + 1 == chain.len();
+        self.inserts_mut(on)?.remove(pos);
+        // `remove_node` drops every edge touching the insert, including a
+        // pre-fader send's tap, so only new edges are added below.
+        let removed = self.graph.remove_node(node)?;
+        self.graph.connect(prev, next)?;
+        if was_last {
+            if let StripId::Track(track) = on {
+                for send in self.pre_fader_sends(track) {
+                    self.graph.connect(prev, send)?;
+                }
+            }
+        }
+        Ok(removed)
+    }
+
+    /// A strip's insert chain, in signal order.
+    pub fn inserts(&self, on: impl Into<StripId>) -> Result<&[NodeId]> {
+        Ok(match on.into() {
+            StripId::Track(id) => &self.track(id)?.inserts,
+            StripId::Bus(id) => &self.bus(id)?.inserts,
+        })
+    }
+
+    /// `(input node, strip node, last insert)` of a strip.
+    fn strip_nodes(&self, on: StripId) -> Result<(NodeId, NodeId, Option<NodeId>)> {
+        Ok(match on {
+            StripId::Track(id) => {
+                let t = self.track(id)?;
+                (t.input_node, t.strip_node, t.inserts.last().copied())
+            }
+            StripId::Bus(id) => {
+                let b = self.bus(id)?;
+                (b.input_node, b.strip_node, b.inserts.last().copied())
+            }
+        })
+    }
+
+    fn inserts_mut(&mut self, on: StripId) -> Result<&mut Vec<NodeId>> {
+        Ok(match on {
+            StripId::Track(id) => {
+                let idx = self.track_index(id)?;
+                &mut self.tracks[idx].inserts
+            }
+            StripId::Bus(id) => {
+                let idx = self.bus_index(id)?;
+                &mut self.buses[idx].inserts
+            }
+        })
+    }
+
+    /// Send nodes of `track` that tap before the fader.
+    fn pre_fader_sends(&self, track: TrackId) -> Vec<NodeId> {
+        self.sends
+            .iter()
+            .filter(|s| s.track == track && s.tap == SendTap::PreFader)
+            .map(|s| s.node)
+            .collect()
+    }
+
+    // ------------------------------------------------------------------
     // Sends
     // ------------------------------------------------------------------
 
@@ -399,7 +552,7 @@ impl Mixer {
             .graph
             .add_node(Box::new(SendNode::new(Arc::clone(&params), self.channels)));
         let tap_node = match tap {
-            SendTap::PreFader => t.input_node,
+            SendTap::PreFader => t.inserts.last().copied().unwrap_or(t.input_node),
             SendTap::PostFader => t.strip_node,
         };
         self.graph.connect(tap_node, node)?;
@@ -518,7 +671,7 @@ impl BlockProcessor for Mixer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::graph::nodes::ConstantNode;
+    use crate::primitives::graph::nodes::{ConstantNode, GainNode};
 
     const R: SampleRate = SampleRate::HZ_48K;
     const N: usize = 16;
@@ -774,6 +927,99 @@ mod tests {
         p.take_peak(0);
         settle(&mut m);
         assert_eq!(p.peak(0), 0.0);
+    }
+
+    #[test]
+    fn inserts_run_in_order_between_input_and_fader() {
+        let mut m = Mixer::new(2);
+        let t = m.add_track("t");
+        balanced(&mut m, t);
+        add_source(&mut m, t, 1.0);
+        let nodes_before = m.graph().node_count();
+        let half = m.add_insert(t, Box::new(GainNode::new(0.5, 2))).unwrap();
+        m.prepare(R, N).unwrap();
+        assert_eq!(settle(&mut m), vec![0.5, 0.5]);
+        let quarter = m.add_insert(t, Box::new(GainNode::new(0.5, 2))).unwrap();
+        assert_eq!(m.inserts(t).unwrap(), &[half, quarter]);
+        m.prepare(R, N).unwrap();
+        assert_eq!(settle(&mut m), vec![0.25, 0.25]);
+
+        // Removing the first insert keeps the second in the chain.
+        let node = m.remove_insert(t, half).unwrap();
+        assert_eq!(node.name(), "gain");
+        assert_eq!(m.inserts(t).unwrap(), &[quarter]);
+        m.prepare(R, N).unwrap();
+        assert_eq!(settle(&mut m), vec![0.5, 0.5]);
+        m.remove_insert(t, quarter).unwrap();
+        assert!(m.inserts(t).unwrap().is_empty());
+        assert_eq!(m.graph().node_count(), nodes_before);
+        m.prepare(R, N).unwrap();
+        assert_eq!(settle(&mut m), vec![1.0, 1.0]);
+
+        // Errors leave the strip intact.
+        assert!(m.remove_insert(t, quarter).is_err(), "already removed");
+        assert!(
+            m.add_insert(t, Box::new(ConstantNode::new(1.0, 2)))
+                .is_err(),
+            "a generator cannot be an insert"
+        );
+        assert!(m
+            .add_insert(TrackId::from_raw(99), Box::new(GainNode::new(1.0, 2)))
+            .is_err());
+        assert_eq!(m.graph().node_count(), nodes_before);
+        m.prepare(R, N).unwrap();
+        assert_eq!(settle(&mut m), vec![1.0, 1.0]);
+    }
+
+    #[test]
+    fn pre_fader_sends_follow_the_insert_chain() {
+        let mut m = Mixer::new(2);
+        let t = m.add_track("t");
+        balanced(&mut m, t);
+        add_source(&mut m, t, 1.0);
+        let fx = m.add_bus("fx");
+        m.add_send(t, fx, 1.0, SendTap::PreFader).unwrap();
+        m.prepare(R, N).unwrap();
+        assert_eq!(settle(&mut m), vec![2.0, 2.0], "track + unity send");
+
+        // An insert halves both the track and its pre-fader send.
+        let insert = m.add_insert(t, Box::new(GainNode::new(0.5, 2))).unwrap();
+        m.prepare(R, N).unwrap();
+        assert_eq!(settle(&mut m), vec![1.0, 1.0]);
+        // The fader only affects the track: pre-fader means after the inserts.
+        m.track_params(t).unwrap().set_gain(0.5);
+        assert_eq!(settle(&mut m), vec![0.75, 0.75]);
+        // Removing the insert re-taps the send at the input.
+        m.remove_insert(t, insert).unwrap();
+        m.prepare(R, N).unwrap();
+        assert_eq!(settle(&mut m), vec![1.5, 1.5]);
+    }
+
+    #[test]
+    fn buses_take_inserts_and_removal_cleans_up() {
+        let mut m = Mixer::new(2);
+        let t = m.add_track("t");
+        balanced(&mut m, t);
+        add_source(&mut m, t, 1.0);
+        let fx = m.add_bus("fx");
+        m.set_track_output(t, fx).unwrap();
+        m.add_insert(fx, Box::new(GainNode::new(0.5, 2))).unwrap();
+        m.add_insert(m.master(), Box::new(GainNode::new(0.5, 2)))
+            .unwrap();
+        m.prepare(R, N).unwrap();
+        assert_eq!(settle(&mut m), vec![0.25, 0.25]);
+        let before = m.graph().node_count();
+        m.remove_bus(fx).unwrap();
+        assert_eq!(
+            m.graph().node_count(),
+            before - 3,
+            "input, strip and insert"
+        );
+        m.add_insert(t, Box::new(GainNode::new(0.5, 2))).unwrap();
+        let before = m.graph().node_count();
+        m.remove_track(t).unwrap();
+        assert_eq!(m.graph().node_count(), before - 3);
+        assert_eq!(m.inserts(m.master()).unwrap().len(), 1);
     }
 
     #[test]

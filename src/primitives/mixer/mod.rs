@@ -12,9 +12,11 @@
 //! * [`SendParams`] — level and enable switch of a send.
 //! * [`PanLaw`] — constant-power (−3 dB centre) or balance (0 dB centre).
 //!
-//! Every track is two graph nodes: an *input* summing point and a *strip*
-//! (gain → pan → mute/solo → meter). Sources connect to the input node, so
-//! pre-fader sends can tap it while post-fader sends tap the strip output.
+//! Every track (and bus) is two graph nodes with an optional chain in
+//! between: an *input* summing point, the *inserts* (effects, added with
+//! [`Mixer::add_insert`]) and a *strip* (gain → pan → mute/solo → meter).
+//! Sources connect to the input node. Pre-fader sends tap the signal after
+//! the inserts and before the fader; post-fader sends tap the strip output.
 //!
 //! ```
 //! use superb::primitives::SampleRate;
@@ -43,6 +45,6 @@ mod console;
 mod params;
 mod strip;
 
-pub use console::{BusInfo, Mixer, SendInfo, SendTap, TrackInfo};
+pub use console::{BusInfo, Mixer, SendInfo, SendTap, StripId, TrackInfo};
 pub use params::{PanLaw, SendParams, StripParams};
 pub use strip::{SendNode, StripNode};
