@@ -1,4 +1,4 @@
-# superb-midi
+# primitives::midi
 
 MIDI 1.0 messages and real-time-safe event plumbing for the Superb DAW SDK.
 
@@ -14,7 +14,7 @@ MIDI 1.0 messages and real-time-safe event plumbing for the Superb DAW SDK.
 * [`TimestampedMessage`] / [`timing::FrameMapper`] — the non-RT-thread
   equivalent (microsecond timestamp instead of a frame offset) and the
   converter between the two clocks.
-* `input` module (feature `midir`, **off by default**) — lists hardware MIDI
+* `input` module (feature `midi-io`, **off by default**) — lists hardware MIDI
   input ports and bridges them into an SPSC queue.
 
 ## Building a buffer and parsing bytes
@@ -49,13 +49,13 @@ assert_eq!(&wire[..n], &[0x90, 60, 100]);
 `NoteOn` with velocity `0` is normalised to `NoteOff` by both `from_bytes`
 and the `note_on` constructor, matching standard MIDI convention.
 
-## The `midir` feature and the non-RT -> RT queue pattern
+## The `midi-io` feature and the non-RT -> RT queue pattern
 
-The `midir` feature is **not** part of `default-features`, so the workspace
+The `midi-io` feature is **not** part of `default-features`, so the crate
 (and CI) builds without linking ALSA/CoreMIDI/WinMM. Enable it explicitly:
 
 ```toml
-superb-midi = { version = "0.1", features = ["midir"] }
+superb = { version = "0.1", features = ["midi-io"] }
 ```
 
 Hardware MIDI input runs on midir's own callback thread, which is *not*
@@ -97,7 +97,7 @@ silently ignored by the bridge rather than being queued.
 stream clock (or the cpal callback timestamp under `device::run_engine`)
 and `frame_for` on each message (`MidiTiming::Stream`, the default). Note
 that midir's `timestamp_us` epoch is midir's own connection clock, not
-cpal's stream clock — see `docs/superb-io.md` for the consequences.
+cpal's stream clock — see `docs/primitives/io.md` for the consequences.
 
 ## Limitations
 
@@ -107,8 +107,8 @@ cpal's stream clock — see `docs/superb-io.md` for the consequences.
   status byte; the wire optimisation of omitting repeated status bytes is
   not implemented.
 * **No Standard MIDI File (SMF) reading or writing** — file formats belong
-  in `superb-io`.
+  in `primitives::io`.
 
 These are deliberately left out rather than half-implemented; the current
-scope covers everything the real-time path in `superb-graph` and
-`superb-mixer` needs.
+scope covers everything the real-time path in `primitives::graph` and
+`primitives::mixer` needs.

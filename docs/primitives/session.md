@@ -1,19 +1,27 @@
-# superb-session
+# primitives::session
 
 The document model: what a project *is*.
 
 ## Purpose
 
-`superb-session` depends on `superb-core`, `superb-transport` (for
-`TempoMap` and `LoopRange`), `superb-undo`, and `serde` + `serde_json` for
-snapshots. It holds the editable description of a
-project — tracks, clips, markers, tempo map, loop range — and
-nothing about rendering. Turning a `Session` into a `superb-mixer` /
-`superb-graph` topology is the application's (or a later crate's) job; the
-session is deliberately free of `Arc<AtomicF32>` handles and audio-thread
-concerns, so it can be cloned, diffed, serialised and undone freely.
+`primitives::session` depends on the `primitives` root,
+`primitives::transport` (for `TempoMap` and `LoopRange`), `primitives::undo`,
+and `serde` + `serde_json` for snapshots. It holds the editable description of
+a project — tracks, clips, markers, tempo map, loop range — and nothing about
+rendering. Turning a `Session` into a mixer is the job of `play::sync` (see
+`docs/flows/play.md`); the session is deliberately free of `Arc<AtomicF32>`
+handles and audio-thread concerns, so it can be cloned, diffed, serialised and
+undone freely.
 
 ## Key types
+
+Inserts: a track's plugin chain is part of the document. `Insert`
+(`PluginRef` = format, id, path; `bypassed`; `params: Vec<(u32, f64)>`;
+`state: Vec<u8>`) lives in `Track::inserts()`, is saved in the snapshot,
+and is edited through the `AddInsert` / `RemoveInsert` / `MoveInsert`
+commands and the coalescing `set_insert_bypassed` / `set_insert_param`
+property edits. `Session::allocate_insert_id` mints IDs.
+
 
 * `Session` — name, `SampleRate`, `TempoMap`, `Option<LoopRange>`, ordered
   `Track`s, position-sorted `Marker`s, a per-session ID counter and a
@@ -136,7 +144,7 @@ the IDs present.
 
 ## Real-time notes
 
-None — nothing in this crate is meant for the audio thread. Every mutating
+None — nothing in this module is meant for the audio thread. Every mutating
 method may allocate. Keep the session on the UI/document thread and push
 derived parameter changes to the engine through `Arc<AtomicF32>` handles
 or `superb::primitives::graph::live`.
@@ -145,7 +153,7 @@ or `superb::primitives::graph::live`.
 
 * Clips are positioned in samples; there is no "beat-locked" clip mode
   that follows tempo changes (convert through `Session::tempo_map()`).
-* No per-clip automation lanes yet (`superb-automation` lanes are not
+* No per-clip automation lanes yet (`primitives::automation` lanes are not
   owned by the session).
 * Routing is one output per track plus sends to buses; there are no
   sidechain inputs, no per-send pan, and a send's destination cannot be
@@ -157,9 +165,9 @@ saving it as JSON and reloading it.
 
 ## Mixer bridge
 
-Mirroring a session into a live [`Mixer`](superb-mixer.md) is handled by
+Mirroring a session into a live [`Mixer`](mixer.md) is handled by
 `superb::play::bridge::SessionMixerBridge` (separate `TrackId` namespaces,
 `sync` + `apply_routing` + `apply_strip_params`). Playing clips onto those strips is
 `superb::play::{SessionPlayer, render_region, AudioCache}` — offline
-region render first; see `docs/superb.md` and `examples/session_playback`.
+region render first; see `docs/flows/play.md` and the `session_playback` example.
 

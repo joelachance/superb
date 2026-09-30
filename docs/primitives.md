@@ -1,16 +1,15 @@
-# superb-core
+# primitives (root)
 
-Foundation types shared by every Superb SDK crate. No dependencies, no I/O.
+Foundation types shared by every module of the crate. No dependencies, no I/O.
 
 ## Purpose
 
-`superb-core` is the bottom of the dependency chain (core → buffers/rt →
-transport → graph): every other crate in the workspace depends on it, and it
-depends on nothing in the workspace. Everything here is `Copy`-friendly
-(except the rarely-used `SuperbError::Message(String)` variant) and safe to
-touch on the audio thread — it defines the vocabulary (time, sample rates,
-IDs, errors) that the rest of the SDK builds on, but does no scheduling,
-buffering or I/O itself.
+The root of `superb::primitives` is the bottom of the engine: every other
+module depends on it, and it depends on nothing else in the crate. Everything
+here is `Copy`-friendly (except the rarely-used `SuperbError::Message(String)`
+variant) and safe to touch on the audio thread — it defines the vocabulary
+(time, sample rates, IDs, errors) that the rest of the SDK builds on, but does
+no scheduling, buffering or I/O itself.
 
 ## Key types
 
@@ -23,7 +22,7 @@ buffering or I/O itself.
 * `TimeSignature` — validated `numerator/denominator` meter with `bar_length`
   and `beat_length` helpers.
 * `IdGenerator` / `TrackId`, `BusId`, `SendId`, `NodeId`, `PortId`, `ClipId`,
-  `ParamId` — monotonic `u64` newtype IDs, `0` reserved as "invalid".
+  `ParamId`, `InsertId` — monotonic `u64` newtype IDs, `0` reserved as "invalid".
 * `SuperbError` / `Result<T>` — the shared error enum used across the SDK.
 
 ## Usage
@@ -37,7 +36,7 @@ assert_eq!(half_second.samples(), 24_000);
 assert_eq!(half_second.to_seconds(rate), 0.5);
 
 // Beats are independent of sample rate; the tempo map in
-// `superb-transport` converts between the two domains.
+// `primitives::transport` converts between the two domains.
 let two_bars_of_4_4 = BeatPosition::new(8.0);
 assert_eq!(two_bars_of_4_4.beats(), 8.0);
 ```
@@ -54,16 +53,16 @@ assert!(b > a);
 
 ## Real-time notes
 
-Every type in this crate is stack-only (`Vec`/`String`-free except
+Every type here is stack-only (`Vec`/`String`-free except
 `SuperbError::Message`, which is only ever constructed off the audio thread)
 so arithmetic on `TimePosition`, `BeatPosition`, `SampleRate` etc. never
 allocates. `IdGenerator::next_raw` is a single lock-free `AtomicU64::fetch_add`
-(`crates/superb-core/src/ids.rs`, proven single-threaded and cross-thread by
+(`src/primitives/ids.rs`, proven single-threaded and cross-thread by
 `generator_is_monotonic_and_never_yields_invalid` and
 `generator_is_unique_across_threads`), so IDs may be minted from any thread,
 including the audio thread. There is no allocator dependency to prove
 no-alloc against here — that guarantee is established downstream in
-`superb-graph`'s `no_alloc.rs` integration test, which exercises these types
+the `tests/graph_no_alloc.rs` integration test, which exercises these types
 as part of a real process call.
 
 ## Limitations / next
@@ -73,6 +72,6 @@ as part of a real process call.
 * `BeatPosition`/`BeatDuration` are `f64`; no rational/tick-exact
   representation.
 * Converting between the audio and musical domains requires a tempo map,
-  which lives in `superb-transport`, not here.
+  which lives in `primitives::transport`, not here.
 * `IdGenerator` never reuses IDs and has no persistence story of its own;
-  `superb-session` keeps its own ID counter and saves it with the document.
+  `primitives::session` keeps its own ID counter and saves it with the document.

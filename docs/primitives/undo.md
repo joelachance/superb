@@ -1,15 +1,15 @@
-# superb-undo
+# primitives::undo
 
 Coalescing undo/redo command stack for document edits.
 
 ## Purpose
 
-`superb-undo` sits in front of any document type `T` (typically
-`superb::primitives::session::Session`) on the UI thread. It knows nothing about audio:
-mutations happen through `Command::apply` / `revert`, and nothing here is
-real-time safe.
+`primitives::undo` sits in front of any document type `T` (typically
+`superb::primitives::session::Session`) on the UI thread. It knows nothing
+about audio: mutations happen through `Command::apply` / `revert`, and nothing
+here is real-time safe.
 
-Depends only on `superb-core` (for `Result` / `SuperbError`). No third-party
+Depends only on the `primitives` root (for `Result` / `SuperbError`). No third-party
 deps.
 
 ## Key types
@@ -76,6 +76,6 @@ to know the document changed; the stack itself stays off-thread.
 
 * No persistent undo history across process restarts (session snapshots
   are the document; the stack is ephemeral).
-* The crate is `#![forbid(unsafe_code)]`: downcasting goes through
+* The module has no unsafe code: downcasting goes through
   `dyn Any` (trait upcasting, Rust 1.86+).
 * Session-facing commands live in `superb::primitives::session::commands`, not here.

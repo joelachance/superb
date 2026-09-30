@@ -1,16 +1,15 @@
-# superb-transport
+# primitives::transport
 
 The playhead and musical clock of the Superb DAW SDK.
 
 ## Purpose
 
-`superb-transport` sits above `superb-buffers`/`superb-rt` in the dependency
-chain (core → buffers/rt → **transport** → graph) and depends on
-`superb-core`. It owns the mapping between audio time (samples) and musical
-time (beats/bars), and the playhead state machine that walks a process block
-across that timeline, including loop wraps. `superb-graph`'s `BlockTime`
-(`crates/superb-graph/src/context.rs`) is built from a `Transport` and one of
-its `Segment`s, so every node downstream sees a consistent, sample-accurate
+`primitives::transport` depends only on the `primitives` root. It owns the
+mapping between audio time (samples) and musical time (beats/bars), and the
+playhead state machine that walks a process block across that timeline,
+including loop wraps. `primitives::graph`'s `BlockTime`
+(`src/primitives/graph/context.rs`) is built from a `Transport` and one of its
+`Segment`s, so every node downstream sees a consistent, sample-accurate
 position and tempo.
 
 ## Key types
@@ -86,7 +85,7 @@ closed-form integral, so they are exact and invertible rather than sampled:
 Equal tempos on both ends degrade to the constant case, so a ramp flag never
 divides by zero. `rebuild` caches seconds at each point with the same
 integral, keeping `seconds_to_beat`'s binary search valid.
-`superb-session` persists the flag (`TempoPointSnapshot::ramp`, defaulting
+`primitives::session` persists the flag (`TempoPointSnapshot::ramp`, defaulting
 to `false` for older files) and `commands::SetTempo::ramped` edits it
 undoably.
 
@@ -111,6 +110,6 @@ binary-search the existing `Vec`s and are safe to call every block.
 * No tap-tempo or tempo-detection helpers.
 * `TempoMap`/`Transport` are plain single-owner values with no built-in
   cross-thread command queue; a live engine is expected to pair them with
-  `superb::primitives::realtime::spsc` for control messages, per the crate doc comment.
+  `superb::primitives::realtime::spsc` for control messages, per the module doc comment.
 * Loop points are sample-accurate but there is no crossfade/click-avoidance
   at the loop boundary — that's a node/mixer concern, not the transport's.

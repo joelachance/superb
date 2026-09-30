@@ -1,17 +1,17 @@
-# superb-graph
+# primitives::graph
 
 The audio process graph of the Superb DAW SDK.
 
 ## Purpose
 
-`superb-graph` sits in the middle of the dependency chain (core →
-buffers/rt → transport → **graph** → mixer → io): it depends on `superb-core`,
-`superb-buffers`, `superb-rt` and `superb-midi`, and pulls `superb-transport`
-in for `BlockTime::from_transport`. It defines the `Node` trait every
-processor implements and `AudioGraph`, which owns nodes and edges, compiles a
+`primitives::graph` is the middle of the engine: it depends on the
+`primitives` root, `primitives::buffers`, `primitives::realtime` and
+`primitives::midi`, and pulls `primitives::transport` in for
+`BlockTime::from_transport`. It defines the `Node` trait every processor
+implements and `AudioGraph`, which owns nodes and edges, compiles a
 topological schedule, allocates all buffers up front in `prepare`, and then
-runs `process` with no heap activity. `superb-mixer` builds its console on
-this layer and `superb-io`'s block loop drives it.
+runs `process` with no heap activity. `primitives::mixer` builds its console
+on this layer and the block loop in `primitives::io` drives it.
 
 ## Key types
 
@@ -258,7 +258,7 @@ counts the ones that were mixed). `reset()` clears the delay lines too.
 call `debug_assert_not_rt` and allocate (`Vec<PlanarBuffer>` per node,
 `HashMap`/`Vec` bookkeeping) — they are the off-thread editing/compile path.
 `AudioGraph::process` performs **no heap activity**: this is proven directly
-by `crates/superb-graph/tests/no_alloc.rs::process_is_allocation_free`, which
+by `tests/graph_no_alloc.rs::process_is_allocation_free`, which
 runs a `SineNode`+`MonoSynthNode`+`GainNode`+`PassThroughNode` graph for 64
 varying-size blocks inside `superb::primitives::realtime::assert_no_alloc` with
 `CountingAllocator` installed. Per-node `process` implementations reuse the
@@ -298,7 +298,7 @@ latency-compensation delay line (ring write + delayed read + mix, and
 * **Channel adaptation is a fixed rule, not configurable**: equal counts map
   1:1, mono producers fan out, mono consumers average, otherwise only the
   first `min(src, dst)` channels map (`mix_into`,
-  `crates/superb-graph/src/graph.rs`, tested by `channel_adaptation_rules`).
+  `src/primitives/graph/graph.rs`, tested by `channel_adaptation_rules`).
 * Cycles are rejected at `connect` time (`SuperbError::Cycle`), so there is
   no feedback-delay-compensated loop support.
 * **Live editing swaps whole graphs.** After `publish()` the draft is empty,

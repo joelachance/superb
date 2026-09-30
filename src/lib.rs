@@ -3,23 +3,53 @@
 //! An open-source, permissively licensed (Apache-2.0 OR MIT) Rust toolkit
 //! for building a digital audio workstation.
 //!
-//! The crate has two tiers:
+//! The crate has two tiers, so you always know what a call will do:
 //!
-//! * **Flows** (top-level modules such as [`play`]) gather the calls needed
-//!   for one everyday task and document the primitive steps they are made of.
-//! * **[`primitives`]** hold the engine: sample-accurate time, buffers,
-//!   the real-time graph, the mixer, MIDI, automation, the project document
-//!   with undo, plugin hosting and device / file I/O.
+//! * **Flows** are top-level modules named after everyday tasks:
+//!   [`project`], [`play`], [`mix`], [`midi`], [`record`], [`plugins`],
+//!   [`export`] and [`devices`]. Each is a set of free functions over a
+//!   [`Rig`] (the state of a song in progress), and every function's docs
+//!   end with a "Made of:" list of the primitive calls it performs, so you
+//!   can call those yourself when the flow is not quite what you want.
+//! * **[`primitives`]** are the engine: sample-accurate time, buffers, the
+//!   real-time graph, the mixer, MIDI, automation, the project document
+//!   with undo, plugin hosting and device / file I/O. They know nothing
+//!   about flows.
 //!
-//! Feature flags: `devices` (audio input and output through cpal),
-//! `midi-io` (hardware MIDI input through midir), `hardware` (both) and
-//! `files` (audio file decoding, resampling and bounce helpers). All are off
-//! by default so the crate builds and tests without audio hardware.
+//! Feature flags: `clap` (CLAP plugin hosting, on by default), `devices`
+//! (audio input and output through cpal), `midi-io` (hardware MIDI input
+//! through midir), `hardware` (both) and `files` (audio file decoding,
+//! resampling and bounce helpers). Hardware and codecs are off by default
+//! so the crate builds and tests without audio hardware.
+//!
+//! A song from nothing to sound, without an audio device:
+//!
+//! ```
+//! use superb::prelude::*;
+//! use superb::{mix, play, project};
+//!
+//! let mut rig = project::create("demo", SampleRate::HZ_48K, 256)?;
+//! let lead = project::add_track(&mut rig, "lead", TrackKind::Audio)?;
+//!
+//! // Clips point at audio in the cache: a decoded file, or a buffer you made.
+//! let mut tone = PlanarBuffer::new(2, 4_800);
+//! tone.fill(0.25);
+//! rig.cache.insert("tone.wav", tone);
+//! project::add_audio_clip(&mut rig, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(4_800))?;
+//! mix::set_gain_db(&mut rig, lead, -6.0)?;
+//!
+//! play::start(&mut rig)?;                    // builds the console, starts the transport
+//! let audio = play::advance(&mut rig, 4)?;   // renders 4 blocks of 256 frames
+//! assert_eq!(audio.frames(), 1_024);
+//! assert!(audio.peak() > 0.05);
+//! # Ok::<(), SuperbError>(())
+//! ```
+//!
+//! The same thing from the primitives, bypassing the flows entirely:
 //!
 //! ```
 //! use superb::prelude::*;
 //!
-//! // A stereo mixer with one track fed by a sine, rendered offline.
 //! let mut mixer = Mixer::new(2);
 //! let track = mixer.add_track("lead");
 //! let osc = mixer.graph_mut().add_node(Box::new(SineNode::new(440.0, 0.5, 2)));

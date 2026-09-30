@@ -1,8 +1,8 @@
 # Architecture
 
-How the Superb SDK is put together, and the rules every module follows.
-Read [TERMINOLOGY.md](TERMINOLOGY.md) first if the DAW words are new to
-you.
+How Superb is put together, and the rules every module follows. Read
+[TERMINOLOGY.md](TERMINOLOGY.md) first if the DAW words are new to you,
+and [flows.md](flows.md) for the top tier in detail.
 
 ## The big picture
 
@@ -14,24 +14,37 @@ the deadline, every time, without ever waiting. Superb keeps the two apart
 and connects them deliberately.
 
 ```text
- document side (UI thread)            engine side (audio thread)
+ flows (free functions over a Rig)
+ project · play · mix · midi · record · plugins · export · devices
+ ─────────────────────────────────────────────────────────────────────
+ primitives
+   document side (UI thread)           engine side (audio thread)
 
- superb-session ─┐                     superb-io   Engine, device streams, files
- superb-undo    ─┤ superb (facade)         │
-                 │  bridge, playback   superb-mixer   tracks, buses, sends
-                 └──────────────────►      │
-                                       superb-graph   nodes, schedule, live swap
- superb-automation ──► Arc<AtomicF32> ►    │
-                                       superb-transport  playhead, tempo map
-                                       superb-midi       events per block
-                                       superb-buffers    planar f32 blocks
-                                       superb-rt         queues, atomics, proofs
-                                       superb-core       time, IDs, errors
+   session ── tracks, clips, inserts   io::live   LiveEngine ◄─queues─► EngineLoop
+   undo    ── history                  io         Engine, offline render, WAV, devices
+                       play::sync ───► mixer      tracks, buses, sends, inserts
+   automation ─► Arc<AtomicF32> ─────► graph      nodes, schedule, live swap
+                                       plugins    PluginNode, CLAP host
+                                       transport  playhead, tempo map
+                                       midi       events per block
+                                       buffers    planar f32 blocks
+                                       realtime   queues, atomics, proofs
+                                       (root)     time, IDs, errors
 ```
 
-Dependencies point downward only. `superb-core` depends on nothing in the
-workspace; every other crate depends on it. The `superb` facade sits on top
-and is the one crate an application imports.
+Primitives depend downward only and never import a flow. Flows import
+primitives and each other, and all of them work on the `Rig`.
+
+## The Rig
+
+`Rig` (`src/rig.rs`) is a plain record of the primitives a running song
+needs: the `Session`, its `UndoStack`, the `AudioCache`, the `LiveEngine`
+control handle, the `EngineLoop` (until a device takes it), the handles
+into the last console that was built (`LiveHandles`: strip and send
+atomics, plugin parameter queues), the take being recorded, and the plugin
+loader. It has constructors and nothing else. Flow verbs take `&mut Rig`
+so a call does not need seven arguments; steps take the fields they need,
+so a program can assemble its own verb.
 
 ## The two-thread contract
 
@@ -43,52 +56,73 @@ Every type that runs on the audio thread follows the same shape:
    allocate, block or lock, and it never processes more frames than
    `prepare` was told.
 
-This is not a convention but a tested property. `superb-rt` provides a
-counting global allocator, and integration tests in `superb-graph` and
-`superb-mixer` run hundreds of blocks under it, moving parameters and
-swapping graphs, and fail on a single heap operation.
+This is not a convention but a tested property. `primitives::realtime`
+provides a counting global allocator, and the integration tests under
+`tests/` run hundreds of blocks under it, moving parameters and swapping
+graphs, and fail on a single heap operation.
 
 Data crosses the thread boundary in exactly three ways:
 
 * **Parameters** are `Arc<AtomicF32>` or `AtomicBool` handles. The UI
   stores, the audio thread loads once per block and ramps to the new value
   so nothing clicks.
-* **Events** (MIDI, commands, captured audio blocks) travel through the
-  wait-free single-producer single-consumer queue in `superb-rt::spsc`.
-  Queues are allocated once; a full queue drops and counts, never blocks.
+* **Events** (MIDI, transport commands, plugin parameter changes, captured
+  audio blocks) travel through the wait-free single-producer
+  single-consumer queue in `primitives::realtime::spsc`. Queues are
+  allocated once; a full queue refuses and counts, never blocks.
 * **Structure** (nodes and edges) never changes under a running graph.
-  Either stop, edit and `prepare` again, or use `superb-graph::live`: edit
-  a draft on the control thread, `publish` it, and the audio thread swaps
-  in the whole prepared graph between two blocks with a pointer exchange.
-  The retired graph travels back over a second queue and is dropped on the
-  control thread, so nothing is ever freed on the audio thread.
+  The control side builds and prepares a whole new graph, publishes it,
+  and the audio side swaps it in between two blocks with a pointer
+  exchange (`primitives::graph::live`). The retired graph travels back
+  over a second queue and is freed on the control thread, so nothing is
+  ever dropped on the audio thread.
 
 ## From project to sound
 
-1. **`superb-session`** holds the song as plain data: tracks (audio, MIDI or
-   bus), clips on tracks, markers, a tempo map, loop range, and routing
-   (each track's output bus and its sends). It knows nothing about audio
+1. **`primitives::session`** holds the song as plain data: tracks (audio,
+   MIDI or bus), clips on tracks, markers, a tempo map, loop range, routing
+   (each track's output bus and its sends) and insert chains (plugin,
+   bypass, parameter values, saved state). It knows nothing about audio
    threads, so it can be cloned, saved as JSON and undone freely. Edits go
-   through `superb-undo` commands, which restore removed objects under
+   through `primitives::undo` commands, which restore removed objects under
    their original IDs so the UI's handles stay valid.
-2. **`superb::bridge`** maps session tracks onto mixer strips and buses and
-   mirrors gain, pan, mute, solo, outputs and sends onto the mixer. The two
-   sides keep separate ID spaces; the bridge is the side table between them.
-3. **`superb-mixer`** builds a console out of graph nodes: every track is an
-   input summing node plus a strip node (gain, pan, mute/solo, meter), buses
-   are the same pair, sends are gain nodes tapped before or after the fader.
-4. **`superb::playback`** attaches one source node per audible clip:
-   `BufferPlayerNode` for audio held in memory, `ScheduledSynthNode` for
-   MIDI notes converted through the tempo map.
-5. **`superb-graph`** compiles the nodes into a topological schedule,
+2. **`play::sync`** turns the song into a console and hands it to the
+   engine. Its steps are public:
+   * `build_console` maps session tracks onto mixer strips and buses
+     (`play::bridge`), mirrors gain, pan, mute, solo, outputs and sends,
+     and attaches one source node per audible clip (`play::playback`):
+     `BufferPlayerNode` for audio in the cache, `ScheduledSynthNode` for
+     MIDI notes converted through the tempo map, plus a live instrument
+     for every monitoring MIDI track.
+   * `attach_inserts` instantiates each track's plugins and adds them to
+     the strip's insert chain; a plugin that fails to load is reported,
+     not fatal.
+   * `collect_handles` gathers the strip, send and plugin handles the
+     control side keeps.
+   * `publish` prepares the mixer's graph and sends it to the engine.
+3. **`primitives::mixer`** builds the console out of graph nodes: every
+   track is an input summing node, an insert chain, and a strip node (gain,
+   pan, mute/solo, meter); buses are the same; sends are gain nodes tapped
+   before or after the fader.
+4. **`primitives::graph`** compiles the nodes into a topological schedule,
    propagates silence so idle branches cost nothing, delays shorter parallel
    paths so everything stays time-aligned, and routes MIDI to the nodes
    that asked for it.
-6. **`superb-io::Engine`** owns a `Transport` and a processor. Each block it
-   advances the playhead, splits the block at loop wraps, delivers queued
-   MIDI at sample-accurate frames, runs the processor and copies the result
-   out. `offline::render` drives it as fast as possible into a buffer;
-   `device::run_engine` drives it from a real output callback.
+5. **`primitives::io::live`** is the running engine: `LiveEngine` on the
+   control side (commands, graph publishing, software MIDI, position and
+   state atomics) and `EngineLoop` on the audio side, which applies
+   commands, drains MIDI, renders a block through `Engine` and publishes
+   the position. `play::advance` ticks the loop by hand; `play::start_output`
+   moves it into a device callback.
+6. **`primitives::io::Engine`** owns a `Transport` and a processor. Each
+   block it advances the playhead, splits the block at loop wraps, delivers
+   queued MIDI at sample-accurate frames, runs the processor and copies the
+   result out. `offline::render` drives a private engine for `export`.
+
+Recording runs the other way: a device (or any producer) fills a capture
+queue, `record::collect` moves blocks into the take on the control thread,
+and `record::stop` stores the take in the cache and places one clip per
+armed track as a single undo step.
 
 ## Rules of the house
 
@@ -126,6 +160,15 @@ block resolution until a bridge re-stamps it.
 right for mono sources); buses and the master default to balance (unity at
 centre, right for stereo material). Solo is a shared counter: a track is
 heard if nothing is soloed or it is soloed itself; buses ignore solo.
+Inserts sit between the input node and the strip node; pre-fader sends
+tap after the last insert.
+
+**Live engine.** Commands and graphs go one way, position and state come
+back as atomics. A published graph must be prepared for the engine's
+sample rate and block size or it is rejected, never re-prepared on the
+audio thread. The swap queue holds two graphs; `play::sync` reclaims
+retired graphs before building and, while the loop is still owned by the
+`Rig`, applies the swap itself so repeated syncs never back up.
 
 **Automation.** Envelope edits allocate and belong on the control thread.
 The read path evaluates into atomics or a caller's scratch buffer without
@@ -138,6 +181,8 @@ previous state in `apply`, not at construction, so redo after other edits
 is still correct. A failed revert clears the whole history because the
 document state is unknown. The clean (saved) state is a depth index that
 becomes unreachable if the saved step is coalesced onto or discarded.
+Flows add one convention on top: continuous edits coalesce until
+`finish_gesture`; switches are sealed immediately (`project::switch`).
 
 **Session.** The document is plain data with no `Arc` handles and no audio
 types. IDs come from one per-session counter and are never reused. The
@@ -147,45 +192,49 @@ validated in the document (targets must be buses, bus chains may not form
 a cycle), and removing a bus detaches what fed it instead of failing.
 
 **Files.** The MPL-2.0 decoder is imported from exactly one source file and
-returns Superb types only; a default-feature test scans the workspace for
-stray mentions. Decoding is whole-file and lenient: a truncated file yields
-the frames it has, a corrupt packet is skipped, an unrecognised container
-is an error. Writing is WAV only.
+returns Superb types only; a default-feature test scans the crate for stray
+mentions. Decoding is whole-file and lenient: a truncated file yields the
+frames it has, a corrupt packet is skipped, an unrecognised container is
+an error. Writing is WAV only.
 
 **Plugins.** Hosted plugins enter the graph only as `PluginNode`, so
 scheduling, silence, MIDI routing and latency compensation treat them like
 built-ins. The CLAP host is the only FFI in the SDK; every unsafe block
 states its invariant, and the host is tested against an in-process plugin
 so no shared library is needed. `start_processing` is deferred to the
-first `process` and `stop_processing` to `deactivate`.
+first `process` and `stop_processing` to `deactivate`. The song stores a
+plugin reference, parameter values and saved state; the instance is
+recreated at every sync and the stored values re-applied.
 
-**Bridge.** `sync` creates missing mixer strips and buses but never removes
-them, so live audio is not cut behind an application's back. Sends are the
-one thing `apply_routing` tears down, because a lingering send would keep
-feeding a bus the document no longer routes to.
+**Sync.** A sync builds a whole new console and swaps it in; it never
+edits the running one. That keeps the audio thread's contract simple at
+the cost of resetting plugin tails and meters when the console's shape
+changes. Level edits do not need a sync because they go to the live
+handles directly.
 
 **Features.** Hardware (`devices`, `midi-io`) and the copyleft decoder
-(`files`) are opt-in so the default build and `cargo test --workspace`
-need nothing but Rust.
+(`files`) are opt-in so the default build and `cargo test` need nothing
+but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 
 ## Where does new code go?
 
 | you want to add | it belongs in |
 |---|---|
-| a new kind of processor (effect, generator) | a `Node` impl, in `superb-graph::nodes` if general, otherwise in your app |
-| a new console feature (VCA groups, inserts) | `superb-mixer`, built from graph nodes |
-| something the song remembers | `superb-session` (plain data) plus a command in `superb-session::commands` |
-| a new audio file format | `superb-io::files`, keeping any copyleft crate inside `decode.rs` |
-| a new audio or MIDI backend | `superb-io::device` or `superb-midi::input`, behind a feature |
-| a new plugin format | a `PluginInstance` impl in `superb-plugins` |
-| glue between document and engine | `superb::bridge` or `superb::playback` |
-| a shared primitive (time type, queue) | `superb-core` or `superb-rt` |
+| a new kind of processor (effect, generator) | a `Node` impl, in `primitives::graph::nodes` if general, otherwise in your app |
+| a new console feature (VCA groups) | `primitives::mixer`, built from graph nodes |
+| something the song remembers | `primitives::session` (plain data) plus a command in `primitives::session::commands` |
+| a new audio file format | `primitives::io::files`, keeping any copyleft crate inside `decode.rs` |
+| a new audio or MIDI backend | `primitives::io::device` or `primitives::midi::input`, behind a feature |
+| a new plugin format | a `PluginInstance` impl in `primitives::plugins` |
+| an everyday task made of several primitive calls | a verb in the matching flow, with its steps in `steps` and a "Made of:" list |
+| a new everyday area (say, comping takes) | a new top-level flow module, plus a doc in `docs/flows/` and an example |
+| a shared primitive (time type, queue) | the `primitives` root or `primitives::realtime` |
 
 ## Not there yet
 
-Recording into clips (capture streams exist; wiring them to an armed track
-does not). Duplex device streams. Re-stamping hardware MIDI onto the audio
-clock. Incremental re-wiring of a running mixer when the document changes
-(today a change means a fresh `SessionPlayer::wire`). VST3 hosting. SysEx,
-MIDI Time Code and Standard MIDI Files. Encoders other than WAV. Per-clip
-automation lanes owned by the session. Multi-bus or sidechain nodes.
+Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
+Incremental edits to a running console (a sync rebuilds it). Monitoring a
+live input through a strip while recording. Punch-in/out and loop
+recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
+Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes
+owned by the session. Multi-bus or sidechain nodes.

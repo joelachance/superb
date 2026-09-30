@@ -1,14 +1,13 @@
-# superb-rt
+# primitives::realtime
 
 Real-time safety primitives for the Superb DAW SDK.
 
 ## Purpose
 
-`superb-rt` sits beside `superb-buffers` in the dependency chain (core →
-buffers/**rt** → transport → graph): it depends only on `superb-core` and
+`primitives::realtime` depends only on the `primitives` root and
 provides the cross-thread plumbing and safety-proving tools every other
-real-time crate in the SDK is built with. The audio thread must never block,
-allocate, or take a lock; this crate supplies the wait-free queue for moving
+real-time module in the SDK is built with. The audio thread must never block,
+allocate, or take a lock; this module supplies the wait-free queue for moving
 data onto/off of that thread, lock-free atomics for parameter sharing,
 allocation-counting to *prove* a hot path is heap-free, and a thread marker
 plus load meter for diagnosing when it isn't fast enough.
@@ -57,14 +56,14 @@ superb::primitives::realtime::assert_no_alloc(|| {
 `spsc::channel` allocates its slot array once at construction (non-RT
 setup); after that, `Producer::push` and `Consumer::pop`/`peek`/`drain` are
 wait-free and allocation-free, proven by
-`crates/superb-rt/src/spsc.rs::cross_thread_transfer_is_lossless_and_ordered`
+`src/primitives/realtime/spsc.rs::cross_thread_transfer_is_lossless_and_ordered`
 running the queue between two real OS threads. `AtomicF32`/`AtomicF64`
 `get`/`set`/`load`/`store`/`swap`/`fetch_max` compile to single lock-free
 instructions on all supported targets. `assert_no_alloc` itself needs
 `CountingAllocator` installed as the binary's `#[global_allocator]` — without
 it, it panics rather than silently passing
-(`crates/superb-rt/src/alloc.rs::allocation_is_counted_and_absence_is_provable`);
-`superb-graph`'s `crates/superb-graph/tests/no_alloc.rs` is the SDK's
+(`src/primitives/realtime/alloc.rs::allocation_is_counted_and_absence_is_provable`);
+`tests/graph_no_alloc.rs` is the SDK's
 canonical consumer of this pattern for a real `process()` call.
 `thread::debug_assert_not_rt` compiles to nothing in release builds, so it is
 a debug-only guard, not an enforced runtime invariant.

@@ -1,12 +1,11 @@
-# superb-plugins
+# primitives::plugins
 
 Plugin hosting: a format-agnostic instance model, a graph node adapter, a
 CLAP host, and a VST3 stub.
 
 ## Purpose
 
-`superb-plugins` sits beside `superb-mixer` (depends on `superb-core`,
-`superb-buffers`, `superb-rt`, `superb-midi`, `superb-graph`). It turns an
+`primitives::plugins` is built on `primitives::graph`. It turns an
 external plugin into a `superb::primitives::graph::Node`, so a hosted effect or
 instrument takes part in scheduling, silence propagation, MIDI routing and
 latency compensation like any built-in node. CLAP is the only backend;

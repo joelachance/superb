@@ -1,18 +1,17 @@
-# superb-buffers
+# primitives::buffers
 
 Audio block buffers for the Superb DAW SDK.
 
 ## Purpose
 
-`superb-buffers` sits directly above `superb-core` in the dependency chain
-(core → **buffers**/rt → transport → graph) and depends only on it. It
-defines the two block layouts every other audio crate exchanges data in:
-`PlanarBuffer` (native to the process graph — DSP code operates on plain
-`f32` slices) and `InterleavedBuffer` (the layout most device APIs, e.g.
-cpal, expose), plus conversion and gain/metering helpers between them. Every
-buffer is allocated once with a frame *capacity* and can then be resized
-*down* without allocating, which is what a variable-size real-time callback
-needs.
+`primitives::buffers` sits just above the shared types: it depends only on the
+`primitives` root and defines the two block layouts every other audio module
+exchanges data in: `PlanarBuffer` (native to the process graph — DSP code
+operates on plain `f32` slices) and `InterleavedBuffer` (the layout most
+device APIs, e.g. cpal, expose), plus conversion and gain/metering helpers
+between them. Every buffer is allocated once with a frame *capacity* and can
+then be resized *down* without allocating, which is what a variable-size
+real-time callback needs.
 
 ## Key types
 
@@ -62,9 +61,9 @@ Everything used per block — `set_frames`, `channel`/`channel_mut`, `clear`,
 in place and never grows it, so it is real-time safe; `set_frames` only
 *shrinks* the active view and returns `SuperbError::CapacityExceeded` rather
 than reallocating if asked to grow past `capacity`
-(`crates/superb-buffers/src/planar.rs`, `shrinking_frames_keeps_capacity_and_plane_stride`).
-This crate has no direct no-alloc test of its own; its allocation-free
-methods are exercised inside `superb-graph`'s `crates/superb-graph/tests/no_alloc.rs`,
+(`src/primitives/buffers/planar.rs`, `shrinking_frames_keeps_capacity_and_plane_stride`).
+This module has no direct no-alloc test of its own; its allocation-free
+methods are exercised inside `tests/graph_no_alloc.rs`,
 since `AudioGraph::process` calls them every block.
 
 ## Limitations / next
@@ -72,7 +71,7 @@ since `AudioGraph::process` calls them every block.
 * `f32` only — no `f64` or fixed-point buffer variant.
 * No SIMD-specialised paths; loops are written for the compiler to
   auto-vectorise.
-* No buffer pooling/arena across nodes — `superb-graph` allocates one input
+* No buffer pooling/arena across nodes — `primitives::graph` allocates one input
   and one output `PlanarBuffer` per node in `prepare`.
 * `channel_pair_mut` only splits two *distinct* channels; there is no
   general multi-channel split helper.

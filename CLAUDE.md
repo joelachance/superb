@@ -1,18 +1,29 @@
-# Superb SDK
+# Superb
 
-Open-source Rust SDK for building a DAW. Dual-licensed Apache-2.0 OR MIT.
+Open-source Rust SDK for building a DAW: one crate, `superb`. Dual-licensed
+Apache-2.0 OR MIT.
 
 Read `CONTRIBUTING.md` for the checks and rules, `docs/ARCHITECTURE.md`
-for how the crates fit together, and `docs/TERMINOLOGY.md` for the words
-to use in code and docs.
+for the engine, `docs/flows.md` for the flow tier, and
+`docs/TERMINOLOGY.md` for the words to use in code and docs.
+
+## Layout
+
+- `src/primitives/` is the engine; modules never import a flow or the `Rig`.
+- `src/<flow>.rs` (`project`, `play`, `mix`, `midi`, `record`, `plugins`,
+  `export`, `devices`) are free functions over `src/rig.rs`. Verbs take
+  `&mut Rig`; steps take primitives; every verb doc ends with "Made of:".
+- `examples/flows/`, `examples/primitives/`, registered in `Cargo.toml`.
+- `docs/primitives/<module>.md`, `docs/flows/<flow>.md`.
 
 ## Commands
 
 ```sh
-cargo test --workspace                          # no hardware needed
-cargo clippy --workspace --all-targets -- -D warnings
+cargo test                                            # no hardware needed
+cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --features hardware -- -D warnings
 cargo fmt --all -- --check
-cargo doc --workspace --no-deps
+cargo doc --no-deps
 ```
 
 ## Rules that must hold
@@ -22,7 +33,10 @@ cargo doc --workspace --no-deps
 - Default-feature dependencies are permissive (Apache-2.0, MIT, ISC, BSD).
   MPL code stays behind the `files` feature and inside one file.
 - `prepare` may allocate; `process` never does. New audio-path code gets a
-  no-alloc test.
-- No unsafe outside `superb-rt`'s primitives and the CLAP FFI.
-- Every public item is documented; update `docs/superb-<crate>.md` and the
-  examples when an API changes.
+  no-alloc test under `tests/`.
+- No unsafe outside `primitives::realtime::{alloc, spsc}` and
+  `primitives::plugins::clap`.
+- Structural edits set `rig.needs_sync`; switches go through
+  `project::switch`; level edits reach the document and the live handle.
+- Every public item is documented; update the doc note and the example
+  when an API changes.

@@ -1,13 +1,11 @@
-# superb-io
+# primitives::io
 
 Where audio leaves and enters the Superb DAW SDK.
 
 ## Purpose
 
-`superb-io` sits at the end of the dependency chain (core →
-buffers/rt → transport → graph → mixer → **io**): it depends on
-`superb-core`, `superb-buffers`, `superb-rt`, `superb-transport`,
-`superb-midi` and `superb-graph`, and is generic over any
+`primitives::io` is the last stop in the engine: it depends on every
+other engine module and is generic over any
 `superb::primitives::graph::BlockProcessor` — an `AudioGraph` or a `superb::primitives::mixer::Mixer`
 both qualify. It owns the block loop that turns a prepared processor plus a
 `Transport` into rendered audio: advancing the transport, splitting each
@@ -30,6 +28,16 @@ resampling and bounce/export helpers.
 * `MidiTiming` — `Stream` (default: timestamps → frames via
   `FrameMapper`) or `BlockStart` (everything at frame 0).
 * `EngineStats` — `blocks`, `segments`, `midi_dropped` counters from `render`.
+* `live::{live_engine, LiveEngine, EngineLoop, EngineCommand}` — a running
+  engine split in two: `LiveEngine` is the control handle (transport
+  commands over a queue, `publish` of prepared graphs, software MIDI,
+  position and state atomics, `reclaim` of retired graphs) and
+  `EngineLoop` is the audio side (`tick` renders one block; with `devices`,
+  `run_on_device` moves it into an output callback). This is what the
+  `play` flow drives.
+* `capture::{capture_queue, CaptureProducer, CaptureConsumer, CaptureBlock}`
+  — a recycle queue of pre-allocated planar blocks for recording; always
+  compiled, fed by `device::run_capture` or any producer.
 * `offline::render` / `offline::render_prepared` — drive an `Engine` as fast
   as possible into a returned `PlanarBuffer` (bounce / test rendering).
 * `wav::{write, write_to, read, read_from, WavFormat}` — minimal RIFF/WAVE
@@ -74,16 +82,14 @@ engine to `device::run_engine` and plays it on the default output.
 ## File I/O (feature `files`)
 
 ```sh
-cargo test --features files   # decode / resample / bounce tests
-cargo test --features files      # facade wiring
+cargo test --features files                       # decode / resample / bounce tests and crate wiring
 cargo run --example decode_bounce                 # example: bounce → decode → resample → export
 ```
 
-`files` is **off by default** on `superb-io` and the facade, so
-`cargo test -p superb-io` (no extra features) never compiles the codec
+`files` is **off by default**, so `cargo test` (no extra features) never compiles the codec
 stack. `examples/decode_bounce` enables `superb/files`, and Cargo feature
-unification therefore turns `files` on for `cargo test --workspace` and
-`cargo run --example decode_bounce`. Isolated crate tests still need
+unification therefore turns `files` on for
+`cargo run --example decode_bounce --features files`. Plain tests still need
 `--features files`. Pure Rust: no hardware, ALSA or ffmpeg at test time.
 
 ### Licence boundary (MPL-2.0)
@@ -91,16 +97,16 @@ unification therefore turns `files` on for `cargo test --workspace` and
 The decoder is [symphonia](https://crates.io/crates/symphonia) 0.6, which
 is **MPL-2.0** — a file-level copyleft. Superb keeps it contained:
 
-* `crates/superb-io/src/files/decode.rs` is the **only** source file in the
-  workspace that imports symphonia. Its header says so, as do the headers
+* `src/primitives/io/files/decode.rs` is the **only** source file in the
+  crate that imports symphonia. Its header says so, as do the headers
   of `files/mod.rs`, `resample.rs` and `bounce.rs`.
 * Everything `decode.rs` exports is expressed in Superb types
   (`PlanarBuffer`, `SampleRate`, `SuperbError::Message`), so no other file
   names an MPL type.
-* `superb-io`'s default-feature test `mpl_dependency_is_confined_to_decode_rs`
-  scans every `.rs` file under `crates/` and `examples/` and fails if any
-  other file mentions the crate outside a comment. It runs on every
-  `cargo test --workspace`.
+* The default-feature test `mpl_dependency_is_confined_to_decode_rs`
+  scans every `.rs` file under `src/`, `tests/` and `examples/` and fails if
+  any other file mentions the crate outside a comment. It runs on every
+  `cargo test`.
 * symphonia is built with `default-features = false` and only `wav`,
   `flac` and `pcm`, so no patent-encumbered or extra-licence codecs are
   pulled in. Transitive crates (`symphonia-core`, `-format-riff`,
@@ -108,7 +114,7 @@ is **MPL-2.0** — a file-level copyleft. Superb keeps it contained:
   only reachable from `decode.rs`.
 
 Resampling uses [rubato](https://crates.io/crates/rubato) 4 (MIT OR
-Apache-2.0; 5.x needs rustc 1.87, above the workspace's 1.86 floor) and
+Apache-2.0; 5.x needs rustc 1.87, above the crate's 1.86 floor) and
 its `audioadapter` buffers (MIT OR Apache-2.0).
 
 ### Decoding
@@ -128,7 +134,7 @@ let in_memory = decode_bytes(std::fs::read("take.wav")?, Some("wav"))?;
   consumes any `Read + Send + Sync` stream without seeking.
 * Formats with the default `files` build: WAV (PCM 8/16/24/32-bit, float)
   and FLAC. More containers/codecs are a matter of adding symphonia
-  features in the workspace `Cargo.toml` — nothing else changes.
+  features in `Cargo.toml` — nothing else changes.
 * The first audio track is decoded in full into a planar `f32` buffer in
   file channel order; samples are converted from the codec's native format
   by symphonia (`i16` → `f32` is `/32768`, matching `wav::read`).
@@ -284,7 +290,7 @@ are `#[ignore]` since CI has no audio device.
 ## Capture / input streams (feature `devices`)
 
 ```sh
-cargo test -p superb-io --features devices   # unit + ignored hardware smoke
+cargo test --features devices   # unit + ignored hardware smoke
 ```
 
 Mirror of the output API for microphones / line inputs:
