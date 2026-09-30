@@ -160,7 +160,7 @@ impl<T: 'static> UndoStack<T> {
         if let (Some(k), Some(last)) = (key, self.undo.last_mut()) {
             let in_window = self
                 .window
-                .map_or(true, |w| at.saturating_duration_since(last.at) <= w);
+                .is_none_or(|w| at.saturating_duration_since(last.at) <= w);
             if !last.sealed && last.key == Some(k) && in_window {
                 let tail = last.steps.last_mut().expect("entries are never empty");
                 if let Err(refused) = tail.merge(command) {

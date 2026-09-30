@@ -34,7 +34,6 @@ mod tests {
 
     #[test]
     fn everything_is_unsupported() {
-        assert!(!AVAILABLE);
         let err = load("/nonexistent/plugin.vst3").err().unwrap();
         assert!(err.to_string().contains("VST3"));
         assert_eq!(err, unsupported());

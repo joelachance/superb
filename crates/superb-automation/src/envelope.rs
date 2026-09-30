@@ -5,11 +5,12 @@ use superb_core::{Result, SuperbError, TimePosition};
 /// How the segment from a point to the next interpolates.
 ///
 /// The shape is stored on the *left* (earlier) point of each segment.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum CurveShape {
     /// Hold the left point's value until the next point (step).
     Hold,
     /// Linear interpolation between the two values.
+    #[default]
     Linear,
     /// Exponential-style curve. `tension` is clamped to `[-1.0, 1.0]`:
     /// * `0.0` — identical to [`CurveShape::Linear`]
@@ -19,12 +20,6 @@ pub enum CurveShape {
         /// Curve tension in `[-1.0, 1.0]`.
         tension: f32,
     },
-}
-
-impl Default for CurveShape {
-    fn default() -> Self {
-        CurveShape::Linear
-    }
 }
 
 impl CurveShape {

@@ -928,17 +928,17 @@ impl Node for BufferPlayerNode {
 
         let mut any = false;
         for ch in 0..self.channels {
-            let plane = output.channel_mut(ch);
-            for i in 0..ctx.frames {
+            let plane = &mut output.channel_mut(ch)[..ctx.frames];
+            for (i, out) in plane.iter_mut().enumerate() {
                 let pos = block_start + i as i64;
                 if pos < clip_start || pos >= clip_end {
-                    plane[i] = 0.0;
+                    *out = 0.0;
                     continue;
                 }
                 let into = pos - clip_start;
                 let src = self.buffer_offset + into;
                 let s = self.sample_at(src, ch) * self.gain * self.envelope(into);
-                plane[i] = s;
+                *out = s;
                 if s != 0.0 {
                     any = true;
                 }
@@ -973,9 +973,9 @@ pub struct ScheduledNoteEvent {
 
 /// Monophonic sine synth driven by a sorted list of absolute-time note events.
 ///
-/// Built for session MIDI items: convert [`superb_session::MidiNote`]s through
-/// a [`TempoMap`](superb_transport::TempoMap) once (off the audio thread),
-/// then this node fires them sample-accurately from [`BlockTime`].
+/// Built for session MIDI clips: convert the clip's notes through a
+/// [`TempoMap`](superb_transport::TempoMap) once (off the audio thread), then
+/// this node fires them sample-accurately from [`BlockTime`](crate::BlockTime).
 pub struct ScheduledSynthNode {
     channels: usize,
     sample_rate: f64,

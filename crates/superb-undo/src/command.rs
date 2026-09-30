@@ -58,7 +58,7 @@ pub trait Command<T>: Any + Send {
     /// Return `Err(next)` to refuse (the default); the stack then keeps
     /// `next` as a separate command inside the same undo step, which is
     /// always correct but uses more memory. Use
-    /// [`downcast`](dyn Command::downcast) to look inside `next`.
+    /// `downcast` (defined on `dyn Command<T>`) to look inside `next`.
     fn merge(
         &mut self,
         next: Box<dyn Command<T>>,

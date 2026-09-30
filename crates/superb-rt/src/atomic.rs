@@ -54,7 +54,8 @@ impl AtomicF32 {
         let mut current = self.0.load(Ordering::Relaxed);
         loop {
             let cur_f = f32::from_bits(current);
-            if !(value > cur_f) {
+            // Only a strictly greater, non-NaN value replaces the current one.
+            if value.partial_cmp(&cur_f) != Some(core::cmp::Ordering::Greater) {
                 return cur_f;
             }
             match self

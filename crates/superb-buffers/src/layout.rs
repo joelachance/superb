@@ -3,11 +3,12 @@
 use core::fmt;
 
 /// Describes how many channels a buffer or node carries.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ChannelLayout {
     /// A single channel.
     Mono,
     /// Left/right pair.
+    #[default]
     Stereo,
     /// An arbitrary channel count (may be 1 or 2 as well; use
     /// [`ChannelLayout::from_count`] to normalise).
@@ -31,12 +32,6 @@ impl ChannelLayout {
             Self::Stereo => 2,
             Self::Multi(n) => n as usize,
         }
-    }
-}
-
-impl Default for ChannelLayout {
-    fn default() -> Self {
-        Self::Stereo
     }
 }
 

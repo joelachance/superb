@@ -1,8 +1,8 @@
 //! Thin session → mixer bridge.
 //!
 //! The document model ([`superb_session::Session`]) and the realtime console
-//! ([`superb_mixer::Mixer`]) use independent [`TrackId`](superb_core::TrackId)
-//! / [`SendId`](superb_core::SendId) namespaces. This module keeps a side
+//! ([`superb_mixer::Mixer`]) use independent [`superb_core::TrackId`] /
+//! [`superb_core::SendId`] namespaces. This module keeps a side
 //! table that maps session tracks onto mixer strips / buses (and session
 //! sends onto mixer sends), pushes fader/mute/solo/pan and send levels from
 //! the document onto the atomics, and mirrors the document's routing

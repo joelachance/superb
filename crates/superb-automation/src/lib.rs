@@ -9,8 +9,8 @@
 //! * [`AutomationLane`] / [`AutomationBank`] — bind an envelope to an
 //!   `Arc<AtomicF32>` (the same handles mixer strips and graph nodes use)
 //!   and apply one block at a time.
-//! * [`ParamTarget`] — trait implemented for [`AtomicF32`] and
-//!   `Arc<AtomicF32>`.
+//! * [`ParamTarget`] — trait implemented for [`AtomicF32`](superb_rt::AtomicF32)
+//!   and `Arc<AtomicF32>`.
 //!
 //! ```
 //! use std::sync::Arc;

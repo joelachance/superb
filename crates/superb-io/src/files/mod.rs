@@ -2,7 +2,8 @@
 //!
 //! **MPL-2.0 boundary: symphonia is confined to `decode.rs`.** This module
 //! and every other Superb source file only see Superb types
-//! ([`PlanarBuffer`], [`SampleRate`], [`SuperbError`]); the symphonia
+//! ([`PlanarBuffer`], [`SampleRate`], [`SuperbError`](superb_core::SuperbError));
+//! the symphonia
 //! crate (MPL-2.0, file-level copyleft) is imported by exactly one file,
 //! `src/files/decode.rs`, which is the only file subject to that licence's
 //! per-file obligations. A workspace-wide test in `lib.rs` enforces this.

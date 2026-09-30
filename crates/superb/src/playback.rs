@@ -2,7 +2,7 @@
 //!
 //! Builds on [`crate::bridge::SessionMixerBridge`]: after strips exist,
 //! [`SessionPlayer::wire`] attaches a source node per audible item —
-//! [`BufferPlayerNode`](superb_graph::nodes::BufferPlayerNode) for cached
+//! [`superb_graph::nodes::BufferPlayerNode`] for cached
 //! audio (and empty items stay silent), [`ScheduledSynthNode`] for MIDI —
 //! then [`render_region`] seeks the transport and runs the offline engine.
 //!
@@ -398,7 +398,7 @@ mod tests {
         let mut mixer = Mixer::new(2);
         let player = SessionPlayer::wire(&session, &mut mixer, &cache).unwrap();
         assert_eq!(player.sources().len(), 1);
-        assert_eq!(player.bridge().mixer_track(audio).is_some(), true);
+        assert!(player.bridge().mixer_track(audio).is_some());
     }
 
     #[test]

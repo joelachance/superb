@@ -890,7 +890,7 @@ mod tests {
         editor.configure(R, 8);
         let s = format!("{editor:?} {live:?}");
         assert!(s.contains("GraphEditor") && s.contains("LiveGraph"));
-        let cmd = GraphCommand::Swap(Box::new(AudioGraph::new()));
+        let cmd = GraphCommand::Swap(Box::default());
         assert!(format!("{cmd:?}").starts_with("Swap"));
     }
 }

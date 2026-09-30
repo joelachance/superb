@@ -44,12 +44,6 @@ fn process_is_allocation_free() {
         },
     })
     .unwrap();
-    let gain_handle = match graph.node_mut(gain) {
-        Ok(_) => (),
-        Err(e) => panic!("{e}"),
-    };
-    let _ = gain_handle;
-
     // Warm-up call (first-time lazy initialisation, if any, happens here).
     graph
         .process(BlockTime::free_running(), 512, &midi)
