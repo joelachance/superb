@@ -25,28 +25,15 @@ Crate folder names stay as-is for now (`superb-*`). Prefer these **common DAW wo
 - **Control / UI thread** — Where you click Play, drag a fader, edit clips. That work is allowed to allocate and wait. It must not do heavy DSP inside the audio callback.
 - **Signal path (we also say “graph”)** — The wiring of processors. Same idea as inserts, sends, and buses on a console.
 
-## Day-1 vs later (product filter)
-
-**Day-1 keep:** basics, buffers, real-time helpers, transport, signal path, mixer, MIDI, I/O (devices + offline WAV), project/session, undo, thin playback bridge.
-
-**Soon after:** automation, file decode (WAV/FLAC).
-
-**Defer:** plugin host depth, VST3, latency compensation polish, tempo ramps, duplex/armed record, streaming players, sidechain.
-
-Written 2026-09-24 for review.
-
 ## Plugin formats (short map)
 
-Prefer these common names in docs; backends live under the plugin host.
+These are industry names, not Superb terms; use them as-is in docs. All
+backends live under the plugin host crate.
 
 | Say | Notes |
 |---|---|
-| CLAP | Open MIT API (Bitwig + u-he / free-audio); Superb’s first real backend |
-| VST3 | Steinberg; largest commercial catalog; SDK MIT as of 3.8.0 — hosting still stubbed here |
-| Audio Units (AU) | Apple; macOS/iOS only |
-| LV2 | Open; strong on Linux |
-| AAX | Avid; Pro Tools ecosystem |
-
-Detail and sources: discuss in chat / product docs; do not treat format names as Superb-specific jargon.
-
-Added 2026-09-25.
+| CLAP | Open plugin format; the one Superb hosts today |
+| VST3 | The most widely used commercial format; not hosted yet |
+| Audio Units (AU) | Apple platforms only |
+| LV2 | Open format, most common on Linux |
+| AAX | Pro Tools only |

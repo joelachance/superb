@@ -4,9 +4,9 @@ The document model: what a project *is*.
 
 ## Purpose
 
-`superb-session` is a Phase 2 crate (depends on `superb-core`,
-`superb-transport` for `TempoMap`/`LoopRange`, `superb-undo`, and `serde` +
-`serde_json` for snapshots). It holds the editable description of a
+`superb-session` depends on `superb-core`, `superb-transport` (for
+`TempoMap` and `LoopRange`), `superb-undo`, and `serde` + `serde_json` for
+snapshots. It holds the editable description of a
 project — tracks, items (clips), markers, tempo map, loop range — and
 nothing about rendering. Turning a `Session` into a `superb-mixer` /
 `superb-graph` topology is the application's (or a later crate's) job; the

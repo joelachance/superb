@@ -74,5 +74,5 @@ as part of a real process call.
   representation.
 * Converting between the audio and musical domains requires a tempo map,
   which lives in `superb-transport`, not here.
-* `IdGenerator` never reuses IDs and has no persistence/serialization story
-  yet — that belongs to `superb-session` in Phase 2.
+* `IdGenerator` never reuses IDs and has no persistence story of its own;
+  `superb-session` keeps its own ID counter and saves it with the document.

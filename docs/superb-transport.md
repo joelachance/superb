@@ -72,7 +72,7 @@ assert!(s > 2.0 && s < 4.0);
 assert!((map.seconds_to_beat(s).beats() - 4.0).abs() < 1e-9);
 ```
 
-## Tempo ramps (Phase 2)
+## Tempo ramps
 
 A `TempoPoint` with `ramp == true` interpolates bpm **linearly in beats** up
 to the next point (`bpm(β) = b0 + (b1 − b0)(β − β0)/(β1 − β0)`); the last

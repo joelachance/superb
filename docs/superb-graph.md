@@ -4,15 +4,14 @@ The audio process graph of the Superb DAW SDK.
 
 ## Purpose
 
-`superb-graph` is the top of the Phase 1 dependency chain (core →
-buffers/rt → transport → **graph**): it depends on `superb-core`,
+`superb-graph` sits in the middle of the dependency chain (core →
+buffers/rt → transport → **graph** → mixer → io): it depends on `superb-core`,
 `superb-buffers`, `superb-rt` and `superb-midi`, and pulls `superb-transport`
 in for `BlockTime::from_transport`. It defines the `Node` trait every
 processor implements and `AudioGraph`, which owns nodes and edges, compiles a
 topological schedule, allocates all buffers up front in `prepare`, and then
-runs `process` with no heap activity. This is the layer `superb-mixer`
-(Phase 1, next) and `superb-io`'s device callback are expected to drive
-directly.
+runs `process` with no heap activity. `superb-mixer` builds its console on
+this layer and `superb-io`'s block loop drives it.
 
 ## Key types
 
@@ -31,10 +30,10 @@ directly.
   counters (`nodes_processed`, `nodes_silent`, `mixes`, `delayed_mixes`).
 * Latency: `set_latency_compensation`/`latency_compensation`,
   `latency_frames` (graph total), `node_input_latency`/`node_output_latency`,
-  `edge_delay` (Phase 2, see below).
+  `edge_delay` (see below).
 * `MidiPort` / `MidiEdge` — a MIDI source (`MidiPort::External`, the buffer
   passed to `process`) routed to one node; edited with
-  `connect_midi`/`disconnect_midi`/`midi_edges` (Phase 2, see below).
+  `connect_midi`/`disconnect_midi`/`midi_edges` (see below).
 * `ProcessContext` / `BlockTime` — what a node sees each block: sample rate,
   frame count, timeline position/tempo/rolling/wrapped state, the block's
   `MidiEventBuffer`, and `input_is_silent`.
@@ -68,7 +67,7 @@ Editing after `prepare` (`add_node`, `connect`, ...) sets `graph.is_dirty()`;
 `process` then returns `Err(SuperbError::NotPrepared)` until `prepare` runs
 again.
 
-## MIDI edges (Phase 2): per-node MIDI routing
+## MIDI edges: per-node MIDI routing
 
 Audio edges say where samples flow; **MIDI edges** say which nodes see the
 `MidiEventBuffer` handed to `process`. They are a separate edge set
@@ -105,8 +104,8 @@ assert!(graph.node_output(pad).unwrap().is_silent());
 Rules:
 
 * **Broadcast when empty.** With *no* MIDI edges every node receives the
-  incoming buffer — the Phase 1 behaviour, so existing graphs and tests are
-  unchanged. Adding the first MIDI edge switches the graph to routed mode;
+  incoming buffer, so a graph that never routes MIDI needs no edges at all.
+  Adding the first MIDI edge switches the graph to routed mode;
   removing the last one switches back.
 * **Routed mode.** Nodes targeted by a `MidiPort::External` edge get the
   incoming buffer; every other node gets a pre-allocated **empty** buffer
@@ -129,7 +128,7 @@ Rules:
 See `examples/midi_route` for MIDI edges plus sample-accurate placement of a
 queued note through `superb_io::Engine`.
 
-## Live editing (Phase 2): `live_pair`, `GraphEditor`, `LiveGraph`
+## Live editing: `live_pair`, `GraphEditor`, `LiveGraph`
 
 `AudioGraph` alone forces a stop/`prepare`/start cycle for every structural
 edit because `process` refuses to run a dirty graph. The `live` module lifts
@@ -208,7 +207,7 @@ Protocol and ownership:
 See `examples/live_graph_edit` for three generations swapped into a running
 block loop with printed peaks.
 
-## Latency compensation (Phase 2)
+## Latency compensation
 
 Every `Node` reports `latency_frames()` (a look-ahead limiter, a linear-phase
 EQ, a plugin). With compensation on — the default, toggled by
@@ -272,7 +271,7 @@ no-alloc proof too, and a `DelayNode` in a parallel path so a
 latency-compensation delay line (ring write + delayed read + mix, and
 `reset`) is exercised under the proof as well.
 
-## Session playback nodes (Phase 2)
+## Session playback nodes
 
 * `BufferPlayerNode` — timeline-aware playback of an `Arc<PlanarBuffer>`
   (region, offset, gain, fades); silent when the transport is stopped.

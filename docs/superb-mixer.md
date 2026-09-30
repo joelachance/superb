@@ -92,7 +92,7 @@ mute, solo and send-enable move every block.
   the broadcast behaviour. Re-`prepare` after adding edges, as for audio
   edges.
 * **No automation** — parameter changes are immediate (ramped, not
-  scheduled); `superb-automation` is a separate Phase 2 crate.
+  scheduled); `superb-automation` is a separate crate.
 * **Metering is peak-hold on the first two channels only**
   (`params::METER_CHANNELS = 2`); higher channel counts on a strip aren't
   metered beyond L/R, and there's no RMS/LUFS option yet.

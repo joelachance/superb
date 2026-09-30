@@ -4,10 +4,10 @@ The facade crate of the Superb DAW SDK.
 
 ## Purpose
 
-`superb` sits above the Phase 1 crates plus Phase 2 automation, undo and
-session (core → buffers/rt → transport → midi / automation → graph → mixer
-→ undo → session → io → **superb**): it depends on all of them and
-re-exports each as a module, so an application can depend on `superb`
+`superb` sits at the top of the dependency chain (core → buffers/rt →
+transport → midi / automation → graph → mixer → io, with undo → session
+beside it): it depends on every other crate and re-exports each as a
+module, so an application can depend on `superb`
 alone instead of naming every crate individually. Beyond re-exports it
 owns a thin `superb::bridge` module that maps session document tracks
 onto mixer strips/buses and mirrors the document's routing (outputs,
@@ -161,13 +161,10 @@ in by the `decode_bounce` example via feature unification).
   `superb-midi/midir` (hardware MIDI input), `hardware` is both, and
   `files` enables `superb-io/files` (symphonia decode + rubato resample +
   bounce). `AudioFile` is in the prelude only when `files` is on.
-* **Phase 2 in progress** — re-exports include `superb-automation`,
-  `superb-session`, `superb-undo`, `superb-plugins` (CLAP host; VST3 is a
-  stub), live graph editing, capture (`devices`), the thin bridge,
-  session item playback (`playback`), bus/send routing mirrored from the
-  session, and (behind `files`) the file layer. Still ahead: duplex
-  device streams, midir↔cpal clock re-stamp, live incremental re-wire,
-  armed-track capture.
+* **Not yet implemented** — duplex device streams (one stream for input
+  and output), aligning hardware MIDI timestamps with the audio clock,
+  incremental re-wiring of a running mixer when the session changes, and
+  recording an armed track into a clip.
 * The prelude is a fixed, curated list — crate-specific or less common
   types (e.g. `wav::WavFormat`, `device::OutputConfig`) still need an
   explicit `superb::io::...` / `superb::mixer::...` path, as the doctest's

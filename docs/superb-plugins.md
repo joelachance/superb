@@ -9,13 +9,12 @@ CLAP host, and a VST3 stub.
 `superb-buffers`, `superb-rt`, `superb-midi`, `superb-graph`). It turns an
 external plugin into a `superb_graph::Node`, so a hosted effect or
 instrument takes part in scheduling, silence propagation, MIDI routing and
-latency compensation like any built-in node. The CLAP backend is the first
-(and only) real one; VST3 is a stub until the Steinberg SDK licence is
-accepted for this project.
+latency compensation like any built-in node. CLAP is the only backend;
+VST3 is a stub (see the `vst3` module).
 
 Third-party deps (all behind the default `clap` feature): `clap-sys` 0.5
 (MIT/Apache-2.0, plain FFI bindings to the CLAP ABI) and `libloading` 0.7
-(ISC). No plugin SDK host code is vendored or copied.
+(ISC).
 
 ## Key types
 

@@ -99,17 +99,16 @@ and `frame_for` on each message (`MidiTiming::Stream`, the default). Note
 that midir's `timestamp_us` epoch is midir's own connection clock, not
 cpal's stream clock — see `docs/superb-io.md` for the consequences.
 
-## Limitations (Phase 2)
+## Limitations
 
 * **No SysEx** (`0xF0` .. `0xF7`) — `from_bytes` returns an error.
 * **No MIDI Time Code quarter frames** (`0xF1`).
 * **No running status** — every call to `from_bytes` must start with a
   status byte; the wire optimisation of omitting repeated status bytes is
   not implemented.
-* **No Standard MIDI File (SMF) reading/writing** — that belongs to
-  `superb-io`/file I/O in Phase 2, alongside `superb-session` and
-  `superb-automation`.
+* **No Standard MIDI File (SMF) reading or writing** — file formats belong
+  in `superb-io`.
 
-These are deliberately deferred rather than half-implemented; the current
-scope covers everything the Phase 1 `superb-graph`/`superb-mixer` realtime
-path needs.
+These are deliberately left out rather than half-implemented; the current
+scope covers everything the real-time path in `superb-graph` and
+`superb-mixer` needs.

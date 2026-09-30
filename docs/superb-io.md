@@ -4,7 +4,7 @@ Where audio leaves and enters the Superb DAW SDK.
 
 ## Purpose
 
-`superb-io` sits at the very end of the Phase 1 dependency chain (core →
+`superb-io` sits at the end of the dependency chain (core →
 buffers/rt → transport → graph → mixer → **io**): it depends on
 `superb-core`, `superb-buffers`, `superb-rt`, `superb-transport`,
 `superb-midi` and `superb-graph`, and is generic over any
@@ -71,7 +71,7 @@ written with `wav::write`. `examples/play_sine_device`
 (`cargo run -p play_sine_device --features devices`) instead hands the
 engine to `device::run_engine` and plays it on the default output.
 
-## File I/O (Phase 2, feature `files`)
+## File I/O (feature `files`)
 
 ```sh
 cargo test -p superb-io --features files   # decode / resample / bounce tests
@@ -182,7 +182,7 @@ call `transport_mut().play()` first if the transport should move.
 without reading the file back. Output is always WAV (PCM16 or float32);
 encoding to FLAC or other formats is not provided.
 
-## Sample-accurate external MIDI (Phase 2)
+## Sample-accurate external MIDI
 
 `Engine::render` drains the `Consumer<TimestampedMessage>` attached with
 `set_midi_input` into the block's `MidiEventBuffer`. Each message's
@@ -234,7 +234,7 @@ How the block start is chosen, per `render`:
 
 Then `FrameMapper::set_block(block_start_us, frames)` runs and each message
 is placed at `mapper.frame_for(timestamp_us)` (`MidiTiming::Stream`) or at
-`0` (`MidiTiming::BlockStart`, the Phase 1 behaviour). Timestamps before the
+`0` (`MidiTiming::BlockStart`). Timestamps before the
 block clamp to frame 0 and timestamps after it clamp to the last frame, so
 nothing is ever lost or deferred to a later block. After the drain the buffer
 is `sort_by_frame`d, so explicit `midi_mut().push(MidiEvent { frame, .. })`
@@ -281,7 +281,7 @@ the start of `render` and placed inside that block by the engine's
 are `#[ignore]` since CI has no audio device.
 
 
-## Capture / input streams (Phase 2, feature `devices`)
+## Capture / input streams (feature `devices`)
 
 ```sh
 cargo test -p superb-io --features devices   # unit + ignored hardware smoke

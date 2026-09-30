@@ -4,8 +4,8 @@ Parameter envelopes and DAW-style automation modes.
 
 ## Purpose
 
-`superb-automation` is the first Phase 2 crate. It sits beside `superb-mixer`
-in the dependency graph (depends only on `superb-core` and `superb-rt`) and
+`superb-automation` sits beside `superb-mixer` in the dependency graph (it
+depends only on `superb-core` and `superb-rt`) and
 drives the same `Arc<AtomicF32>` handles that strip/node parameters already
 expose — no new parameter system required.
 
