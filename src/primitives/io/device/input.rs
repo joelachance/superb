@@ -338,7 +338,7 @@ where
         }
     };
     device
-        .build_input_stream(config.clone(), data_cb, err_cb, timeout)
+        .build_input_stream(*config, data_cb, err_cb, timeout)
         .map_err(|e| SuperbError::Message(format!("build input stream: {e}")))
 }
 

@@ -29,17 +29,26 @@ use crate::rig::{LiveHandles, Rig};
 
 /// Rebuilds the console from the song and swaps it into the engine.
 ///
-/// Made of: [`steps::build_console`] → [`steps::attach_inserts`] →
-/// [`steps::collect_handles`] → [`steps::publish`]. Afterwards
+/// Made of: `LiveEngine::reclaim` (frees graphs the engine has retired, on
+/// this thread) → [`steps::build_console`] → [`steps::attach_inserts`] →
+/// [`steps::collect_handles`] → [`steps::publish`], and while the engine
+/// loop is still in the rig, `LiveGraph::apply_pending` so the swap does not
+/// wait for an [`advance`]. Afterwards
 /// [`Rig::live`] points at the new strips, sends and plugins, and
 /// [`Rig::needs_sync`] is clear. Inserts whose plugin failed to load are
 /// listed in `live.failed_inserts`; the rest of the console runs.
 pub fn sync(rig: &mut Rig) -> Result<()> {
+    rig.engine.reclaim();
     let (mut mixer, player) = steps::build_console(&rig.session, &rig.cache, rig.channels)?;
     let (inserts, failed_inserts) =
         steps::attach_inserts(&rig.session, &mut rig.plugins, &mut mixer, &player);
     let (strips, sends) = steps::collect_handles(&mixer, &player);
     steps::publish(&mut rig.engine, mixer)?;
+    if let Some(engine_loop) = rig.engine_loop.as_mut() {
+        // Nothing is pulling audio yet, so nobody would swap the graph in
+        // before the next `advance`; do it now so syncs never back up.
+        engine_loop.engine_mut().processor_mut().apply_pending();
+    }
     rig.live = LiveHandles {
         strips,
         sends,

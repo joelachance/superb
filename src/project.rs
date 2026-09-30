@@ -214,14 +214,23 @@ pub fn import_audio(
 }
 
 /// Pushes an edit that does not change the console's structure.
-fn edit(rig: &mut Rig, command: impl Command<Session>) -> Result<()> {
+pub(crate) fn edit(rig: &mut Rig, command: impl Command<Session>) -> Result<()> {
     rig.history.push(&mut rig.session, command)
 }
 
 /// Pushes an edit that changes what the console must look like.
-fn structural(rig: &mut Rig, command: impl Command<Session>) -> Result<()> {
+pub(crate) fn structural(rig: &mut Rig, command: impl Command<Session>) -> Result<()> {
     edit(rig, command)?;
     rig.needs_sync = true;
+    Ok(())
+}
+
+/// Pushes a switch (mute, arm, bypass...). Unlike a fader move, flipping a
+/// switch twice must stay two undo steps, so the step is sealed at once
+/// instead of merging with the next flip.
+pub(crate) fn switch(rig: &mut Rig, command: impl Command<Session>) -> Result<()> {
+    edit(rig, command)?;
+    rig.history.seal();
     Ok(())
 }
 

@@ -287,7 +287,7 @@ where
         }
     };
     device
-        .build_output_stream(config.clone(), data_cb, err_cb, timeout)
+        .build_output_stream(*config, data_cb, err_cb, timeout)
         .map_err(|e| SuperbError::Message(format!("build stream: {e}")))
 }
 

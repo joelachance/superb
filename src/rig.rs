@@ -17,7 +17,9 @@ use std::sync::Arc;
 use crate::play::{AudioCache, SessionPlayer};
 use crate::primitives::io::live::{live_engine, EngineLoop, LiveEngine};
 use crate::primitives::mixer::{SendParams, StripParams};
-use crate::primitives::plugins::{ParamChange, ParamInfo, PluginDescriptor, PluginInstance};
+#[cfg(feature = "clap")]
+use crate::primitives::plugins::PluginInstance;
+use crate::primitives::plugins::{ParamChange, ParamInfo, PluginDescriptor};
 use crate::primitives::realtime::spsc::Producer;
 use crate::primitives::session::Session;
 use crate::primitives::undo::UndoStack;

@@ -65,6 +65,7 @@ path = "examples/primitives/session_playback.rs"
 [[example]]
 name = "clap_host_scan"
 path = "examples/primitives/clap_host_scan.rs"
+required-features = ["clap"]
 
 [[example]]
 name = "decode_bounce"

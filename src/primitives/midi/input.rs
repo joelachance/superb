@@ -4,7 +4,7 @@
 //! types: nothing outside this file knows midir exists. The bridge runs
 //! midir's callback on its own (non-realtime) thread, parses each message
 //! with [`MidiMessage::from_bytes`] and pushes a [`TimestampedMessage`] into
-//! a [`spsc`](crate::primitives::realtime::spsc) queue that the audio thread drains — the standard
+//! a [`spsc`] queue that the audio thread drains — the standard
 //! "non-RT producer, RT consumer" pattern used throughout the SDK.
 
 use std::sync::atomic::{AtomicUsize, Ordering};

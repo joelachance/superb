@@ -8,7 +8,7 @@
 //! * [`PluginNode`] — adapts any `Box<dyn PluginInstance>` to
 //!   [`Node`](crate::primitives::graph::Node), with a wait-free parameter queue so a UI
 //!   thread can move plugin parameters while the graph runs.
-//! * [`clap`] (feature `clap`, on by default) — a CLAP host built on the
+//! * `clap` (feature `clap`, on by default) — a CLAP host built on the
 //!   `clap-sys` bindings: load a `.clap` bundle (or an in-process entry),
 //!   list descriptors, instantiate, and drive the plugin through the
 //!   standard extensions (`params`, `state`, `latency`, `audio-ports`).
@@ -16,7 +16,7 @@
 //! * [`vst3`] — a stub. VST3 hosting is not implemented; every entry point
 //!   reports that instead of failing silently.
 //!
-//! Only [`clap`] contains `unsafe` code (FFI); the crate is
+//! Only `clap` contains `unsafe` code (FFI); the crate is
 //! `deny(unsafe_op_in_unsafe_fn)` and every unsafe block states its
 //! invariant.
 //!

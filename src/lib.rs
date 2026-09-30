@@ -37,7 +37,12 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(missing_docs)]
 
+pub mod devices;
+pub mod export;
+pub mod midi;
+pub mod mix;
 pub mod play;
+pub mod plugins;
 pub mod primitives;
 pub mod project;
 pub mod record;
