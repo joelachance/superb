@@ -3,7 +3,7 @@
 //! A [`Rig`] is a plain record of the primitives a running song needs: the
 //! document, its undo history, the audio in memory, and the live engine.
 //! Flow functions ([`play::start`](crate::play::start),
-//! `record::stop`, ...) take `&mut Rig` so you don't
+//! [`record::stop`](crate::record::stop), ...) take `&mut Rig` so you don't
 //! pass seven arguments; step functions take the individual fields. Nothing
 //! is hidden behind methods: reach into any field and call a primitive
 //! directly whenever a flow does not do exactly what you want.

@@ -119,7 +119,9 @@ pub fn is_rolling(rig: &Rig) -> bool {
 /// headless renderer) hears the rig; once the loop has been moved into a
 /// device stream it fails with a message saying so.
 ///
-/// Made of: [`sync`] when needed → `EngineLoop::tick` per block.
+/// Made of: [`sync`] when needed → `EngineLoop::tick` per block, with
+/// [`record::steps::collect`](crate::record::steps::collect) after each
+/// while a take is running.
 pub fn advance(rig: &mut Rig, blocks: usize) -> Result<PlanarBuffer> {
     if rig.needs_sync {
         sync(rig)?;
@@ -133,6 +135,9 @@ pub fn advance(rig: &mut Rig, blocks: usize) -> Result<PlanarBuffer> {
     for i in 0..blocks {
         engine_loop.tick(&mut scratch)?;
         out.copy_block_from(i * block, &scratch, block)?;
+        if let Some(recording) = rig.recording.as_mut() {
+            crate::record::steps::collect(recording);
+        }
     }
     rig.engine.reclaim();
     Ok(out)

@@ -82,6 +82,48 @@ name = "midi_monitor"
 path = "examples/primitives/midi_monitor.rs"
 required-features = ["midi-io"]
 
+[[example]]
+name = "transport_tempo_map"
+path = "examples/primitives/transport_tempo_map.rs"
+
+[[example]]
+name = "realtime_queue"
+path = "examples/primitives/realtime_queue.rs"
+
+[[example]]
+name = "new_song"
+path = "examples/flows/new_song.rs"
+
+[[example]]
+name = "play_song"
+path = "examples/flows/play_song.rs"
+
+[[example]]
+name = "mix_session"
+path = "examples/flows/mix_session.rs"
+
+[[example]]
+name = "midi_keys"
+path = "examples/flows/midi_keys.rs"
+
+[[example]]
+name = "record_take"
+path = "examples/flows/record_take.rs"
+
+[[example]]
+name = "insert_plugin"
+path = "examples/flows/insert_plugin.rs"
+required-features = ["clap"]
+
+[[example]]
+name = "export_song"
+path = "examples/flows/export_song.rs"
+
+[[example]]
+name = "list_devices"
+path = "examples/flows/list_devices.rs"
+required-features = ["devices"]
+
 # A single package; the empty table stops Cargo looking for a parent workspace.
 [workspace]
 
