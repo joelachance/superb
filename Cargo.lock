@@ -80,9 +80,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 name = "automation_gain_ramp"
 version = "0.1.0"
 dependencies = [
- "superb-automation",
- "superb-core",
- "superb-rt",
+ "superb",
 ]
 
 [[package]]
@@ -150,11 +148,7 @@ checksum = "a76abbdb2907f6fd97fb6bc0b7be96b77d328f2dd9669d1075cc03369ed22154"
 name = "clap_host_scan"
 version = "0.1.0"
 dependencies = [
- "superb-core",
- "superb-graph",
- "superb-io",
- "superb-plugins",
- "superb-transport",
+ "superb",
 ]
 
 [[package]]
@@ -970,9 +964,7 @@ dependencies = [
 name = "session_undo"
 version = "0.1.0"
 dependencies = [
- "superb-core",
- "superb-session",
- "superb-undo",
+ "superb",
 ]
 
 [[package]]

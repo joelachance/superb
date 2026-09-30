@@ -1,6 +1,6 @@
 [package]
 name = "automation_gain_ramp"
-description = "Superb example: automate an Arc<AtomicF32> gain with a linear envelope"
+description = "Offline example: automate a shared gain parameter with a linear envelope"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,4 @@ license.workspace = true
 publish = false
 
 [dependencies]
-superb-automation = { workspace = true }
-superb-core = { workspace = true }
-superb-rt = { workspace = true }
+superb = { workspace = true }

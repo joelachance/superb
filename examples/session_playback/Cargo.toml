@@ -1,15 +1,11 @@
 [package]
 name = "session_playback"
-description = "Offline: session MIDI + cached audio items → mixer → WAV"
+description = "Offline example: session MIDI and cached audio clips -> mixer -> WAV"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
 
-[[bin]]
-name = "session_playback"
-path = "src/main.rs"
-
 [dependencies]
-superb = { path = "../../crates/superb" }
+superb = { workspace = true }

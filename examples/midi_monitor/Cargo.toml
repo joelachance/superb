@@ -1,8 +1,9 @@
 [package]
 name = "midi_monitor"
-description = "Prints incoming MIDI from the first hardware input port (requires --features midi-io)"
+description = "Prints incoming MIDI from a hardware input port (requires --features midi-io)"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 publish = false
 

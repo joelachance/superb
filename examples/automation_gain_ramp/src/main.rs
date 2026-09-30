@@ -12,9 +12,9 @@
 
 use std::sync::Arc;
 
-use superb_automation::{advance_block, AutomationLane, AutomationMode, EnvelopePoint};
-use superb_core::{IdGenerator, TimePosition};
-use superb_rt::AtomicF32;
+use superb::automation::{advance_block, AutomationLane, AutomationMode, EnvelopePoint};
+use superb::core::{IdGenerator, TimePosition};
+use superb::rt::AtomicF32;
 
 fn main() {
     // IdGenerator hands out unique IDs for lanes, nodes, tracks, etc.

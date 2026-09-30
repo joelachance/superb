@@ -1,6 +1,6 @@
 [package]
 name = "decode_bounce"
-description = "Bounce a sine to WAV, decode it back with the `files` feature, resample to CD rate, write again"
+description = "Offline example: bounce a sine to WAV, decode it back with the `files` feature, resample to CD rate, write again"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

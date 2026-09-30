@@ -11,12 +11,12 @@
 //! cargo run -p session_undo
 //! ```
 
-use superb_core::{BeatPosition, Result, SampleRate, TimeDuration, TimePosition};
-use superb_session::commands::{
+use superb::core::{BeatPosition, Result, SampleRate, TimeDuration, TimePosition};
+use superb::session::commands::{
     self, AddItem, AddMarker, AddSend, AddTrack, MoveItem, SetTempo, SetTrackOutput,
 };
-use superb_session::{Item, ItemSource, Marker, MidiNote, Session, Track, TrackKind, TrackSend};
-use superb_undo::UndoStack;
+use superb::session::{Item, ItemSource, Marker, MidiNote, Session, Track, TrackKind, TrackSend};
+use superb::undo::UndoStack;
 
 // Helper: print a one-line snapshot of session + undo/redo tip labels.
 // `&Session` / `&UndoStack` = shared borrows (read-only).

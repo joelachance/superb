@@ -18,14 +18,14 @@
 
 use std::path::PathBuf;
 
-use superb_core::{Result, SampleRate};
-use superb_graph::nodes::SineNode;
-use superb_graph::AudioGraph;
-use superb_io::{offline, Engine};
-use superb_plugins::clap::ClapBundle;
-use superb_plugins::scan::{default_search_paths, scan_default, scan_directory, ScanReport};
-use superb_plugins::{PluginFormat, PluginInstance, PluginNode};
-use superb_transport::Transport;
+use superb::core::{Result, SampleRate};
+use superb::graph::nodes::SineNode;
+use superb::graph::AudioGraph;
+use superb::io::{offline, Engine};
+use superb::plugins::clap::ClapBundle;
+use superb::plugins::scan::{default_search_paths, scan_default, scan_directory, ScanReport};
+use superb::plugins::{PluginFormat, PluginInstance, PluginNode};
+use superb::transport::Transport;
 
 // Result<()> means "succeed with nothing, or return an error".
 // The `?` operator below forwards errors up to main's caller (the OS).
