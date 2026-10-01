@@ -73,11 +73,11 @@ fn main() -> Result<()> {
     // track, starting at the punch-in point.
     let clips = record::stop(&mut rig)?;
     for id in &clips {
-        let clip = rig.session.clip(*id)?;
+        let clip = rig.document.clip(*id)?;
         println!(
             "clip {:?} on {}: {:.3} s .. {:.3} s (source {:?})",
             clip.name,
-            rig.session.track(rig.session.clip_track(*id)?)?.name,
+            rig.document.track(rig.document.clip_track(*id)?)?.name,
             clip.start().to_seconds(rate),
             (clip.start() + clip.length()).to_seconds(rate),
             clip.source
@@ -95,7 +95,7 @@ fn main() -> Result<()> {
     session::undo(&mut rig)?;
     println!(
         "after undo: {} clips, cache holds {} take(s)",
-        rig.session.clip_count(),
+        rig.document.clip_count(),
         rig.cache.len()
     );
 

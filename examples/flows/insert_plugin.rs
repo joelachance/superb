@@ -2,8 +2,8 @@
 //!
 //! What you'll learn:
 //! - `plugins::scan` looks in the standard folders and `CLAP_PATH`
-//! - An insert is stored in the session; the running instance is created at
-//!   the next rebuild, so a session with a missing plugin still opens and plays
+//! - An insert is stored in the document; the running instance is created at
+//!   the next rebuild, so a document with a missing plugin still opens and plays
 //! - `set_param` reaches the document and the running instance at once
 //! - `failures` tells you which inserts did not load and why
 //!
@@ -73,7 +73,7 @@ fn main() -> Result<()> {
                 println!("{} at max: peak {dry:.3} -> {wet:.3}", p.name);
                 println!(
                     "stored in the session: {:?}",
-                    rig.session.insert(fx)?.param(p.id)
+                    rig.document.insert(fx)?.param(p.id)
                 );
             }
             // Bypass leaves the plugin out of the console entirely.
@@ -85,7 +85,7 @@ fn main() -> Result<()> {
             );
         }
         None => {
-            // No effect installed: show the failure path instead. The session
+            // No effect installed: show the failure path instead. The document
             // remembers the insert; the console runs without it.
             let mut desc =
                 PluginDescriptor::new(PluginFormat::Clap, "com.example.missing", "Missing FX");

@@ -4,7 +4,7 @@ Hearing the session: build the console from the document, drive the engine.
 
 ## Purpose
 
-`play` is where the document meets the engine. `rebuild` turns the `Session`
+`play` is where the document meets the engine. `rebuild` turns the `Document`
 into a `Mixer` full of source nodes and inserts, publishes it to the
 `EngineHandle`, and keeps the control-side handles in `rig.live`. The
 transport verbs send commands to the running engine. Without an audio
@@ -31,7 +31,7 @@ device, `drive` renders blocks by hand.
 | `collect_handles(&Mixer, &Wiring) -> (StripHandles, SendHandles)` | the atomics the control side keeps |
 | `publish(&mut EngineHandle, Mixer)` | prepare and hand the graph to the engine |
 
-`play::bridge` (`SessionMixerBridge`: the session track ↔ mixer strip
+`play::bridge` (`MixerBridge`: the session track ↔ mixer strip
 map, with routing and parameter mirroring) and `play::wiring` (`Wiring`,
 `WiredClip`, `schedule_midi_notes`: a node per clip) are the pieces the
 steps use; `AudioCache` lives in `primitives::io::cache`. The

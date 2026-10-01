@@ -1,4 +1,4 @@
-//! Getting the session out: render a range or the whole session to a file.
+//! Getting the document out: render a range or the whole document to a file.
 //!
 //! Export builds its own copy of the console (inserts included) and drives
 //! it offline, as fast as the machine allows. The running engine is not
@@ -18,33 +18,33 @@ use crate::primitives::transport::Transport;
 use crate::primitives::{Result, SuperbError, TimePosition};
 use crate::rig::Rig;
 
-/// Renders `frames` frames of the session starting at `start` into memory.
+/// Renders `frames` frames of the document starting at `start` into memory.
 ///
 /// Made of: [`play::steps::build_console`] → [`play::steps::attach_inserts`]
-/// → a `Transport` on the session's tempo map, sought to `start` and playing →
+/// → a `Transport` on the document's tempo map, sought to `start` and playing →
 /// `Engine::new` → `offline::render`.
 pub fn render(rig: &mut Rig, start: TimePosition, frames: usize) -> Result<PlanarBuffer> {
-    let (mut mixer, player) = play::steps::build_console(&rig.session, &rig.cache, rig.channels)?;
+    let (mut mixer, player) = play::steps::build_console(&rig.document, &rig.cache, rig.channels)?;
     let (_live, failed) =
-        play::steps::attach_inserts(&rig.session, &mut rig.plugins, &mut mixer, &player);
+        play::steps::attach_inserts(&rig.document, &mut rig.plugins, &mut mixer, &player);
     if let Some((id, why)) = failed.first() {
         return Err(SuperbError::Message(format!(
             "cannot export: insert {id} did not load ({why})"
         )));
     }
-    let mut transport = Transport::with_tempo_map(rig.session.tempo_map().clone());
+    let mut transport = Transport::with_tempo_map(rig.document.tempo_map().clone());
     transport.seek(start);
     transport.play();
     let mut engine = Engine::new(mixer, transport);
     offline::render(
         &mut engine,
-        rig.session.sample_rate(),
+        rig.document.sample_rate(),
         rig.engine.max_frames(),
         frames,
     )
 }
 
-/// Renders a range and writes it as a WAV file at the session's sample rate.
+/// Renders a range and writes it as a WAV file at the document's sample rate.
 /// Returns the audio as well.
 ///
 /// Made of: [`render`] → `wav::write`.
@@ -56,23 +56,23 @@ pub fn bounce(
     format: WavFormat,
 ) -> Result<PlanarBuffer> {
     let audio = render(rig, start, frames)?;
-    wav::write(path, &audio, rig.session.sample_rate(), format)?;
+    wav::write(path, &audio, rig.document.sample_rate(), format)?;
     Ok(audio)
 }
 
-/// Bounces the whole session, from the start to the end of the last clip.
-/// Fails if the session has no clips.
+/// Bounces the whole document, from the start to the end of the last clip.
+/// Fails if the document has no clips.
 ///
-/// Made of: `Session::end_position` → [`bounce`].
+/// Made of: `Document::end_position` → [`bounce`].
 pub fn bounce_session(
     rig: &mut Rig,
     path: impl AsRef<Path>,
     format: WavFormat,
 ) -> Result<PlanarBuffer> {
-    let end = rig.session.end_position().samples();
+    let end = rig.document.end_position().samples();
     if end <= 0 {
         return Err(SuperbError::Message(
-            "the session has no clips to bounce".into(),
+            "the document has no clips to bounce".into(),
         ));
     }
     bounce(rig, path, TimePosition::ZERO, end as usize, format)
@@ -92,7 +92,7 @@ pub fn bounce_at_rate(
 ) -> Result<PlanarBuffer> {
     let audio = render(rig, start, frames)?;
     let converted =
-        crate::primitives::io::files::resample(&audio, rig.session.sample_rate(), rate)?;
+        crate::primitives::io::files::resample(&audio, rig.document.sample_rate(), rate)?;
     wav::write(path, &converted, rate, format)?;
     Ok(converted)
 }
@@ -136,7 +136,7 @@ mod tests {
 
         let dir = std::env::temp_dir().join(format!("superb-export-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("session.wav");
+        let path = dir.join("document.wav");
         let bounced = bounce_session(&mut rig, &path, WavFormat::Float32).unwrap();
         assert_eq!(bounced.frames(), 1_500, "to the end of the last clip");
         let (read, rate) = wav::read(&path).unwrap();

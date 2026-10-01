@@ -1,11 +1,11 @@
 //! Effects and instruments: find plugins, put one on a track, turn its knobs.
 //!
-//! An insert is remembered in the session (plugin, bypass, parameter values,
+//! An insert is remembered in the document (plugin, bypass, parameter values,
 //! saved state) and turned into a running instance when the console is
 //! built. Parameter changes take the two usual paths: into the document
 //! through undo and onto the running instance through its wait-free queue.
 //!
-//! Made of `superb::primitives::plugins` (the host), the session's insert
+//! Made of `superb::primitives::plugins` (the host), the document's insert
 //! commands, and [`Rig::plugins`] (which loads bundles and keeps them open).
 
 use crate::primitives::plugins::{ParamChange, ParamInfo, PluginDescriptor};
@@ -27,13 +27,13 @@ pub fn scan() -> Result<crate::primitives::plugins::scan::ScanReport> {
 /// instance is created at the next rebuild; if it cannot be loaded, the rebuild
 /// still succeeds and the failure is listed by [`failures`].
 ///
-/// Made of: `Session::allocate_insert_id` → `Insert::with_id` → push
+/// Made of: `Document::allocate_insert_id` → `Insert::with_id` → push
 /// `AddInsert`; marks the rig for a rebuild.
 pub fn insert(rig: &mut Rig, track: TrackId, plugin: &PluginDescriptor) -> Result<InsertId> {
-    let id = rig.session.allocate_insert_id();
+    let id = rig.document.allocate_insert_id();
     let insert = Insert::with_id(id, PluginRef::from(plugin));
     rig.history
-        .push(&mut rig.session, AddInsert::new(track, insert))?;
+        .push(&mut rig.document, AddInsert::new(track, insert))?;
     rig.needs_rebuild = true;
     Ok(id)
 }
@@ -43,14 +43,14 @@ pub fn insert(rig: &mut Rig, track: TrackId, plugin: &PluginDescriptor) -> Resul
 /// Made of: push `RemoveInsert`; marks the rig for a rebuild.
 pub fn remove(rig: &mut Rig, insert: InsertId) -> Result<()> {
     rig.history
-        .push(&mut rig.session, RemoveInsert::new(insert))?;
+        .push(&mut rig.document, RemoveInsert::new(insert))?;
     rig.needs_rebuild = true;
     Ok(())
 }
 
 /// Bypasses an insert (its input passes straight through, the plugin is
 /// not run) or brings it back. A switch, not an edit: it is saved with the
-/// session but not recorded in the undo history, and it is heard at the
+/// document but not recorded in the undo history, and it is heard at the
 /// next block.
 ///
 /// Made of: `Insert::bypassed` through `session::switch` → the node's
@@ -73,7 +73,7 @@ pub fn set_bypassed(rig: &mut Rig, insert: InsertId, on: bool) -> Result<()> {
 /// instance's queue, when it is loaded.
 pub fn set_param(rig: &mut Rig, insert: InsertId, param: u32, value: f64) -> Result<()> {
     rig.history.push(
-        &mut rig.session,
+        &mut rig.document,
         commands::set_insert_param(insert, param, value),
     )?;
     if let Some(live) = rig.live.insert_mut(insert) {
@@ -170,7 +170,7 @@ mod tests {
         set_param(&mut rig, gain, 7, 0.5).unwrap();
         set_param(&mut rig, gain, 7, 0.25).unwrap(); // a knob drag: one step
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3, "heard live");
-        assert_eq!(rig.session.insert(gain).unwrap().param(7), Some(0.25));
+        assert_eq!(rig.document.insert(gain).unwrap().param(7), Some(0.25));
         // A fresh rebuild re-applies the stored value to the new instance.
         play::rebuild(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
@@ -180,7 +180,7 @@ mod tests {
         set_bypassed(&mut rig, gain, true).unwrap();
         assert!(!rig.needs_rebuild);
         assert_eq!(rig.history.undo_len(), steps);
-        assert!(rig.session.insert(gain).unwrap().bypassed);
+        assert!(rig.document.insert(gain).unwrap().bypassed);
         assert!(
             (settled(&mut rig) - dry).abs() < 1e-3,
             "input passes through"
@@ -192,7 +192,7 @@ mod tests {
         set_bypassed(&mut rig, gain, false).unwrap();
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
         remove(&mut rig, gain).unwrap();
-        assert!(rig.session.insert(gain).is_err());
+        assert!(rig.document.insert(gain).is_err());
         play::rebuild(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry).abs() < 1e-3);
         // Undo the removal: the insert is back, active, at 0.25.
@@ -220,6 +220,6 @@ mod tests {
             .any(|(id, why)| *id == vst && why.contains("VST3")));
         // Setting a parameter on an unloaded insert still records in the document.
         set_param(&mut rig, gone, 1, 0.5).unwrap();
-        assert_eq!(rig.session.insert(gone).unwrap().param(1), Some(0.5));
+        assert_eq!(rig.document.insert(gone).unwrap().param(1), Some(0.5));
     }
 }

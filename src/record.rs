@@ -10,7 +10,7 @@
 //!
 //! Made of `superb::primitives::io::capture` (the queue),
 //! `superb::primitives::io::device` (hardware input, feature `devices`),
-//! the audio cache, and the session's clip commands.
+//! the audio cache, and the document's clip commands.
 
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -150,11 +150,11 @@ impl core::fmt::Debug for Collector {
 }
 
 /// Arms or disarms an audio track. Armed tracks receive a clip when a take
-/// is stopped. A switch: saved with the session, not an undo step.
+/// is stopped. A switch: saved with the document, not an undo step.
 ///
 /// Made of: `Track::armed` through `session::switch`.
 pub fn arm(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
-    if rig.session.track(track)?.kind != TrackKind::Audio {
+    if rig.document.track(track)?.kind != TrackKind::Audio {
         return Err(SuperbError::InvalidArgument {
             what: "only audio tracks are armed for recording",
         });
@@ -167,7 +167,7 @@ pub fn arm(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
 
 /// The audio tracks currently armed, in track order.
 pub fn armed_tracks(rig: &Rig) -> Vec<TrackId> {
-    rig.session
+    rig.document
         .tracks()
         .iter()
         .filter(|t| t.kind == TrackKind::Audio && t.armed)
@@ -308,7 +308,7 @@ pub fn stop(rig: &mut Rig) -> Result<Vec<ClipId>> {
         match steps::place_clip(rig, *track, &name, punch_in, length) {
             Ok(clip) => clips.push(clip),
             Err(e) => {
-                rig.history.cancel_group(&mut rig.session)?;
+                rig.history.cancel_group(&mut rig.document)?;
                 return Err(e);
             }
         }
@@ -499,13 +499,13 @@ mod tests {
         assert_eq!(clips.len(), 2);
         assert!(!is_recording(&rig));
         for clip in &clips {
-            let c = rig.session.clip(*clip).unwrap();
+            let c = rig.document.clip(*clip).unwrap();
             assert_eq!(c.start(), TimePosition::from_samples(640));
             assert_eq!(c.length(), TimeDuration::from_samples(320));
             assert_eq!(c.name, "take 1");
         }
-        assert_eq!(rig.session.clip_track(clips[0]).unwrap(), vox);
-        assert_eq!(rig.session.clip_track(clips[1]).unwrap(), gtr);
+        assert_eq!(rig.document.clip_track(clips[0]).unwrap(), vox);
+        assert_eq!(rig.document.clip_track(clips[1]).unwrap(), gtr);
         assert_eq!(rig.cache.len(), 1);
         assert_eq!(rig.history.undo_label(), Some("Record take"));
 
@@ -523,9 +523,9 @@ mod tests {
 
         // One undo removes both clips.
         assert!(session::undo(&mut rig).unwrap());
-        assert!(rig.session.clip(clips[0]).is_err() && rig.session.clip(clips[1]).is_err());
+        assert!(rig.document.clip(clips[0]).is_err() && rig.document.clip(clips[1]).is_err());
         assert!(session::redo(&mut rig).unwrap());
-        assert!(rig.session.clip(clips[0]).is_ok());
+        assert!(rig.document.clip(clips[0]).is_ok());
     }
 
     #[test]
@@ -539,7 +539,7 @@ mod tests {
             feed_stereo(&mut mic, 2);
             let clips = stop(&mut rig).unwrap();
             assert_eq!(
-                rig.session.clip(clips[0]).unwrap().name,
+                rig.document.clip(clips[0]).unwrap().name,
                 format!("take {i}")
             );
         }
@@ -550,7 +550,7 @@ mod tests {
             stop(&mut rig).unwrap().is_empty(),
             "nothing captured, nothing placed"
         );
-        assert_eq!(rig.session.clip_count(), 2);
+        assert_eq!(rig.document.clip_count(), 2);
     }
 
     fn feed_stereo(producer: &mut crate::primitives::io::capture::CaptureProducer, blocks: usize) {
@@ -608,7 +608,7 @@ mod tests {
         let _ = format!("{:?}", rig.recording.as_ref().unwrap());
         let clips = stop(&mut rig).unwrap();
         let dropped = mic.dropped() as usize;
-        let clip = rig.session.clip(clips[0]).unwrap();
+        let clip = rig.document.clip(clips[0]).unwrap();
         assert_eq!(
             clip.length(),
             TimeDuration::from_samples(((200 - dropped) * 64) as i64),
@@ -670,7 +670,7 @@ mod tests {
         assert_eq!(collect(&mut rig), 640);
         let clips = stop(&mut rig).unwrap();
         assert_eq!(
-            rig.session.clip(clips[0]).unwrap().length(),
+            rig.document.clip(clips[0]).unwrap().length(),
             TimeDuration::from_samples(640)
         );
         assert_eq!(collect(&mut rig), 0, "nothing recording");

@@ -37,7 +37,7 @@ Two kinds of function appear in a flow:
 ```rust
 pub struct Rig {
     pub session: Session,            // the session
-    pub history: UndoStack<Session>, // every edit goes through here
+    pub history: UndoStack<Document>, // every edit goes through here
     pub cache: AudioCache,           // audio in memory, keyed by the path clips use
     pub engine: EngineHandle,          // control handle: commands, graph swaps, position
     pub engine_loop: Option<EngineLoop>, // the audio side, until a device takes it
@@ -52,7 +52,7 @@ pub struct Rig {
 ```
 
 `session::create` or `session::open` makes one; `Rig::new` wraps a
-`Session` you already have.
+`Document` you already have.
 
 ## Rebuilding the console
 

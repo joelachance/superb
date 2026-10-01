@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     let mut rig = session::create("keys", rate, 128)?;
     let keys = session::add_track(&mut rig, "keys", TrackKind::Midi)?;
 
-    // Monitoring is part of the session (undoable) and changes the console:
+    // Monitoring is part of the document (undoable) and changes the console:
     // the instrument is a node on the track's strip.
     midi::monitor(&mut rig, keys, true)?;
     play::start(&mut rig)?;

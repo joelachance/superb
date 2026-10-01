@@ -1,8 +1,8 @@
-//! How a session is wired into a console: which strip each track got, and
+//! How a document is wired into a console: which strip each track got, and
 //! a source node for every clip.
 //!
 //! [`Wiring::wire`] binds strips and buses through the
-//! [`SessionMixerBridge`], mirrors routing and strip settings, then attaches
+//! [`MixerBridge`], mirrors routing and strip settings, then attaches
 //! one node per audible clip: [`BufferPlayerNode`] for audio the
 //! [`AudioCache`] holds (a missing entry plays as silence), and
 //! [`ScheduledSynthNode`] for MIDI notes converted through the tempo map.
@@ -14,34 +14,34 @@ use std::sync::Arc;
 use crate::primitives::graph::nodes::{BufferPlayerNode, ScheduledNoteEvent, ScheduledSynthNode};
 use crate::primitives::io::cache::AudioCache;
 use crate::primitives::mixer::Mixer;
-use crate::primitives::session::{Clip, ClipSource, MidiNote, Session, TrackKind};
+use crate::primitives::session::{Clip, ClipSource, Document, MidiNote, TrackKind};
 use crate::primitives::transport::TempoMap;
 use crate::primitives::{BeatPosition, ClipId, NodeId, Result, TrackId};
 
-use crate::play::bridge::{MixerBinding, SessionMixerBridge};
+use crate::play::bridge::{MixerBinding, MixerBridge};
 
 /// One clip wired into the console: the node that plays it and the strip
 /// it feeds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WiredClip {
-    /// Session clip.
+    /// Document clip.
     pub clip: ClipId,
-    /// Session track that owns the clip.
-    pub session_track: TrackId,
+    /// Document track that owns the clip.
+    pub track: TrackId,
     /// Mixer track the source feeds.
     pub mixer_track: TrackId,
     /// The node playing the clip (a buffer player or a scheduled synth).
     pub node: NodeId,
 }
 
-/// The map from a session onto the console built for it.
+/// The map from a document onto the console built for it.
 ///
-/// Owns the [`SessionMixerBridge`] side table (track → strip, send → send)
-/// plus the clip nodes created. A structural edit to the session means a
+/// Owns the [`MixerBridge`] side table (track → strip, send → send)
+/// plus the clip nodes created. A structural edit to the document means a
 /// fresh [`wire`](Wiring::wire) of a fresh mixer.
 #[derive(Clone, Debug)]
 pub struct Wiring {
-    bridge: SessionMixerBridge,
+    bridge: MixerBridge,
     clips: Vec<WiredClip>,
 }
 
@@ -54,21 +54,21 @@ impl Wiring {
     /// * [`ClipSource::Audio`] — [`BufferPlayerNode`] when `cache` has the
     ///   path; otherwise skipped.
     /// * [`ClipSource::Midi`] — [`ScheduledSynthNode`] with notes converted
-    ///   through the session tempo map.
+    ///   through the document tempo map.
     ///
     /// Bus tracks never receive clip sources. The mixer must be prepared
     /// (by the engine) before it renders.
-    pub fn wire(session: &Session, mixer: &mut Mixer, cache: &AudioCache) -> Result<Self> {
-        let mut bridge = SessionMixerBridge::new();
-        bridge.bind(session, mixer);
-        bridge.apply_routing(session, mixer)?;
-        bridge.apply_strip_params(session, mixer);
+    pub fn wire(document: &Document, mixer: &mut Mixer, cache: &AudioCache) -> Result<Self> {
+        let mut bridge = MixerBridge::new();
+        bridge.bind(document, mixer);
+        bridge.apply_routing(document, mixer)?;
+        bridge.apply_strip_params(document, mixer);
 
         let channels = mixer.channels();
-        let tempo = session.tempo_map();
+        let tempo = document.tempo_map();
         let mut clips = Vec::new();
 
-        for track in session.tracks() {
+        for track in document.tracks() {
             if track.kind == TrackKind::Bus {
                 continue;
             }
@@ -105,7 +105,7 @@ impl Wiring {
                 };
                 clips.push(WiredClip {
                     clip: clip.id(),
-                    session_track: track.id(),
+                    track: track.id(),
                     mixer_track,
                     node,
                 });
@@ -116,7 +116,7 @@ impl Wiring {
     }
 
     /// Side table from the last [`wire`](Self::wire).
-    pub fn bridge(&self) -> &SessionMixerBridge {
+    pub fn bridge(&self) -> &MixerBridge {
         &self.bridge
     }
 
@@ -198,19 +198,19 @@ mod tests {
     /// Wires a fresh mixer and renders `frames` from `start` offline, the
     /// way `export::render` does.
     fn render(
-        session: &Session,
+        document: &Document,
         cache: &AudioCache,
         start: TimePosition,
         frames: usize,
         block: usize,
     ) -> PlanarBuffer {
         let mut mixer = Mixer::new(2);
-        Wiring::wire(session, &mut mixer, cache).unwrap();
-        let mut transport = Transport::with_tempo_map(session.tempo_map().clone());
+        Wiring::wire(document, &mut mixer, cache).unwrap();
+        let mut transport = Transport::with_tempo_map(document.tempo_map().clone());
         transport.seek(start);
         transport.play();
         let mut engine = Engine::new(mixer, transport);
-        offline::render(&mut engine, session.sample_rate(), block, frames).unwrap()
+        offline::render(&mut engine, document.sample_rate(), block, frames).unwrap()
     }
 
     fn tone_buffer(frames: usize, value: f32) -> PlanarBuffer {
@@ -221,8 +221,8 @@ mod tests {
 
     #[test]
     fn wire_skips_empty_and_missing_audio_attaches_cached() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let audio = session.add_track("vox", TrackKind::Audio);
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let audio = document.add_track("vox", TrackKind::Audio);
         let empty_clip = Clip::new(
             "e",
             TimePosition::ZERO,
@@ -230,7 +230,7 @@ mod tests {
             ClipSource::Empty,
         )
         .unwrap();
-        session.add_clip(audio, empty_clip).unwrap();
+        document.add_clip(audio, empty_clip).unwrap();
         let missing = Clip::new(
             "m",
             TimePosition::from_samples(100),
@@ -241,7 +241,7 @@ mod tests {
             },
         )
         .unwrap();
-        session.add_clip(audio, missing).unwrap();
+        document.add_clip(audio, missing).unwrap();
         let present = Clip::new(
             "p",
             TimePosition::from_samples(200),
@@ -252,21 +252,21 @@ mod tests {
             },
         )
         .unwrap();
-        session.add_clip(audio, present).unwrap();
+        document.add_clip(audio, present).unwrap();
 
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(100, 0.5));
 
         let mut mixer = Mixer::new(2);
-        let wiring = Wiring::wire(&session, &mut mixer, &cache).unwrap();
+        let wiring = Wiring::wire(&document, &mut mixer, &cache).unwrap();
         assert_eq!(wiring.clips().len(), 1);
         assert!(wiring.bridge().mixer_track(audio).is_some());
     }
 
     #[test]
     fn wired_audio_clip_plays_in_its_place() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let track = session.add_track("vox", TrackKind::Audio);
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let track = document.add_track("vox", TrackKind::Audio);
         let clip = Clip::new(
             "take",
             TimePosition::from_samples(100),
@@ -277,12 +277,12 @@ mod tests {
             },
         )
         .unwrap();
-        session.add_clip(track, clip).unwrap();
+        document.add_clip(track, clip).unwrap();
 
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(200, 0.25));
 
-        let audio = render(&session, &cache, TimePosition::ZERO, 400, 64);
+        let audio = render(&document, &cache, TimePosition::ZERO, 400, 64);
         assert_eq!(audio.frames(), 400);
         // Before the clip: silence
         assert!(audio.channel(0)[..100].iter().all(|&s| s == 0.0));
@@ -298,8 +298,8 @@ mod tests {
 
     #[test]
     fn wired_midi_clip_plays_through_the_scheduled_synth() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let track = session.add_track("keys", TrackKind::Midi);
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let track = document.add_track("keys", TrackKind::Midi);
         let notes = vec![MidiNote {
             beat: 0.0,
             length: 0.25,
@@ -315,10 +315,10 @@ mod tests {
             ClipSource::Midi { notes },
         )
         .unwrap();
-        session.add_clip(track, clip).unwrap();
+        document.add_clip(track, clip).unwrap();
 
         let audio = render(
-            &session,
+            &document,
             &AudioCache::new(),
             TimePosition::ZERO,
             12_000,
@@ -330,9 +330,9 @@ mod tests {
         assert!(tail.iter().all(|&s| s.abs() < 1e-5), "tail not silent");
     }
 
-    fn tone_session(rate: SampleRate) -> (Session, AudioCache, TrackId) {
-        let mut session = Session::new("routing", rate);
-        let vox = session.add_track("vox", TrackKind::Audio);
+    fn tone_session(rate: SampleRate) -> (Document, AudioCache, TrackId) {
+        let mut document = Document::new("routing", rate);
+        let vox = document.add_track("vox", TrackKind::Audio);
         let clip = Clip::new(
             "take",
             TimePosition::ZERO,
@@ -343,54 +343,54 @@ mod tests {
             },
         )
         .unwrap();
-        session.add_clip(vox, clip).unwrap();
+        document.add_clip(vox, clip).unwrap();
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(400, 0.5));
-        (session, cache, vox)
+        (document, cache, vox)
     }
 
-    fn steady_level(session: &Session, cache: &AudioCache) -> f32 {
-        let audio = render(session, cache, TimePosition::ZERO, 400, 64);
+    fn steady_level(document: &Document, cache: &AudioCache) -> f32 {
+        let audio = render(document, cache, TimePosition::ZERO, 400, 64);
         // Last sample: gain ramps have settled.
         audio.channel(0)[399].abs()
     }
 
     #[test]
     fn wiring_honours_bus_routing_and_sends() {
-        let (mut session, cache, vox) = tone_session(SampleRate::HZ_48K);
-        let direct = steady_level(&session, &cache);
+        let (mut document, cache, vox) = tone_session(SampleRate::HZ_48K);
+        let direct = steady_level(&document, &cache);
         assert!(direct > 0.1, "direct {direct}");
 
         // Route through a bus at -6.02 dB: half the level.
-        let sub = session.add_track("sub", TrackKind::Bus);
-        session.track_mut(sub).unwrap().gain_db = -6.0206;
-        session.set_track_output(vox, Some(sub)).unwrap();
-        let through_bus = steady_level(&session, &cache);
+        let sub = document.add_track("sub", TrackKind::Bus);
+        document.track_mut(sub).unwrap().gain_db = -6.0206;
+        document.set_track_output(vox, Some(sub)).unwrap();
+        let through_bus = steady_level(&document, &cache);
         assert!(
             (through_bus - direct * 0.5).abs() < 1e-3,
             "bus {through_bus} vs direct {direct}"
         );
 
         // Add a unity post-fader send to a second bus on top: 1.5×.
-        let fx = session.add_track("fx", TrackKind::Bus);
-        let send = session
+        let fx = document.add_track("fx", TrackKind::Bus);
+        let send = document
             .add_send(vox, crate::primitives::session::TrackSend::new(fx))
             .unwrap();
-        let with_send = steady_level(&session, &cache);
+        let with_send = steady_level(&document, &cache);
         assert!(
             (with_send - direct * 1.5).abs() < 1e-3,
             "send {with_send} vs direct {direct}"
         );
 
         // Disabled send contributes nothing; a bus feeding a muted bus is silent.
-        session.send_mut(send).unwrap().enabled = false;
-        assert!((steady_level(&session, &cache) - through_bus).abs() < 1e-3);
-        session.track_mut(fx).unwrap().muted = true;
-        session.send_mut(send).unwrap().enabled = true;
-        assert!((steady_level(&session, &cache) - through_bus).abs() < 1e-3);
+        document.send_mut(send).unwrap().enabled = false;
+        assert!((steady_level(&document, &cache) - through_bus).abs() < 1e-3);
+        document.track_mut(fx).unwrap().muted = true;
+        document.send_mut(send).unwrap().enabled = true;
+        assert!((steady_level(&document, &cache) - through_bus).abs() < 1e-3);
         let wiring = {
             let mut mixer = Mixer::new(2);
-            Wiring::wire(&session, &mut mixer, &cache).unwrap()
+            Wiring::wire(&document, &mut mixer, &cache).unwrap()
         };
         assert!(wiring.bridge().mixer_send(send).is_some());
     }
@@ -423,8 +423,8 @@ mod tests {
 
     #[test]
     fn muted_clip_is_not_wired() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let track = session.add_track("vox", TrackKind::Audio);
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let track = document.add_track("vox", TrackKind::Audio);
         let mut clip = Clip::new(
             "take",
             TimePosition::ZERO,
@@ -436,11 +436,11 @@ mod tests {
         )
         .unwrap();
         clip.muted = true;
-        session.add_clip(track, clip).unwrap();
+        document.add_clip(track, clip).unwrap();
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(100, 1.0));
         let mut mixer = Mixer::new(2);
-        let wiring = Wiring::wire(&session, &mut mixer, &cache).unwrap();
+        let wiring = Wiring::wire(&document, &mut mixer, &cache).unwrap();
         assert!(wiring.clips().is_empty());
     }
 }

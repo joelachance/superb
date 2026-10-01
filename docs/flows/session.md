@@ -54,9 +54,9 @@ feature, or `rig.cache.insert`).
 
 ## Made of
 
-`Session::allocate_*_id` → `Track::with_id` / `Clip::with_id` /
+`Document::allocate_*_id` → `Track::with_id` / `Clip::with_id` /
 `Marker::with_id` → the matching command in `primitives::session::commands`
-pushed through `UndoStack::push`; `SessionSnapshot` and `serde_json` for
+pushed through `UndoStack::push`; `DocumentSnapshot` and `serde_json` for
 files; `AudioCache::load` for import. `set_loop` additionally sends
 `EngineCommand::SetLoop` so the transport knows the range at once.
 

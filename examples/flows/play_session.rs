@@ -1,11 +1,11 @@
-//! `play`: hear the session, move the playhead, loop a section.
+//! `play`: hear the document, move the playhead, loop a section.
 //!
 //! What you'll learn:
-//! - `play::start` rebuilds the console from the session and starts the transport
+//! - `play::start` rebuilds the console from the document and starts the transport
 //! - Without an audio device, `play::drive` renders blocks and hands you
 //!   the audio (tests and headless tools work this way)
 //! - The playhead is read from atomics: `position`, `state`, `is_rolling`
-//! - A loop range lives in the session (`session::set_loop`); `set_loop_enabled`
+//! - A loop range lives in the document (`session::set_loop`); `set_loop_enabled`
 //!   turns it on and off while rolling
 //! - With feature `devices`, `play::start_output` moves the engine onto a
 //!   real output stream and the device drives it from then on
@@ -69,7 +69,7 @@ fn main() -> Result<()> {
     play::drive(&mut rig, 1)?;
     println!("after seek: {:.3} s", play::position(&rig).to_seconds(rate));
 
-    // Loop the middle pluck. The range is part of the session (undoable,
+    // Loop the middle pluck. The range is part of the document (undoable,
     // saved); enabling is a transport switch.
     let range = LoopRange::new(
         TimePosition::from_seconds(0.5, rate),

@@ -1,7 +1,7 @@
 //! `mix`: faders, pan, mute and solo, a reverb-style bus with sends, meters.
 //!
 //! What you'll learn:
-//! - Level changes go two places at once: the session (undoable) and the live
+//! - Level changes go two places at once: the document (undoable) and the live
 //!   strip (heard on the next block, no rebuild)
 //! - Buses collect tracks; `route` sends a track's output into one
 //! - Sends tap a copy of a track into a bus, pre- or post-fader
@@ -126,7 +126,7 @@ fn main() -> Result<()> {
         println!("room bus meter:          L {l:.3}  R {r:.3}");
     }
 
-    // Everything above is in the session. Undo it all and the document is back
+    // Everything above is in the document. Undo it all and the document is back
     // to two tracks at 0 dB; the console follows on the next rebuild.
     while rig.history.undo_len() > 4 {
         // 4 = the two tracks and two clips we started with
@@ -134,9 +134,9 @@ fn main() -> Result<()> {
     }
     println!(
         "after undo: gtr {} dB, {} tracks, gtr sends {}",
-        rig.session.track(gtr)?.gain_db,
-        rig.session.track_count(),
-        rig.session.track(gtr)?.sends().len()
+        rig.document.track(gtr)?.gain_db,
+        rig.document.track_count(),
+        rig.document.track(gtr)?.sends().len()
     );
     Ok(())
 }

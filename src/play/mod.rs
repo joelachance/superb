@@ -1,7 +1,7 @@
 //! Playing the session: build the console from the document, hand it to the
 //! running engine, and drive the transport.
 //!
-//! The engine never sees the document. [`rebuild`] turns the session into a
+//! The engine never sees the document. [`rebuild`] turns the document into a
 //! [`Mixer`](crate::primitives::mixer::Mixer) (tracks, buses, sends, clip players, live instruments, plugin
 //! inserts) and publishes its graph to the engine, which swaps it in
 //! between two blocks without a glitch. Flows that start audio call `rebuild`
@@ -9,14 +9,14 @@
 //!
 //! Made of `superb::primitives::io::live` (the running engine),
 //! `superb::primitives::mixer` (the console) and the two modules below:
-//! [`bridge`] maps session tracks onto console strips and [`wiring`]
+//! [`bridge`] maps document tracks onto console strips and [`wiring`]
 //! attaches a node per clip. Each function lists the steps it is made of;
 //! the steps are public in [`steps`].
 
 pub mod bridge;
 pub mod wiring;
 
-pub use bridge::{MixerBinding, SessionMixerBridge};
+pub use bridge::{MixerBinding, MixerBridge};
 pub use wiring::{schedule_midi_notes, WiredClip, Wiring};
 
 use crate::primitives::buffers::PlanarBuffer;
@@ -25,7 +25,7 @@ use crate::primitives::transport::TransportState;
 use crate::primitives::{Result, SuperbError, TimePosition};
 use crate::rig::{LiveHandles, Rig};
 
-/// Rebuilds the console from the session and swaps it into the engine.
+/// Rebuilds the console from the document and swaps it into the engine.
 ///
 /// Made of: `EngineHandle::reclaim` (frees graphs the engine has retired, on
 /// this thread) → [`steps::build_console`] → [`steps::attach_inserts`] →
@@ -37,9 +37,9 @@ use crate::rig::{LiveHandles, Rig};
 /// listed in `live.failed_inserts`; the rest of the console runs.
 pub fn rebuild(rig: &mut Rig) -> Result<()> {
     rig.engine.reclaim();
-    let (mut mixer, wiring) = steps::build_console(&rig.session, &rig.cache, rig.channels)?;
+    let (mut mixer, wiring) = steps::build_console(&rig.document, &rig.cache, rig.channels)?;
     let (inserts, failed_inserts) =
-        steps::attach_inserts(&rig.session, &mut rig.plugins, &mut mixer, &wiring);
+        steps::attach_inserts(&rig.document, &mut rig.plugins, &mut mixer, &wiring);
     let (strips, sends) = steps::collect_handles(&mixer, &wiring);
     steps::publish(&mut rig.engine, mixer)?;
     if let Some(engine_loop) = rig.engine_loop.as_mut() {
@@ -58,7 +58,7 @@ pub fn rebuild(rig: &mut Rig) -> Result<()> {
     Ok(())
 }
 
-/// Starts the transport from where it is. Syncs first if the session changed.
+/// Starts the transport from where it is. Syncs first if the document changed.
 ///
 /// Made of: [`rebuild`] when needed → `EngineHandle::send(Play)`.
 pub fn start(rig: &mut Rig) -> Result<()> {
@@ -82,14 +82,14 @@ pub fn seek(rig: &mut Rig, to: TimePosition) -> Result<()> {
     rig.engine.send(EngineCommand::Seek(to))
 }
 
-/// Moves the playhead to the start of the session.
+/// Moves the playhead to the start of the document.
 ///
 /// Made of: [`seek`] to zero.
 pub fn rewind(rig: &mut Rig) -> Result<()> {
     seek(rig, TimePosition::ZERO)
 }
 
-/// Turns looping over the session's loop range on or off (set the range with
+/// Turns looping over the document's loop range on or off (set the range with
 /// [`session::set_loop`](crate::session::set_loop)).
 ///
 /// Made of: `EngineHandle::send(SetLoopEnabled)`.
@@ -175,7 +175,7 @@ pub mod steps {
     use crate::primitives::io::live::EngineHandle;
     use crate::primitives::mixer::{Mixer, StripId};
     use crate::primitives::plugins::PluginNode;
-    use crate::primitives::session::{Session, TrackKind};
+    use crate::primitives::session::{Document, TrackKind};
     use crate::primitives::{InsertId, Result};
     use crate::rig::{LiveInsert, PluginLoader, SendHandles, StripHandles};
 
@@ -186,13 +186,13 @@ pub mod steps {
     /// Made of: `Mixer::new` → `Wiring::wire` → one `MonoSynthNode`
     /// plus a MIDI edge per armed MIDI track.
     pub fn build_console(
-        session: &Session,
+        document: &Document,
         cache: &AudioCache,
         channels: usize,
     ) -> Result<(Mixer, Wiring)> {
         let mut mixer = Mixer::new(channels);
-        let wiring = Wiring::wire(session, &mut mixer, cache)?;
-        for track in session.tracks() {
+        let wiring = Wiring::wire(document, &mut mixer, cache)?;
+        for track in document.tracks() {
             if track.kind != TrackKind::Midi || !track.armed {
                 continue;
             }
@@ -208,21 +208,21 @@ pub mod steps {
         Ok((mixer, wiring))
     }
 
-    /// Loads every insert in the session and splices it into its strip's chain,
+    /// Loads every insert in the document and splices it into its strip's chain,
     /// with the node's bypass switch set to match the document. Failures
     /// are collected, not fatal.
     ///
     /// Made of: `PluginLoader::instantiate` → `PluginNode::new` →
     /// `Mixer::add_insert`, per insert.
     pub fn attach_inserts(
-        session: &Session,
+        document: &Document,
         loader: &mut PluginLoader,
         mixer: &mut Mixer,
         wiring: &Wiring,
     ) -> (Vec<LiveInsert>, Vec<(InsertId, String)>) {
         let mut live = Vec::new();
         let mut failed = Vec::new();
-        for track in session.tracks() {
+        for track in document.tracks() {
             let strip: StripId = match wiring.bridge().binding(track.id()) {
                 Some(MixerBinding::Track(id)) => id.into(),
                 Some(MixerBinding::Bus(id)) => id.into(),
@@ -260,8 +260,8 @@ pub mod steps {
     }
 
     /// Collects the atomics the control side keeps after the mixer's graph
-    /// has been handed to the engine: one strip handle per session track or
-    /// bus, one send handle per session send.
+    /// has been handed to the engine: one strip handle per document track or
+    /// bus, one send handle per document send.
     pub fn collect_handles(mixer: &Mixer, wiring: &Wiring) -> (StripHandles, SendHandles) {
         let strips = wiring
             .bridge()
@@ -306,7 +306,7 @@ mod tests {
 
     const R: SampleRate = SampleRate::HZ_48K;
 
-    /// A session with one audio track playing a cached 0.5 tone from 0..400 frames.
+    /// A document with one audio track playing a cached 0.5 tone from 0..400 frames.
     fn tone_rig() -> (Rig, crate::primitives::TrackId) {
         let mut rig = session::create("tone", R, 64).unwrap();
         let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
@@ -381,10 +381,10 @@ mod tests {
         let before = drive(&mut rig, 2).unwrap();
         assert!(before.peak() > 0.3);
         // Mute the track in the document: parameter-only, mirrored on rebuild.
-        let vox = rig.session.tracks()[0].id();
+        let vox = rig.document.tracks()[0].id();
         rig.history
             .push(
-                &mut rig.session,
+                &mut rig.document,
                 crate::primitives::session::commands::set_track_mute(vox, true),
             )
             .unwrap();
@@ -407,15 +407,15 @@ mod tests {
         let mut rig = session::create("keys", R, 64).unwrap();
         let keys = session::add_track(&mut rig, "keys", TrackKind::Midi).unwrap();
         start(&mut rig).unwrap();
-        let (mixer, wiring) = steps::build_console(&rig.session, &rig.cache, 2).unwrap();
+        let (mixer, wiring) = steps::build_console(&rig.document, &rig.cache, 2).unwrap();
         assert_eq!(
             mixer.graph().node_count(),
             4,
             "master pair + track pair, no instrument"
         );
         drop(wiring);
-        rig.session.track_mut(keys).unwrap().armed = true;
-        let (mixer, _) = steps::build_console(&rig.session, &rig.cache, 2).unwrap();
+        rig.document.track_mut(keys).unwrap().armed = true;
+        let (mixer, _) = steps::build_console(&rig.document, &rig.cache, 2).unwrap();
         assert_eq!(mixer.graph().node_count(), 5, "plus the live synth");
         assert_eq!(mixer.graph().midi_edges().len(), 1);
     }

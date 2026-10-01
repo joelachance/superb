@@ -17,14 +17,14 @@ use crate::rig::Rig;
 
 /// Turns live monitoring on or off for a MIDI track. While on, the track
 /// carries an instrument that plays whatever MIDI reaches the engine. A
-/// switch: saved with the session (as the track's arm flag), not an undo
+/// switch: saved with the document (as the track's arm flag), not an undo
 /// step. It does change the console's shape, so it takes effect at the next
 /// rebuild.
 ///
 /// Made of: `Track::armed` through `session::switch`; marks the rig for a
 /// rebuild (the instrument is a node in the console).
 pub fn monitor(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
-    if rig.session.track(track)?.kind != TrackKind::Midi {
+    if rig.document.track(track)?.kind != TrackKind::Midi {
         return Err(SuperbError::InvalidArgument {
             what: "only MIDI tracks monitor live MIDI",
         });
@@ -39,7 +39,7 @@ pub fn monitor(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
 
 /// `true` if the MIDI track is monitoring.
 pub fn is_monitoring(rig: &Rig, track: TrackId) -> bool {
-    rig.session
+    rig.document
         .track(track)
         .map(|t| t.kind == TrackKind::Midi && t.armed)
         .unwrap_or(false)

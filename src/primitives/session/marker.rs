@@ -29,7 +29,7 @@ impl Marker {
         }
     }
 
-    /// The marker's ID (`MarkerId::INVALID` until added to a session).
+    /// The marker's ID (`MarkerId::INVALID` until added to a document).
     pub fn id(&self) -> MarkerId {
         self.id
     }

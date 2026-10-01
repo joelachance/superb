@@ -38,7 +38,7 @@ primitives and each other, and all of them work on the `Rig`.
 ## The Rig
 
 `Rig` (`src/rig.rs`) is a plain record of the primitives a running session
-needs: the `Session`, its `UndoStack`, the `AudioCache`, the `EngineHandle`
+needs: the `Document`, its `UndoStack`, the `AudioCache`, the `EngineHandle`
 control handle, the `EngineLoop` (until a device takes it), the handles
 into the last console that was built (`LiveHandles`: strip and send
 atomics, plugin parameter queues), the take being recorded, and the plugin

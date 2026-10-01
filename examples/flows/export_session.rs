@@ -1,4 +1,4 @@
-//! `export`: bounce the session to a WAV file.
+//! `export`: bounce the document to a WAV file.
 //!
 //! What you'll learn:
 //! - Export renders offline through its own copy of the console, inserts
@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     let lead = session::add_track(&mut rig, "lead", TrackKind::Audio)?;
     let pad = session::add_track(&mut rig, "pad", TrackKind::Audio)?;
 
-    // Two one-second tones, the second starting at 0.5 s: the session ends at 1.5 s.
+    // Two one-second tones, the second starting at 0.5 s: the document ends at 1.5 s.
     let mut a = PlanarBuffer::new(2, rate.hz() as usize);
     let mut b = PlanarBuffer::new(2, rate.hz() as usize);
     for i in 0..a.frames() {

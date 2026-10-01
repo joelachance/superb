@@ -8,7 +8,7 @@ The document model: what a session *is*.
 `primitives::transport` (for `TempoMap` and `LoopRange`), `primitives::undo`,
 and `serde` + `serde_json` for snapshots. It holds the editable description of
 a session — tracks, clips, markers, tempo map, loop range — and nothing about
-rendering. Turning a `Session` into a mixer is the job of `play::rebuild` (see
+rendering. Turning a `Document` into a mixer is the job of `play::rebuild` (see
 `docs/flows/play.md`); the session is deliberately free of `Arc<AtomicF32>`
 handles and audio-thread concerns, so it can be cloned, diffed, serialised and
 undone freely.
@@ -20,10 +20,10 @@ Inserts: a track's plugin chain is part of the document. `Insert`
 `state: Vec<u8>`) lives in `Track::inserts()`, is saved in the snapshot,
 and is edited through the `AddInsert` / `RemoveInsert` / `MoveInsert`
 commands and the coalescing `set_insert_bypassed` / `set_insert_param`
-property edits. `Session::allocate_insert_id` mints IDs.
+property edits. `Document::allocate_insert_id` mints IDs.
 
 
-* `Session` — name, `SampleRate`, `TempoMap`, `Option<LoopRange>`, ordered
+* `Document` — name, `SampleRate`, `TempoMap`, `Option<LoopRange>`, ordered
   `Track`s, position-sorted `Marker`s, a per-session ID counter and a
   `revision()` bumped by every mutation. IDs are never reused; removed
   objects can be re-inserted under their original IDs (that is how undo
@@ -33,7 +33,7 @@ property edits. `Session::allocate_insert_id` mints IDs.
   `output()` (the bus track it feeds, `None` = master) and `sends()`.
 * `TrackSend` — `SendId`, destination bus track (fixed at creation),
   `level_db`, `pre_fader`, `enabled`. Only audio/MIDI tracks send; only
-  bus tracks receive. `Session::set_track_output` / `add_send` validate
+  bus tracks receive. `Document::set_track_output` / `add_send` validate
   the target kind and reject bus → bus cycles; removing a bus detaches
   everything routed into it (`tracks_routed_to` / `sends_to` let you
   capture that first — `commands::RemoveTrack` does).
@@ -41,9 +41,9 @@ property edits. `Session::allocate_insert_id` mints IDs.
   an `ClipSource::{Empty, Audio { path, offset }, Midi { notes }}`, gain,
   mute, fades. `MidiNote` content is in beats relative to the clip start.
 * `Marker` — `MarkerId`, name, position, colour.
-* `SessionSnapshot` (+ `TrackSnapshot`, `ClipSnapshot`, `MarkerSnapshot`,
+* `DocumentSnapshot` (+ `TrackSnapshot`, `ClipSnapshot`, `MarkerSnapshot`,
   `TempoSnapshot`) — primitive-only, `serde` types with a `format_version`.
-  `Session::snapshot` / `from_snapshot` / `to_json` / `from_json` /
+  `Document::snapshot` / `from_snapshot` / `to_json` / `from_json` /
   `save` / `load`.
 * `commands` — `superb::primitives::undo::Command<Session>` implementations: `AddTrack`,
   `RemoveTrack`, `MoveTrack`, `SetTrackOutput`, `AddSend`, `RemoveSend`,
@@ -61,7 +61,7 @@ use superb::primitives::session::commands::{AddClip, AddTrack, MoveClip};
 use superb::primitives::session::{Clip, ClipSource, Session, Track, TrackKind};
 use superb::primitives::undo::UndoStack;
 
-let mut session = Session::new("demo", SampleRate::HZ_48K);
+let mut session = Document::new("demo", SampleRate::HZ_48K);
 let mut history = UndoStack::new();
 
 // Allocate IDs first so you know them before the stack takes the command.
@@ -82,14 +82,14 @@ assert_eq!(history.undo_len(), 3);
 history.undo(&mut session).unwrap();                 // back to 0
 history.undo(&mut session).unwrap();                 // clip gone
 history.redo(&mut session).unwrap();                 // back under the same ClipId
-assert!(session.clip(clip).is_ok());
+assert!document.clip(clip).is_ok());
 
 let json = session.to_json().unwrap();
-let copy = Session::from_json(&json).unwrap();
+let copy = Document::from_json(&json).unwrap();
 assert_eq!(copy.snapshot(), session.snapshot());
 ```
 
-Direct (non-undoable) editing uses the same verbs on `Session`:
+Direct (non-undoable) editing uses the same verbs on `Document`:
 `add_track`, `remove_track`, `move_track`, `track_mut`, `add_clip`,
 `move_clip`, `move_clip_to_track`, `resize_clip`, `clip_mut`,
 `add_marker`, `move_marker`, `tempo_map_mut`, `set_loop_range`,
@@ -103,20 +103,20 @@ use superb::primitives::session::commands::{AddSend, SetTrackOutput, set_send_le
 use superb::primitives::session::{Session, TrackKind, TrackSend};
 use superb::primitives::undo::UndoStack;
 
-let mut session = Session::new("routing", SampleRate::HZ_48K);
+let mut session = Document::new("routing", SampleRate::HZ_48K);
 let mut history = UndoStack::new();
 let vox = session.add_track("vox", TrackKind::Audio);
 let drums = session.add_track("drums", TrackKind::Bus);
 let verb = session.add_track("verb", TrackKind::Bus);
 
 history.push(&mut session, SetTrackOutput::new(vox, Some(drums))).unwrap();
-assert!(session.set_track_output(drums, Some(drums)).is_err());        // cycle
-assert!(session.set_track_output(vox, Some(vox)).is_err());            // not a bus
+assert!document.set_track_output(drums, Some(drums)).is_err());        // cycle
+assert!document.set_track_output(vox, Some(vox)).is_err());            // not a bus
 
 let send = session.allocate_send_id();
 history.push(&mut session, AddSend::new(vox, TrackSend::with_id(send, verb).pre_fader())).unwrap();
 history.push(&mut session, set_send_level_db(send, -12.0)).unwrap();
-assert_eq!(session.send(send).unwrap().level_db, -12.0);
+assert_eq!document.send(send).unwrap().level_db, -12.0);
 
 // Removing the verb bus drops the send; undo puts both back.
 history.push(&mut session, superb::primitives::session::commands::RemoveTrack::new(verb)).unwrap();
@@ -127,7 +127,7 @@ assert_eq!(session.send_track(send).unwrap(), vox);
 
 ## File format
 
-`to_json` writes a `SessionSnapshot`: `format_version` (currently 1), name,
+`to_json` writes a `DocumentSnapshot`: `format_version` (currently 1), name,
 `sample_rate_hz`, tempo points (`beat`, `bpm`, `ramp` — the ramp flag is
 optional on read and defaults to `false`) and meters (`bar`,
 `numerator`, `denominator`), loop range as `[start, end)` samples, tracks
@@ -152,7 +152,7 @@ or `superb::primitives::graph::live`.
 ## Limitations / next
 
 * Clips are positioned in samples; there is no "beat-locked" clip mode
-  that follows tempo changes (convert through `Session::tempo_map()`).
+  that follows tempo changes (convert through `Document::tempo_map()`).
 * No per-clip automation lanes yet (`primitives::automation` lanes are not
   owned by the session).
 * Routing is one output per track plus sends to buses; there are no
@@ -166,7 +166,7 @@ saving it as JSON and reloading it.
 ## Mixer bridge
 
 Mirroring a session into a live [`Mixer`](mixer.md) is handled by
-`superb::play::bridge::SessionMixerBridge` (separate `TrackId` namespaces,
+`superb::play::bridge::MixerBridge` (separate `TrackId` namespaces,
 `rebuild` + `apply_routing` + `apply_strip_params`). Playing clips onto those strips is
 `superb::play::Wiring` attaches a node per clip onto those strips, and
 `superb::export::render` runs the result offline; see `docs/flows/play.md`

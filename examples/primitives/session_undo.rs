@@ -1,8 +1,8 @@
-//! Builds a small session through the undo stack, walks the history, saves
+//! Builds a small document through the undo stack, walks the history, saves
 //! the document as JSON and reloads it. No audio hardware needed.
 //!
 //! What you'll learn:
-//! - `UndoStack<Session>`: push / undo / redo / seal / begin_group / end_group
+//! - `UndoStack<Document>`: push / undo / redo / seal / begin_group / end_group
 //! - Commands as the only way to mutate (so every edit is reversible)
 //! - Coalescing rapid property edits (send level drag, move clip drag)
 //! - `mark_clean` / `is_clean` for "document dirty?" after save
@@ -15,24 +15,24 @@ use superb::primitives::session::commands::{
     self, AddClip, AddMarker, AddSend, AddTrack, MoveClip, SetTempo, SetTrackOutput,
 };
 use superb::primitives::session::{
-    Clip, ClipSource, Marker, MidiNote, Session, Track, TrackKind, TrackSend,
+    Clip, ClipSource, Document, Marker, MidiNote, Track, TrackKind, TrackSend,
 };
 use superb::primitives::undo::UndoStack;
 use superb::primitives::{BeatPosition, Result, SampleRate, TimeDuration, TimePosition};
 
-// Helper: print a one-line snapshot of session + undo/redo tip labels.
-// `&Session` / `&UndoStack` = shared borrows (read-only).
-fn describe(session: &Session, history: &UndoStack<Session>) {
+// Helper: print a one-line snapshot of document + undo/redo tip labels.
+// `&Document` / `&UndoStack` = shared borrows (read-only).
+fn describe(document: &Document, history: &UndoStack<Document>) {
     println!(
         "  {:<12} rev {:>3}  tracks {}  clips {}  sends {}  markers {}  tempo {:.0} bpm  end {} smp  | undo: {:?}  redo: {:?}",
-        session.name(),
-        session.revision(),
-        session.track_count(),
-        session.clip_count(),
-        session.send_count(),
-        session.markers().len(),
-        session.tempo_map().tempo_at(BeatPosition::ZERO),
-        session.end_position().samples(),
+        document.name(),
+        document.revision(),
+        document.track_count(),
+        document.clip_count(),
+        document.send_count(),
+        document.markers().len(),
+        document.tempo_map().tempo_at(BeatPosition::ZERO),
+        document.end_position().samples(),
         // unwrap_or: if the undo/redo stack tip is empty, show "-".
         history.undo_label().unwrap_or("-"),
         history.redo_label().unwrap_or("-"),
@@ -41,29 +41,29 @@ fn describe(session: &Session, history: &UndoStack<Session>) {
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut session = Session::new("untitled", rate);
+    let mut document = Document::new("untitled", rate);
     // UndoStack stores applied commands so we can revert/reapply them.
     let mut history = UndoStack::new();
 
     println!("edits:");
     // push applies the command and records it for undo.
-    history.push(&mut session, commands::set_session_name("demo session"))?;
-    history.push(&mut session, SetTempo::new(BeatPosition::ZERO, 96.0))?;
+    history.push(&mut document, commands::set_session_name("demo document"))?;
+    history.push(&mut document, SetTempo::new(BeatPosition::ZERO, 96.0))?;
 
     // One undo step for the whole "add drums with a loop" operation.
     // begin_group / end_group nest multiple pushes into a single undo entry.
     history.begin_group("Add drum track");
     // Pre-allocate IDs so the command (and its undo) know the stable identity.
-    let drums = session.allocate_track_id();
+    let drums = document.allocate_track_id();
     history.push(
-        &mut session,
+        &mut document,
         AddTrack::new(Track::with_id(drums, "drums", TrackKind::Audio)),
     )?;
     history.push(
-        &mut session,
+        &mut document,
         commands::set_track_color(drums, Some(0xE0_60_30)),
     )?;
-    let loop_clip = session.allocate_clip_id();
+    let loop_clip = document.allocate_clip_id();
     let loop_clip = Clip::with_id(
         loop_clip,
         "break.wav",
@@ -75,16 +75,16 @@ fn main() -> Result<()> {
             offset: TimeDuration::ZERO,
         },
     )?;
-    history.push(&mut session, AddClip::new(drums, loop_clip))?;
+    history.push(&mut document, AddClip::new(drums, loop_clip))?;
     history.end_group();
-    describe(&session, &history);
+    describe(&document, &history);
 
-    let keys = session.allocate_track_id();
+    let keys = document.allocate_track_id();
     history.push(
-        &mut session,
+        &mut document,
         AddTrack::new(Track::with_id(keys, "keys", TrackKind::Midi)),
     )?;
-    let chord = session.allocate_clip_id();
+    let chord = document.allocate_clip_id();
     // C major triad as three MidiNote structs in a vec![...].
     let notes = vec![
         MidiNote {
@@ -110,7 +110,7 @@ fn main() -> Result<()> {
         },
     ];
     // TempoMap converts musical beats → sample positions.
-    let bar = session.tempo_map().beat_to_samples(BeatPosition::new(4.0));
+    let bar = document.tempo_map().beat_to_samples(BeatPosition::new(4.0));
     let chord_clip = Clip::with_id(
         chord,
         "C major",
@@ -118,42 +118,44 @@ fn main() -> Result<()> {
         TimeDuration::from_samples(bar.samples()),
         ClipSource::Midi { notes },
     )?;
-    history.push(&mut session, AddClip::new(keys, chord_clip))?;
-    describe(&session, &history);
+    history.push(&mut document, AddClip::new(keys, chord_clip))?;
+    describe(&document, &history);
 
     // Routing is part of the document: keys feed a reverb bus, drums send
     // into it pre-fader, and the send level drag coalesces into one step.
-    let verb = session.allocate_track_id();
+    let verb = document.allocate_track_id();
     history.push(
-        &mut session,
+        &mut document,
         AddTrack::new(Track::with_id(verb, "verb", TrackKind::Bus)),
     )?;
-    history.push(&mut session, SetTrackOutput::new(keys, Some(verb)))?;
-    let send = session.allocate_send_id();
+    history.push(&mut document, SetTrackOutput::new(keys, Some(verb)))?;
+    let send = document.allocate_send_id();
     history.push(
-        &mut session,
+        &mut document,
         AddSend::new(drums, TrackSend::with_id(send, verb).pre_fader()),
     )?;
     // Rapid set_send_level_db pushes share a coalesce key → one undo step after seal.
     for db in [-3.0, -6.0, -9.0] {
-        history.push(&mut session, commands::set_send_level_db(send, db))?;
+        history.push(&mut document, commands::set_send_level_db(send, db))?;
     }
     // seal() closes the current coalesce window so the next push is separate.
     history.seal();
-    describe(&session, &history);
+    describe(&document, &history);
 
     // A drag: several small moves coalesce into a single "Move clip" step.
     for beat in [5.0, 6.0, 7.0, 8.0] {
-        let pos = session.tempo_map().beat_to_samples(BeatPosition::new(beat));
-        history.push(&mut session, MoveClip::new(chord, pos))?;
+        let pos = document
+            .tempo_map()
+            .beat_to_samples(BeatPosition::new(beat));
+        history.push(&mut document, MoveClip::new(chord, pos))?;
     }
     history.seal();
-    let marker = session.allocate_marker_id();
+    let marker = document.allocate_marker_id();
     history.push(
-        &mut session,
+        &mut document,
         AddMarker::new(Marker::with_id(marker, "verse", bar)),
     )?;
-    describe(&session, &history);
+    describe(&document, &history);
     // undo_labels() is an iterator; collect::<Vec<_>>() materializes it for Debug.
     println!(
         "  history ({} steps): {:?}",
@@ -163,28 +165,28 @@ fn main() -> Result<()> {
 
     println!("undo x3:");
     for _ in 0..3 {
-        history.undo(&mut session)?;
-        describe(&session, &history);
+        history.undo(&mut document)?;
+        describe(&document, &history);
     }
     println!("redo x3:");
     // redo returns Ok(true) while there is something to redo.
-    while history.redo(&mut session)? {
-        describe(&session, &history);
+    while history.redo(&mut document)? {
+        describe(&document, &history);
     }
 
     let path = "session_undo.superb.json";
-    session.save(path)?;
+    document.save(path)?;
     // mark_clean remembers this revision as the last saved ("not dirty").
     history.mark_clean();
-    let reloaded = Session::load(path)?;
+    let reloaded = Document::load(path)?;
     // snapshot() compares document state; metadata().map(...).unwrap_or(0) is soft I/O.
     println!(
         "saved {path} ({} bytes) and reloaded: identical = {}",
         std::fs::metadata(path).map(|m| m.len()).unwrap_or(0),
-        reloaded.snapshot() == session.snapshot()
+        reloaded.snapshot() == document.snapshot()
     );
     println!("clean after save: {}", history.is_clean());
-    history.undo(&mut session)?;
+    history.undo(&mut document)?;
     println!("clean after one more undo: {}", history.is_clean());
     Ok(())
 }

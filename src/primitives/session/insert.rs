@@ -49,13 +49,13 @@ pub struct Insert {
 }
 
 impl Insert {
-    /// An insert for `plugin` with no ID yet (the session assigns one).
+    /// An insert for `plugin` with no ID yet (the document assigns one).
     pub fn new(plugin: PluginRef) -> Self {
         Self::with_id(InsertId::INVALID, plugin)
     }
 
     /// An insert with a pre-allocated ID (see
-    /// [`Session::allocate_insert_id`](crate::primitives::session::Session::allocate_insert_id)).
+    /// [`Document::allocate_insert_id`](crate::primitives::session::Document::allocate_insert_id)).
     pub fn with_id(id: InsertId, plugin: PluginRef) -> Self {
         Self {
             id,
@@ -66,7 +66,7 @@ impl Insert {
         }
     }
 
-    /// The insert's ID (`InsertId::INVALID` until added to a session).
+    /// The insert's ID (`InsertId::INVALID` until added to a document).
     pub fn id(&self) -> InsertId {
         self.id
     }

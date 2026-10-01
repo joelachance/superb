@@ -1,9 +1,9 @@
-//! Thin session → mixer bridge.
+//! Thin document → mixer bridge.
 //!
-//! The document model ([`Session`]) and the realtime console
+//! The document model ([`Document`]) and the realtime console
 //! ([`Mixer`]) use independent [`TrackId`] /
 //! [`SendId`] namespaces. This module keeps a side
-//! table that maps session tracks onto mixer strips / buses (and session
+//! table that maps document tracks onto mixer strips / buses (and document
 //! sends onto mixer sends), pushes fader/mute/solo/pan and send levels from
 //! the document onto the atomics, and mirrors the document's routing
 //! (track → bus outputs, sends) onto the mixer topology.
@@ -12,90 +12,90 @@
 //! bridge only deals with strips, buses, outputs and sends.
 
 use crate::primitives::mixer::{Mixer, SendTap};
-use crate::primitives::session::{Session, TrackKind};
+use crate::primitives::session::{Document, TrackKind};
 use crate::primitives::{BusId, Result, SendId, TrackId};
 
-/// One session track mapped onto a mixer strip or bus.
+/// One document track mapped onto a mixer strip or bus.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MixerBinding {
-    /// Session [`TrackKind::Audio`] or [`TrackKind::Midi`] → mixer track.
+    /// Document [`TrackKind::Audio`] or [`TrackKind::Midi`] → mixer track.
     Track(TrackId),
-    /// Session [`TrackKind::Bus`] → mixer bus.
+    /// Document [`TrackKind::Bus`] → mixer bus.
     Bus(BusId),
 }
 
-/// Side table from session track IDs to mixer strips / buses (and from
-/// session sends to mixer sends).
+/// Side table from document track IDs to mixer strips / buses (and from
+/// document sends to mixer sends).
 #[derive(Clone, Debug, Default)]
-pub struct SessionMixerBridge {
+pub struct MixerBridge {
     entries: Vec<(TrackId, MixerBinding)>,
     sends: Vec<(SendId, SendId)>,
-    session_revision: u64,
+    document_revision: u64,
 }
 
-impl SessionMixerBridge {
+impl MixerBridge {
     /// Empty bridge.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Session revision last seen by [`bind`](Self::bind) /
+    /// Document revision last seen by [`bind`](Self::bind) /
     /// [`apply_strip_params`](Self::apply_strip_params) /
     /// [`apply_routing`](Self::apply_routing).
-    pub fn session_revision(&self) -> u64 {
-        self.session_revision
+    pub fn document_revision(&self) -> u64 {
+        self.document_revision
     }
 
-    /// Binding for a session track, if any.
-    pub fn binding(&self, session_track: TrackId) -> Option<MixerBinding> {
+    /// Binding for a document track, if any.
+    pub fn binding(&self, track: TrackId) -> Option<MixerBinding> {
         self.entries
             .iter()
-            .find(|(id, _)| *id == session_track)
+            .find(|(id, _)| *id == track)
             .map(|(_, b)| *b)
     }
 
-    /// Mixer track for a session audio/MIDI track.
-    pub fn mixer_track(&self, session_track: TrackId) -> Option<TrackId> {
-        match self.binding(session_track)? {
+    /// Mixer track for a document audio/MIDI track.
+    pub fn mixer_track(&self, track: TrackId) -> Option<TrackId> {
+        match self.binding(track)? {
             MixerBinding::Track(id) => Some(id),
             MixerBinding::Bus(_) => None,
         }
     }
 
-    /// Mixer bus for a session bus track.
-    pub fn mixer_bus(&self, session_track: TrackId) -> Option<BusId> {
-        match self.binding(session_track)? {
+    /// Mixer bus for a document bus track.
+    pub fn mixer_bus(&self, track: TrackId) -> Option<BusId> {
+        match self.binding(track)? {
             MixerBinding::Bus(id) => Some(id),
             MixerBinding::Track(_) => None,
         }
     }
 
-    /// Mixer send for a session send, once [`apply_routing`](Self::apply_routing)
+    /// Mixer send for a document send, once [`apply_routing`](Self::apply_routing)
     /// has created it.
-    pub fn mixer_send(&self, session_send: SendId) -> Option<SendId> {
+    pub fn mixer_send(&self, send: SendId) -> Option<SendId> {
         self.sends
             .iter()
-            .find(|(id, _)| *id == session_send)
+            .find(|(id, _)| *id == send)
             .map(|(_, m)| *m)
     }
 
-    /// All bindings in session order.
+    /// All bindings in document order.
     pub fn entries(&self) -> &[(TrackId, MixerBinding)] {
         &self.entries
     }
 
-    /// All send bindings as `(session send, mixer send)`.
+    /// All send bindings as `(document send, mixer send)`.
     pub fn send_entries(&self) -> &[(SendId, SendId)] {
         &self.sends
     }
 
-    /// Ensures every session track has a mixer counterpart.
+    /// Ensures every document track has a mixer counterpart.
     ///
     /// * Creates a mixer track for each unmapped [`TrackKind::Audio`] /
-    ///   [`TrackKind::Midi`] session track (name copied).
+    ///   [`TrackKind::Midi`] document track (name copied).
     /// * Creates a mixer bus for each unmapped [`TrackKind::Bus`].
-    /// * Drops bindings whose session track no longer exists.
-    /// * Does **not** remove mixer strips/buses that lost their session
+    /// * Drops bindings whose document track no longer exists.
+    /// * Does **not** remove mixer strips/buses that lost their document
     ///   track — the application owns teardown so live audio is not cut
     ///   unexpectedly. (Stale mixer *sends* are removed by
     ///   [`apply_routing`](Self::apply_routing), since a lingering send
@@ -103,12 +103,12 @@ impl SessionMixerBridge {
     ///
     /// Routing is not touched here; call [`apply_routing`](Self::apply_routing)
     /// afterwards. Returns the number of newly created mixer objects.
-    pub fn bind(&mut self, session: &Session, mixer: &mut Mixer) -> usize {
+    pub fn bind(&mut self, document: &Document, mixer: &mut Mixer) -> usize {
         // Drop stale bindings.
-        self.entries.retain(|(sid, _)| session.track(*sid).is_ok());
+        self.entries.retain(|(sid, _)| document.track(*sid).is_ok());
 
         let mut created = 0usize;
-        for track in session.tracks() {
+        for track in document.tracks() {
             if self.binding(track.id()).is_some() {
                 continue;
             }
@@ -126,19 +126,19 @@ impl SessionMixerBridge {
             };
             self.entries.push((track.id(), binding));
         }
-        self.session_revision = session.revision();
+        self.document_revision = document.revision();
         created
     }
 
-    /// Copies gain / pan / mute / solo from every mapped session track onto
+    /// Copies gain / pan / mute / solo from every mapped document track onto
     /// the corresponding mixer strip (or bus) atomics, and level / enable
-    /// from every mapped session send onto its mixer send.
+    /// from every mapped document send onto its mixer send.
     ///
-    /// Safe to call from the control thread whenever the session revision
+    /// Safe to call from the control thread whenever the document revision
     /// moves; does not allocate beyond iterating the side tables.
-    pub fn apply_strip_params(&mut self, session: &Session, mixer: &Mixer) {
+    pub fn apply_strip_params(&mut self, document: &Document, mixer: &Mixer) {
         for (session_id, binding) in &self.entries {
-            let Ok(track) = session.track(*session_id) else {
+            let Ok(track) = document.track(*session_id) else {
                 continue;
             };
             match binding {
@@ -162,13 +162,13 @@ impl SessionMixerBridge {
                 }
             }
         }
-        self.mirror_send_params(session, mixer);
-        self.session_revision = session.revision();
+        self.mirror_send_params(document, mixer);
+        self.document_revision = document.revision();
     }
 
-    fn mirror_send_params(&self, session: &Session, mixer: &Mixer) {
-        for (session_send, mixer_send) in &self.sends {
-            let Ok(send) = session.send(*session_send) else {
+    fn mirror_send_params(&self, document: &Document, mixer: &Mixer) {
+        for (send, mixer_send) in &self.sends {
+            let Ok(send) = document.send(*send) else {
                 continue;
             };
             if let Ok(params) = mixer.send_params(*mixer_send) {
@@ -181,11 +181,11 @@ impl SessionMixerBridge {
     /// Mirrors the document's routing onto the mixer topology.
     ///
     /// * Every bound track/bus is routed to the mixer bus bound to its
-    ///   session [`output`](crate::primitives::session::Track::output), or to the master
+    ///   document [`output`](crate::primitives::session::Track::output), or to the master
     ///   when the output is `None` (or its bus is not bound).
-    /// * Every session send gets a mixer send with the same destination and
+    /// * Every document send gets a mixer send with the same destination and
     ///   tap; a send whose destination or tap changed is re-created, and
-    ///   mixer sends whose session send disappeared are removed. Send level
+    ///   mixer sends whose document send disappeared are removed. Send level
     ///   / enable are mirrored as well.
     ///
     /// Call after [`bind`](Self::bind) so every bus is bound. Returns the
@@ -194,13 +194,13 @@ impl SessionMixerBridge {
     /// next `process`. Strip-parameter mirroring is *not* part of this
     /// call. Mixer objects the application removed behind the bridge's back
     /// are skipped.
-    pub fn apply_routing(&mut self, session: &Session, mixer: &mut Mixer) -> Result<usize> {
+    pub fn apply_routing(&mut self, document: &Document, mixer: &mut Mixer) -> Result<usize> {
         let master = mixer.master();
         let mut changed = 0usize;
 
         // Outputs.
         for (session_id, binding) in &self.entries {
-            let Ok(track) = session.track(*session_id) else {
+            let Ok(track) = document.track(*session_id) else {
                 continue;
             };
             let target = track
@@ -230,10 +230,10 @@ impl SessionMixerBridge {
             }
         }
 
-        // Sends whose session send is gone.
+        // Sends whose document send is gone.
         let mut stale = Vec::new();
-        self.sends.retain(|(session_send, mixer_send)| {
-            if session.send(*session_send).is_ok() {
+        self.sends.retain(|(send, mixer_send)| {
+            if document.send(*send).is_ok() {
                 true
             } else {
                 stale.push(*mixer_send);
@@ -248,7 +248,7 @@ impl SessionMixerBridge {
         }
 
         // Sends: create, re-create on destination/tap change, keep otherwise.
-        for track in session.tracks() {
+        for track in document.tracks() {
             let Some(MixerBinding::Track(mid)) = self.binding(track.id()) else {
                 continue;
             };
@@ -288,8 +288,8 @@ impl SessionMixerBridge {
             }
         }
 
-        self.mirror_send_params(session, mixer);
-        self.session_revision = session.revision();
+        self.mirror_send_params(document, mixer);
+        self.document_revision = document.revision();
         Ok(changed)
     }
 }
@@ -302,35 +302,35 @@ mod tests {
 
     #[test]
     fn sync_creates_tracks_and_buses_and_maps_ids() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let audio = session.add_track("lead", TrackKind::Audio);
-        let midi = session.add_track("keys", TrackKind::Midi);
-        let bus = session.add_track("reverb", TrackKind::Bus);
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let audio = document.add_track("lead", TrackKind::Audio);
+        let midi = document.add_track("keys", TrackKind::Midi);
+        let bus = document.add_track("reverb", TrackKind::Bus);
 
         let mut mixer = Mixer::new(2);
-        let mut bridge = SessionMixerBridge::new();
-        assert_eq!(bridge.bind(&session, &mut mixer), 3);
-        assert_eq!(bridge.bind(&session, &mut mixer), 0); // idempotent
+        let mut bridge = MixerBridge::new();
+        assert_eq!(bridge.bind(&document, &mut mixer), 3);
+        assert_eq!(bridge.bind(&document, &mut mixer), 0); // idempotent
 
         assert_eq!(mixer.tracks().len(), 2);
         assert!(bridge.mixer_track(audio).is_some());
         assert!(bridge.mixer_track(midi).is_some());
         assert!(bridge.mixer_bus(bus).is_some());
-        assert_eq!(bridge.session_revision(), session.revision());
+        assert_eq!(bridge.document_revision(), document.revision());
     }
 
     #[test]
     fn apply_strip_params_mirrors_gain_mute() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let id = session.add_track("lead", TrackKind::Audio);
-        session.track_mut(id).unwrap().gain_db = -6.0;
-        session.track_mut(id).unwrap().muted = true;
-        session.track_mut(id).unwrap().pan = -0.5;
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let id = document.add_track("lead", TrackKind::Audio);
+        document.track_mut(id).unwrap().gain_db = -6.0;
+        document.track_mut(id).unwrap().muted = true;
+        document.track_mut(id).unwrap().pan = -0.5;
 
         let mut mixer = Mixer::new(2);
-        let mut bridge = SessionMixerBridge::new();
-        bridge.bind(&session, &mut mixer);
-        bridge.apply_strip_params(&session, &mixer);
+        let mut bridge = MixerBridge::new();
+        bridge.bind(&document, &mut mixer);
+        bridge.apply_strip_params(&document, &mixer);
 
         let mid = bridge.mixer_track(id).unwrap();
         let params = mixer.track_params(mid).unwrap();
@@ -341,14 +341,14 @@ mod tests {
 
     #[test]
     fn removing_session_track_drops_binding_but_keeps_mixer_strip() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let id = session.add_track("lead", TrackKind::Audio);
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let id = document.add_track("lead", TrackKind::Audio);
         let mut mixer = Mixer::new(2);
-        let mut bridge = SessionMixerBridge::new();
-        bridge.bind(&session, &mut mixer);
+        let mut bridge = MixerBridge::new();
+        bridge.bind(&document, &mut mixer);
         let mid = bridge.mixer_track(id).unwrap();
-        session.remove_track(id).unwrap();
-        assert_eq!(bridge.bind(&session, &mut mixer), 0);
+        document.remove_track(id).unwrap();
+        assert_eq!(bridge.bind(&document, &mut mixer), 0);
         assert!(bridge.binding(id).is_none());
         assert_eq!(mixer.tracks().len(), 1);
         assert!(mixer.track(mid).is_ok());
@@ -356,24 +356,24 @@ mod tests {
 
     #[test]
     fn apply_routing_mirrors_outputs_and_follows_changes() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let lead = session.add_track("lead", TrackKind::Audio);
-        let keys = session.add_track("keys", TrackKind::Midi);
-        let sub = session.add_track("sub", TrackKind::Bus);
-        let room = session.add_track("room", TrackKind::Bus);
-        session.set_track_output(lead, Some(sub)).unwrap();
-        session.set_track_output(sub, Some(room)).unwrap();
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let lead = document.add_track("lead", TrackKind::Audio);
+        let keys = document.add_track("keys", TrackKind::Midi);
+        let sub = document.add_track("sub", TrackKind::Bus);
+        let room = document.add_track("room", TrackKind::Bus);
+        document.set_track_output(lead, Some(sub)).unwrap();
+        document.set_track_output(sub, Some(room)).unwrap();
 
         let mut mixer = Mixer::new(2);
-        let mut bridge = SessionMixerBridge::new();
-        bridge.bind(&session, &mut mixer);
+        let mut bridge = MixerBridge::new();
+        bridge.bind(&document, &mut mixer);
         assert_eq!(
-            bridge.apply_routing(&session, &mut mixer).unwrap(),
+            bridge.apply_routing(&document, &mut mixer).unwrap(),
             2,
             "lead → sub, sub → room"
         );
         assert_eq!(
-            bridge.apply_routing(&session, &mut mixer).unwrap(),
+            bridge.apply_routing(&document, &mut mixer).unwrap(),
             0,
             "idempotent"
         );
@@ -391,43 +391,43 @@ mod tests {
         assert_eq!(mixer.bus(m_sub).unwrap().output, Some(m_room));
         assert_eq!(mixer.bus(m_room).unwrap().output, Some(mixer.master()));
 
-        // Back to the master, and a bus that loses its session output.
-        session.set_track_output(lead, None).unwrap();
-        session.set_track_output(sub, None).unwrap();
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 2);
+        // Back to the master, and a bus that loses its document output.
+        document.set_track_output(lead, None).unwrap();
+        document.set_track_output(sub, None).unwrap();
+        assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 2);
         assert_eq!(mixer.track(m_lead).unwrap().output, mixer.master());
         assert_eq!(mixer.bus(m_sub).unwrap().output, Some(mixer.master()));
 
-        // Removing the session bus detaches in the document; the mixer bus
+        // Removing the document bus detaches in the document; the mixer bus
         // stays (bind never removes strips) but nothing routes into it.
-        session.set_track_output(lead, Some(room)).unwrap();
-        bridge.apply_routing(&session, &mut mixer).unwrap();
-        session.remove_track(room).unwrap();
-        bridge.bind(&session, &mut mixer);
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 1);
+        document.set_track_output(lead, Some(room)).unwrap();
+        bridge.apply_routing(&document, &mut mixer).unwrap();
+        document.remove_track(room).unwrap();
+        bridge.bind(&document, &mut mixer);
+        assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 1);
         assert_eq!(mixer.track(m_lead).unwrap().output, mixer.master());
         assert!(mixer.bus(m_room).is_ok());
-        assert_eq!(bridge.session_revision(), session.revision());
+        assert_eq!(bridge.document_revision(), document.revision());
     }
 
     #[test]
     fn apply_routing_creates_updates_and_removes_sends() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let lead = session.add_track("lead", TrackKind::Audio);
-        let fx = session.add_track("fx", TrackKind::Bus);
-        let room = session.add_track("room", TrackKind::Bus);
-        let a = session
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let lead = document.add_track("lead", TrackKind::Audio);
+        let fx = document.add_track("fx", TrackKind::Bus);
+        let room = document.add_track("room", TrackKind::Bus);
+        let a = document
             .add_send(lead, TrackSend::new(fx).level_db(-6.0))
             .unwrap();
-        let b = session
+        let b = document
             .add_send(lead, TrackSend::new(room).pre_fader())
             .unwrap();
-        session.send_mut(b).unwrap().enabled = false;
+        document.send_mut(b).unwrap().enabled = false;
 
         let mut mixer = Mixer::new(2);
-        let mut bridge = SessionMixerBridge::new();
-        bridge.bind(&session, &mut mixer);
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 2);
+        let mut bridge = MixerBridge::new();
+        bridge.bind(&document, &mut mixer);
+        assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 2);
         assert_eq!(mixer.sends().len(), 2);
         let ma = bridge.mixer_send(a).unwrap();
         let mb = bridge.mixer_send(b).unwrap();
@@ -442,19 +442,19 @@ mod tests {
         assert!(!mixer.send_params(mb).unwrap().is_enabled());
 
         // Parameter-only changes: no structural edit, mirrored by either call.
-        session.send_mut(a).unwrap().level_db = -12.0;
-        session.send_mut(b).unwrap().enabled = true;
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 0);
+        document.send_mut(a).unwrap().level_db = -12.0;
+        document.send_mut(b).unwrap().enabled = true;
+        assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 0);
         assert!((mixer.send_params(ma).unwrap().level_db() - -12.0).abs() < 1e-4);
         assert!(mixer.send_params(mb).unwrap().is_enabled());
-        session.send_mut(a).unwrap().level_db = -1.0;
-        bridge.apply_strip_params(&session, &mixer);
+        document.send_mut(a).unwrap().level_db = -1.0;
+        bridge.apply_strip_params(&document, &mixer);
         assert!((mixer.send_params(ma).unwrap().level_db() - -1.0).abs() < 1e-4);
 
-        // Tap change re-creates the mixer send under the same session id.
-        session.send_mut(b).unwrap().pre_fader = false;
+        // Tap change re-creates the mixer send under the same document id.
+        document.send_mut(b).unwrap().pre_fader = false;
         assert_eq!(
-            bridge.apply_routing(&session, &mut mixer).unwrap(),
+            bridge.apply_routing(&document, &mut mixer).unwrap(),
             2,
             "remove + add"
         );
@@ -464,18 +464,18 @@ mod tests {
         assert_eq!(mixer.send(mb2).unwrap().tap, SendTap::PostFader);
         assert_eq!(mixer.sends().len(), 2);
 
-        // Removing the session send removes the mixer send.
-        session.remove_send(a).unwrap();
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 1);
+        // Removing the document send removes the mixer send.
+        document.remove_send(a).unwrap();
+        assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 1);
         assert!(bridge.mixer_send(a).is_none());
         assert!(mixer.send(ma).is_err());
         assert_eq!(mixer.sends().len(), 1);
 
         // Removing the destination bus drops the send in the document and
         // therefore in the mixer; the mixer bus itself stays.
-        session.remove_track(room).unwrap();
-        bridge.bind(&session, &mut mixer);
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 1);
+        document.remove_track(room).unwrap();
+        bridge.bind(&document, &mut mixer);
+        assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 1);
         assert!(mixer.sends().is_empty());
         assert!(bridge.send_entries().is_empty());
         assert_eq!(mixer.buses().len(), 3);
@@ -483,21 +483,21 @@ mod tests {
 
     #[test]
     fn apply_routing_tolerates_mixer_objects_removed_by_the_app() {
-        let mut session = Session::new("demo", SampleRate::HZ_48K);
-        let lead = session.add_track("lead", TrackKind::Audio);
-        let fx = session.add_track("fx", TrackKind::Bus);
-        session.set_track_output(lead, Some(fx)).unwrap();
-        session.add_send(lead, TrackSend::new(fx)).unwrap();
+        let mut document = Document::new("demo", SampleRate::HZ_48K);
+        let lead = document.add_track("lead", TrackKind::Audio);
+        let fx = document.add_track("fx", TrackKind::Bus);
+        document.set_track_output(lead, Some(fx)).unwrap();
+        document.add_send(lead, TrackSend::new(fx)).unwrap();
         let mut mixer = Mixer::new(2);
-        let mut bridge = SessionMixerBridge::new();
-        bridge.bind(&session, &mut mixer);
-        bridge.apply_routing(&session, &mut mixer).unwrap();
+        let mut bridge = MixerBridge::new();
+        bridge.bind(&document, &mut mixer);
+        bridge.apply_routing(&document, &mut mixer).unwrap();
         // The app tears down the bus and the strip behind the bridge's back.
         mixer.remove_bus(bridge.mixer_bus(fx).unwrap()).unwrap();
         mixer
             .remove_track(bridge.mixer_track(lead).unwrap())
             .unwrap();
-        assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 0);
-        bridge.apply_strip_params(&session, &mixer);
+        assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 0);
+        bridge.apply_strip_params(&document, &mixer);
     }
 }

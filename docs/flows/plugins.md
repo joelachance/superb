@@ -43,7 +43,7 @@ for (id, why) in plugins::failures(&rig) {
 
 ## Made of
 
-`insert`: `Session::allocate_insert_id` → `Insert::with_id(PluginRef::from(desc))`
+`insert`: `Document::allocate_insert_id` → `Insert::with_id(PluginRef::from(desc))`
 → `AddInsert`, `needs_rebuild`. `set_param`: `set_insert_param` through undo →
 `Producer<ParamChange>::push` on `rig.live.insert_mut(id).param_queue`. At rebuild,
 `play::steps::attach_inserts` calls `PluginLoader::instantiate` (load the

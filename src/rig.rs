@@ -1,6 +1,6 @@
 //! The state every flow works on.
 //!
-//! A [`Rig`] is a plain record of the primitives a running session needs: the
+//! A [`Rig`] is a plain record of the primitives a running document needs: the
 //! document, its undo history, the audio in memory, and the live engine.
 //! Flow functions ([`play::start`](crate::play::start),
 //! [`record::stop`](crate::record::stop), ...) take `&mut Rig` so you don't
@@ -10,7 +10,7 @@
 //!
 //! Build one with [`session::create`](crate::session::create) or
 //! [`session::open`](crate::session::open), or with [`Rig::new`] from a
-//! [`Session`] you already have.
+//! [`Document`] you already have.
 
 use core::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -23,21 +23,21 @@ use crate::primitives::mixer::{SendParams, StripParams};
 use crate::primitives::plugins::PluginInstance;
 use crate::primitives::plugins::{ParamChange, ParamInfo, PluginDescriptor};
 use crate::primitives::realtime::spsc::Producer;
-use crate::primitives::session::Session;
+use crate::primitives::session::Document;
 use crate::primitives::undo::UndoStack;
 use crate::primitives::{InsertId, Result, SendId, TrackId};
 
-/// Everything a session in progress consists of.
+/// Everything a document in progress consists of.
 pub struct Rig {
-    /// The session: tracks, clips, markers, routing, inserts, tempo.
-    pub session: Session,
-    /// Undo history for `session`. Every flow edit pushes through this
+    /// The document: tracks, clips, markers, routing, inserts, tempo.
+    pub document: Document,
+    /// Undo history for `document`. Every flow edit pushes through this
     /// stack, so every edit is reversible. Consecutive edits of the same
     /// control (a fader, a knob, a clip being dragged) merge into one step
     /// while they arrive within [`Rig::COALESCE_WINDOW`] of each other; a
     /// pause starts a new step. Call `history.seal()` to end a step sooner
     /// (on mouse up, say).
-    pub history: UndoStack<Session>,
+    pub history: UndoStack<Document>,
     /// Audio held in memory, keyed by the path clips refer to.
     pub cache: AudioCache,
     /// Control handle to the engine: commands, graph swaps, position.
@@ -72,22 +72,22 @@ impl Rig {
     /// into separate undo steps.
     pub const COALESCE_WINDOW: core::time::Duration = core::time::Duration::from_millis(500);
 
-    /// A stereo rig around `session`, with an engine that renders blocks of
-    /// at most `block_size` frames at the session's sample rate.
-    pub fn new(session: Session, block_size: usize) -> Result<Rig> {
-        Self::with_channels(session, block_size, 2)
+    /// A stereo rig around `document`, with an engine that renders blocks of
+    /// at most `block_size` frames at the document's sample rate.
+    pub fn new(document: Document, block_size: usize) -> Result<Rig> {
+        Self::with_channels(document, block_size, 2)
     }
 
     /// Like [`new`](Self::new) with an explicit channel count.
-    pub fn with_channels(session: Session, block_size: usize, channels: usize) -> Result<Rig> {
-        let bpm = session
+    pub fn with_channels(document: Document, block_size: usize, channels: usize) -> Result<Rig> {
+        let bpm = document
             .tempo_map()
             .tempo_at(crate::primitives::BeatPosition::ZERO);
-        let (engine, engine_loop) = engine_pair(session.sample_rate(), block_size, bpm)?;
+        let (engine, engine_loop) = engine_pair(document.sample_rate(), block_size, bpm)?;
         let mut history = UndoStack::new();
         history.set_coalesce_window(Some(Self::COALESCE_WINDOW));
         Ok(Rig {
-            session,
+            document,
             history,
             cache: AudioCache::new(),
             engine,
@@ -108,8 +108,8 @@ impl Rig {
 impl core::fmt::Debug for Rig {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Rig")
-            .field("session", &self.session.name())
-            .field("tracks", &self.session.track_count())
+            .field("document", &self.document.name())
+            .field("tracks", &self.document.track_count())
             .field("undo_steps", &self.history.undo_len())
             .field("cached_files", &self.cache.len())
             .field("engine", &self.engine)
@@ -121,9 +121,9 @@ impl core::fmt::Debug for Rig {
     }
 }
 
-/// Session track or bus → its live strip parameters.
+/// Document track or bus → its live strip parameters.
 pub type StripHandles = Vec<(TrackId, Arc<StripParams>)>;
-/// Session send → its live level and enable switch.
+/// Document send → its live level and enable switch.
 pub type SendHandles = Vec<(SendId, Arc<SendParams>)>;
 
 /// Handles into the console the engine is currently running.
@@ -133,13 +133,13 @@ pub type SendHandles = Vec<(SendId, Arc<SendParams>)>;
 /// heard on the next block.
 #[derive(Debug, Default)]
 pub struct LiveHandles {
-    /// Session track → its strip (tracks and buses alike).
+    /// Document track → its strip (tracks and buses alike).
     pub strips: StripHandles,
-    /// Session send → its level and enable switch.
+    /// Document send → its level and enable switch.
     pub sends: SendHandles,
-    /// Session insert → the loaded plugin's parameter queue and info.
+    /// Document insert → the loaded plugin's parameter queue and info.
     pub inserts: Vec<LiveInsert>,
-    /// How the session was wired into that console: which strip each
+    /// How the document was wired into that console: which strip each
     /// track got, which node plays each clip.
     pub wiring: Option<Wiring>,
     /// Inserts that could not be loaded, with the reason. The rest of the
@@ -148,7 +148,7 @@ pub struct LiveHandles {
 }
 
 impl LiveHandles {
-    /// The live strip of a session track or bus.
+    /// The live strip of a document track or bus.
     pub fn strip(&self, track: TrackId) -> Option<&Arc<StripParams>> {
         self.strips
             .iter()
@@ -156,7 +156,7 @@ impl LiveHandles {
             .map(|(_, p)| p)
     }
 
-    /// The live parameters of a session send.
+    /// The live parameters of a document send.
     pub fn send(&self, send: SendId) -> Option<&Arc<SendParams>> {
         self.sends
             .iter()
@@ -164,7 +164,7 @@ impl LiveHandles {
             .map(|(_, p)| p)
     }
 
-    /// The loaded plugin behind a session insert.
+    /// The loaded plugin behind a document insert.
     pub fn insert(&self, insert: InsertId) -> Option<&LiveInsert> {
         self.inserts.iter().find(|i| i.id == insert)
     }
@@ -267,7 +267,7 @@ impl core::fmt::Debug for PluginLoader {
 /// A plugin instance running inside the console.
 #[derive(Debug)]
 pub struct LiveInsert {
-    /// The session insert this instance was created for.
+    /// The document insert this instance was created for.
     pub id: InsertId,
     /// What the plugin says about itself.
     pub descriptor: PluginDescriptor,

@@ -83,7 +83,7 @@ pub enum MidiMessage {
         /// (`8192`) is the resting position.
         value: u16,
     },
-    /// Session position pointer, in MIDI beats (sixteenth notes) from the start
+    /// Document position pointer, in MIDI beats (sixteenth notes) from the start
     /// of the session.
     SongPosition(u16),
     /// Selects a session/sequence number for playback.

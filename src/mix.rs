@@ -4,7 +4,7 @@
 //! undo history, so it is saved and reversible, and onto the live strip's
 //! atomics, so it is heard on the next block without a rebuild. Switches
 //! (mute, solo, send on/off) take the same two paths but skip the history:
-//! they are saved with the session, not undone. Changing the console's
+//! they are saved with the document, not undone. Changing the console's
 //! shape (a new bus, a new send, a new route) is a structural edit like any
 //! other and marks the rig for a [`play::rebuild`](crate::play::rebuild).
 //!
@@ -24,7 +24,7 @@ use crate::rig::Rig;
 /// Made of: push `set_track_gain_db` → `StripParams::set_gain_db` on the live strip.
 pub fn set_gain_db(rig: &mut Rig, track: TrackId, db: f32) -> Result<()> {
     rig.history
-        .push(&mut rig.session, commands::set_track_gain_db(track, db))?;
+        .push(&mut rig.document, commands::set_track_gain_db(track, db))?;
     if let Some(strip) = rig.live.strip(track) {
         strip.set_gain_db(db);
     }
@@ -36,14 +36,14 @@ pub fn set_gain_db(rig: &mut Rig, track: TrackId, db: f32) -> Result<()> {
 /// Made of: push `set_track_pan` → `StripParams::set_pan` on the live strip.
 pub fn set_pan(rig: &mut Rig, track: TrackId, pan: f32) -> Result<()> {
     rig.history
-        .push(&mut rig.session, commands::set_track_pan(track, pan))?;
+        .push(&mut rig.document, commands::set_track_pan(track, pan))?;
     if let Some(strip) = rig.live.strip(track) {
         strip.set_pan(pan);
     }
     Ok(())
 }
 
-/// Mutes or unmutes. A switch: saved with the session, heard at the next
+/// Mutes or unmutes. A switch: saved with the document, heard at the next
 /// block, not an undo step.
 ///
 /// Made of: `Track::muted` through `session::switch` → `StripParams::set_mute`
@@ -89,7 +89,7 @@ pub fn add_bus(rig: &mut Rig, name: &str) -> Result<TrackId> {
 /// Made of: push `SetTrackOutput`; marks the rig for a rebuild.
 pub fn route(rig: &mut Rig, track: TrackId, bus: Option<TrackId>) -> Result<()> {
     rig.history
-        .push(&mut rig.session, SetTrackOutput::new(track, bus))?;
+        .push(&mut rig.document, SetTrackOutput::new(track, bus))?;
     rig.needs_rebuild = true;
     Ok(())
 }
@@ -97,7 +97,7 @@ pub fn route(rig: &mut Rig, track: TrackId, bus: Option<TrackId>) -> Result<()> 
 /// Adds a send from a track into a bus at `level_db`, tapped before or
 /// after the fader (`SendTap::PreFader` / `SendTap::PostFader`).
 ///
-/// Made of: `Session::allocate_send_id` → `TrackSend::with_id` → push
+/// Made of: `Document::allocate_send_id` → `TrackSend::with_id` → push
 /// `AddSend`; marks the rig for a rebuild.
 pub fn add_send(
     rig: &mut Rig,
@@ -106,13 +106,13 @@ pub fn add_send(
     level_db: f32,
     tap: SendTap,
 ) -> Result<SendId> {
-    let id = rig.session.allocate_send_id();
+    let id = rig.document.allocate_send_id();
     let mut send = TrackSend::with_id(id, bus).level_db(level_db);
     if tap == SendTap::PreFader {
         send = send.pre_fader();
     }
     rig.history
-        .push(&mut rig.session, AddSend::new(track, send))?;
+        .push(&mut rig.document, AddSend::new(track, send))?;
     rig.needs_rebuild = true;
     Ok(id)
 }
@@ -121,7 +121,7 @@ pub fn add_send(
 ///
 /// Made of: push `RemoveSend`; marks the rig for a rebuild.
 pub fn remove_send(rig: &mut Rig, send: SendId) -> Result<()> {
-    rig.history.push(&mut rig.session, RemoveSend::new(send))?;
+    rig.history.push(&mut rig.document, RemoveSend::new(send))?;
     rig.needs_rebuild = true;
     Ok(())
 }
@@ -131,7 +131,7 @@ pub fn remove_send(rig: &mut Rig, send: SendId) -> Result<()> {
 /// Made of: push `set_send_level_db` → `SendParams::set_level_db` on the live send.
 pub fn set_send_level_db(rig: &mut Rig, send: SendId, db: f32) -> Result<()> {
     rig.history
-        .push(&mut rig.session, commands::set_send_level_db(send, db))?;
+        .push(&mut rig.document, commands::set_send_level_db(send, db))?;
     if let Some(live) = rig.live.send(send) {
         live.set_level_db(db);
     }
@@ -215,7 +215,7 @@ mod tests {
         set_gain_db(&mut rig, vox, -6.0206).unwrap();
         set_gain_db(&mut rig, vox, -6.0206).unwrap(); // a drag: one step
         rig.history.seal();
-        assert!((rig.session.track(vox).unwrap().gain_db + 6.0206).abs() < 1e-6);
+        assert!((rig.document.track(vox).unwrap().gain_db + 6.0206).abs() < 1e-6);
         assert!(
             (settled(&mut rig) - 0.25).abs() < 1e-3,
             "heard without a rebuild"
@@ -229,11 +229,11 @@ mod tests {
             audio.channel(1)[255].abs() < 1e-6,
             "hard left: right is silent"
         );
-        assert_eq!(rig.session.track(vox).unwrap().pan, -1.0);
+        assert_eq!(rig.document.track(vox).unwrap().pan, -1.0);
 
         set_mute(&mut rig, vox, true).unwrap();
         assert!(settled(&mut rig).abs() < 1e-6);
-        assert!(rig.session.track(vox).unwrap().muted);
+        assert!(rig.document.track(vox).unwrap().muted);
         set_mute(&mut rig, vox, false).unwrap();
 
         let other = session::add_track(&mut rig, "other", TrackKind::Audio).unwrap();
@@ -253,8 +253,8 @@ mod tests {
         while rig.history.undo_len() > steps_before {
             assert!(session::undo(&mut rig).unwrap());
         }
-        assert_eq!(rig.session.track(vox).unwrap().gain_db, 0.0);
-        assert_eq!(rig.session.track(vox).unwrap().pan, 0.0);
+        assert_eq!(rig.document.track(vox).unwrap().gain_db, 0.0);
+        assert_eq!(rig.document.track(vox).unwrap().pan, 0.0);
     }
 
     #[test]
@@ -267,8 +267,8 @@ mod tests {
         let room = add_bus(&mut rig, "room").unwrap();
         assert!(rig.needs_rebuild);
         let send = add_send(&mut rig, vox, room, 0.0, SendTap::PostFader).unwrap();
-        assert_eq!(rig.session.send(send).unwrap().bus(), room);
-        assert!(!rig.session.send(send).unwrap().pre_fader);
+        assert_eq!(rig.document.send(send).unwrap().bus(), room);
+        assert!(!rig.document.send(send).unwrap().pre_fader);
         play::rebuild(&mut rig).unwrap();
         balance_all(&rig);
         assert!(
@@ -284,7 +284,7 @@ mod tests {
         let steps = rig.history.undo_len();
         set_send_enabled(&mut rig, send, false).unwrap();
         assert!((settled(&mut rig) - direct).abs() < 1e-3);
-        assert!(!rig.session.send(send).unwrap().enabled);
+        assert!(!rig.document.send(send).unwrap().enabled);
         assert_eq!(rig.history.undo_len(), steps, "a switch, not an edit");
         assert!(!session::is_saved(&rig), "but it does count as unsaved");
 
@@ -300,7 +300,7 @@ mod tests {
         );
 
         remove_send(&mut rig, send).unwrap();
-        assert!(rig.session.send(send).is_err());
+        assert!(rig.document.send(send).is_err());
         route(&mut rig, vox, None).unwrap();
         play::rebuild(&mut rig).unwrap();
         balance_all(&rig);

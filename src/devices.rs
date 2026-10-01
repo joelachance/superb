@@ -36,7 +36,7 @@ pub fn inputs() -> Result<Vec<DeviceInfo>> {
 pub fn output_config(rig: &Rig, device: Option<&str>) -> OutputConfig {
     OutputConfig {
         device_name: device.map(str::to_owned),
-        sample_rate: rig.session.sample_rate(),
+        sample_rate: rig.document.sample_rate(),
         channels: rig.channels,
         buffer_frames: None,
         max_block_frames: rig.engine.max_frames(),
@@ -49,7 +49,7 @@ pub fn output_config(rig: &Rig, device: Option<&str>) -> OutputConfig {
 pub fn input_config(rig: &Rig, device: Option<&str>, channels: usize) -> InputConfig {
     InputConfig {
         device_name: device.map(str::to_owned),
-        sample_rate: rig.session.sample_rate(),
+        sample_rate: rig.document.sample_rate(),
         channels,
         buffer_frames: None,
         max_block_frames: rig.engine.max_frames(),
