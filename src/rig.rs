@@ -273,8 +273,9 @@ pub struct LiveInsert {
     pub descriptor: PluginDescriptor,
     /// Its parameters, in the plugin's order.
     pub params: Vec<ParamInfo>,
-    /// Wait-free queue into the running instance; changes apply at the next block.
-    pub sender: Producer<ParamChange>,
+    /// Wait-free queue of parameter changes into the running instance;
+    /// each applies at the next block.
+    pub param_queue: Producer<ParamChange>,
     /// The node's bypass switch; flips are heard at the next block.
     pub bypass: Arc<AtomicBool>,
 }

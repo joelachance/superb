@@ -17,8 +17,7 @@ port.
 | `is_monitoring(rig, track)` | |
 | `play_note(rig, channel, note, velocity)` / `release_note(rig, channel, note)` | queue a note for the next block |
 | `send(rig, MidiMessage)` | queue any message |
-| `inputs()` (feature `midi-io`) | hardware input ports |
-| `connect_input(rig, port_index)` (feature `midi-io`) | route a port into the engine; the connection lives in `rig.midi_inputs` |
+| `connect_input(rig, port_index)` (feature `midi-io`) | route a port (listed by `devices::midi_inputs`) into the engine; the connection lives in `rig.midi_inputs` |
 
 ## Usage
 

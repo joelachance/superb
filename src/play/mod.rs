@@ -239,7 +239,7 @@ pub mod steps {
                 let descriptor = instance.descriptor().clone();
                 let params = instance.params().to_vec();
                 let mut node = PluginNode::new(instance);
-                let sender = node
+                let param_queue = node
                     .take_param_sender()
                     .expect("a fresh node has its sender");
                 let bypass = node.bypass_handle();
@@ -249,7 +249,7 @@ pub mod steps {
                         id: insert.id(),
                         descriptor,
                         params,
-                        sender,
+                        param_queue,
                         bypass,
                     }),
                     Err(e) => failed.push((insert.id(), e.to_string())),

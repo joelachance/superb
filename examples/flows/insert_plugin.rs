@@ -5,7 +5,7 @@
 //! - An insert is stored in the session; the running instance is created at
 //!   the next rebuild, so a session with a missing plugin still opens and plays
 //! - `set_param` reaches the document and the running instance at once
-//! - `failed` tells you which inserts did not load and why
+//! - `failures` tells you which inserts did not load and why
 //!
 //! ```text
 //! cargo run --example insert_plugin
@@ -54,9 +54,9 @@ fn main() -> Result<()> {
         Some(desc) => {
             let fx = plugins::insert(&mut rig, vox, &desc)?;
             play::start(&mut rig)?; // syncs: the instance is created here
-            match plugins::loaded(&rig, fx) {
+            match plugins::info(&rig, fx) {
                 Some(d) => println!("loaded {} v{}", d.name, d.version),
-                None => println!("did not load: {:?}", plugins::failed(&rig)),
+                None => println!("did not load: {:?}", plugins::failures(&rig)),
             }
             let params = plugins::params(&rig, fx).to_vec();
             for p in params.iter().take(6) {
@@ -79,7 +79,10 @@ fn main() -> Result<()> {
             // Bypass leaves the plugin out of the console entirely.
             plugins::set_bypassed(&mut rig, fx, true)?;
             play::rebuild(&mut rig)?;
-            println!("bypassed: loaded = {}", plugins::loaded(&rig, fx).is_some());
+            println!(
+                "bypassed, still loaded: {}",
+                plugins::info(&rig, fx).is_some()
+            );
         }
         None => {
             // No effect installed: show the failure path instead. The session
@@ -90,7 +93,7 @@ fn main() -> Result<()> {
             let fx = plugins::insert(&mut rig, vox, &desc)?;
             play::start(&mut rig)?;
             println!("no audio effect installed; inserted a missing one instead:");
-            for (id, why) in plugins::failed(&rig) {
+            for (id, why) in plugins::failures(&rig) {
                 println!("  {id} failed: {why}");
             }
             println!(

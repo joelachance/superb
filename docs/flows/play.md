@@ -77,4 +77,4 @@ block plus `record::steps::collect`. `start_output`:
   stored parameters and state, so reverb tails and meters reset when the
   console's shape changes. Level edits never cause a rebuild.
 * `rebuild` succeeds even if a plugin fails to load; look at
-  `rig.live.failed_inserts` (or `plugins::failed`).
+  `rig.live.failed_inserts` (or `plugins::failures`).

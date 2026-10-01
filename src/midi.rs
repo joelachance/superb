@@ -3,7 +3,8 @@
 //! A MIDI track that is *monitoring* gets a live instrument when the
 //! console is built, so notes arriving at the engine sound on that track's
 //! strip. Notes can come from your program ([`play_note`], [`send`]) or,
-//! with the `midi-io` feature, from a hardware port (`connect_input`).
+//! with the `midi-io` feature, from a hardware port (`connect_input`;
+//! `devices::midi_inputs` lists them).
 //!
 //! Made of `superb::primitives::midi` (messages), the engine's MIDI queue
 //! in `superb::primitives::io::live`, and the live instrument
@@ -72,15 +73,8 @@ pub fn send(rig: &mut Rig, message: MidiMessage) -> Result<()> {
     })
 }
 
-/// Lists the hardware MIDI input ports.
-///
-/// Made of: `midi::input::list_input_ports`.
-#[cfg(feature = "midi-io")]
-pub fn inputs() -> Result<Vec<crate::primitives::midi::input::MidiPortInfo>> {
-    crate::primitives::midi::input::list_input_ports()
-}
-
-/// Connects a hardware MIDI input (an index from [`inputs`]) to the
+/// Connects a hardware MIDI input (an index from
+/// [`devices::midi_inputs`](crate::devices::midi_inputs)) to the
 /// engine. Its notes land at the start of the block they arrive in and play
 /// on every monitoring track. The connection lives in [`Rig::midi_inputs`]
 /// and closes when removed from there.

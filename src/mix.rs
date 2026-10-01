@@ -11,6 +11,7 @@
 //! Made of `superb::primitives::session::commands` (the document side) and
 //! `superb::primitives::mixer` (`StripParams`, `SendParams`: the live side).
 
+use crate::primitives::mixer::SendTap;
 use crate::primitives::session::commands::{self, AddSend, RemoveSend, SetTrackOutput};
 use crate::primitives::session::{TrackKind, TrackSend};
 use crate::primitives::{Result, SendId, TrackId};
@@ -94,7 +95,7 @@ pub fn route(rig: &mut Rig, track: TrackId, bus: Option<TrackId>) -> Result<()> 
 }
 
 /// Adds a send from a track into a bus at `level_db`, tapped before or
-/// after the fader.
+/// after the fader (`SendTap::PreFader` / `SendTap::PostFader`).
 ///
 /// Made of: `Session::allocate_send_id` → `TrackSend::with_id` → push
 /// `AddSend`; marks the rig for a rebuild.
@@ -103,11 +104,11 @@ pub fn add_send(
     track: TrackId,
     bus: TrackId,
     level_db: f32,
-    pre_fader: bool,
+    tap: SendTap,
 ) -> Result<SendId> {
     let id = rig.session.allocate_send_id();
     let mut send = TrackSend::with_id(id, bus).level_db(level_db);
-    if pre_fader {
+    if tap == SendTap::PreFader {
         send = send.pre_fader();
     }
     rig.history
@@ -265,7 +266,7 @@ mod tests {
 
         let room = add_bus(&mut rig, "room").unwrap();
         assert!(rig.needs_rebuild);
-        let send = add_send(&mut rig, vox, room, 0.0, false).unwrap();
+        let send = add_send(&mut rig, vox, room, 0.0, SendTap::PostFader).unwrap();
         assert_eq!(rig.session.send(send).unwrap().bus(), room);
         assert!(!rig.session.send(send).unwrap().pre_fader);
         play::rebuild(&mut rig).unwrap();

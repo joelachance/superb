@@ -61,7 +61,7 @@ fn main() -> Result<()> {
     // Hardware keyboards.
     #[cfg(feature = "midi-io")]
     {
-        let ports = midi::inputs()?;
+        let ports = superb::devices::midi_inputs()?;
         if ports.is_empty() {
             println!("no MIDI input ports");
         }

@@ -95,8 +95,8 @@ fn main() -> Result<()> {
     // mark the rig for a rebuild; `start`/`drive` rebuild for you, or call
     // `play::rebuild` yourself to control when the swap happens.
     let room = mix::add_bus(&mut rig, "room")?;
-    let vox_send = mix::add_send(&mut rig, vox, room, -6.0206, false)?;
-    let _gtr_send = mix::add_send(&mut rig, gtr, room, -6.0206, false)?;
+    let vox_send = mix::add_send(&mut rig, vox, room, -6.0206, SendTap::PostFader)?;
+    let _gtr_send = mix::add_send(&mut rig, gtr, room, -6.0206, SendTap::PostFader)?;
     println!("needs rebuild: {}", rig.needs_rebuild);
     play::rebuild(&mut rig)?;
     for (_, strip) in &rig.live.strips {

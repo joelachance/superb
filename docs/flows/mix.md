@@ -18,7 +18,7 @@ structural edit and marks the rig for a rebuild.
 | `set_mute(rig, track, on)` / `set_solo(rig, track, on)` | document + live strip | switch (not undoable) |
 | `add_bus(rig, name) -> TrackId` | document; needs rebuild | one |
 | `route(rig, track, Some(bus) or None)` | document; needs rebuild; loops refused | one |
-| `add_send(rig, track, bus, level_db, pre_fader) -> SendId` / `remove_send` | document; needs rebuild | one |
+| `add_send(rig, track, bus, level_db, SendTap) -> SendId` / `remove_send` | document; needs rebuild | one |
 | `set_send_level_db(rig, send, db)` | document + live send | drag |
 | `set_send_enabled(rig, send, on)` | document + live send | switch (not undoable) |
 | `peak(rig, track) -> Option<[f32; 2]>` | live strip meter, read and reset | — |
@@ -29,10 +29,11 @@ kind. `track` arguments accept a bus's ID wherever a strip makes sense.
 ## Usage
 
 ```rust
+use superb::prelude::*; // SendTap
 use superb::{mix, play, session};
 
 let room = mix::add_bus(&mut rig, "room")?;
-let send = mix::add_send(&mut rig, vox, room, -6.0, false)?;   // post-fader
+let send = mix::add_send(&mut rig, vox, room, -6.0, SendTap::PostFader)?;
 play::rebuild(&mut rig)?;                                          // the console has the bus now
 
 for db in [-1.0, -2.0, -3.0] {

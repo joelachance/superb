@@ -25,7 +25,7 @@ pub fn scan() -> Result<crate::primitives::plugins::scan::ScanReport> {
 
 /// Adds `plugin` at the end of a track's (or bus's) insert chain. The
 /// instance is created at the next rebuild; if it cannot be loaded, the rebuild
-/// still succeeds and the failure is listed by [`failed`].
+/// still succeeds and the failure is listed by [`failures`].
 ///
 /// Made of: `Session::allocate_insert_id` → `Insert::with_id` → push
 /// `AddInsert`; marks the rig for a rebuild.
@@ -77,7 +77,7 @@ pub fn set_param(rig: &mut Rig, insert: InsertId, param: u32, value: f64) -> Res
         commands::set_insert_param(insert, param, value),
     )?;
     if let Some(live) = rig.live.insert_mut(insert) {
-        let _ = live.sender.push(ParamChange { id: param, value });
+        let _ = live.param_queue.push(ParamChange { id: param, value });
     }
     Ok(())
 }
@@ -91,13 +91,14 @@ pub fn params(rig: &Rig, insert: InsertId) -> &[ParamInfo] {
         .unwrap_or(&[])
 }
 
-/// What the running instance says about itself, once loaded.
-pub fn loaded(rig: &Rig, insert: InsertId) -> Option<&PluginDescriptor> {
+/// What the running instance says about itself; `None` before the first
+/// rebuild or if the plugin failed to load (see [`failures`]).
+pub fn info(rig: &Rig, insert: InsertId) -> Option<&PluginDescriptor> {
     rig.live.insert(insert).map(|i| &i.descriptor)
 }
 
 /// Inserts that did not load at the last rebuild, with the reason.
-pub fn failed(rig: &Rig) -> &[(InsertId, String)] {
+pub fn failures(rig: &Rig) -> &[(InsertId, String)] {
     &rig.live.failed_inserts
 }
 
@@ -158,8 +159,8 @@ mod tests {
             "not loaded until the rebuild"
         );
         play::rebuild(&mut rig).unwrap();
-        assert!(failed(&rig).is_empty(), "{:?}", failed(&rig));
-        assert_eq!(loaded(&rig, gain).unwrap().name, "Test Gain");
+        assert!(failures(&rig).is_empty(), "{:?}", failures(&rig));
+        assert_eq!(info(&rig, gain).unwrap().name, "Test Gain");
         assert_eq!(params(&rig, gain)[0].name, "Gain");
         assert_eq!(rig.plugins.loaded(), 1);
         // Unity gain: unchanged (the test plugin also reports 16 frames of
@@ -184,7 +185,7 @@ mod tests {
             (settled(&mut rig) - dry).abs() < 1e-3,
             "input passes through"
         );
-        assert!(loaded(&rig, gain).is_some(), "the instance stays loaded");
+        assert!(info(&rig, gain).is_some(), "the instance stays loaded");
         // A rebuilt console starts bypassed too, from the document.
         play::rebuild(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry).abs() < 1e-3);
@@ -207,14 +208,14 @@ mod tests {
         desc.path = "/nonexistent/gone.clap".into();
         let gone = insert(&mut rig, vox, &desc).unwrap();
         play::start(&mut rig).unwrap();
-        assert_eq!(failed(&rig).len(), 1);
-        assert_eq!(failed(&rig)[0].0, gone);
+        assert_eq!(failures(&rig).len(), 1);
+        assert_eq!(failures(&rig)[0].0, gone);
         assert!(settled(&mut rig) > 0.3, "the track still plays");
         let mut vst = PluginDescriptor::new(PluginFormat::Vst3, "x", "X");
         vst.path = "/x.vst3".into();
         let vst = insert(&mut rig, vox, &vst).unwrap();
         play::rebuild(&mut rig).unwrap();
-        assert!(failed(&rig)
+        assert!(failures(&rig)
             .iter()
             .any(|(id, why)| *id == vst && why.contains("VST3")));
         // Setting a parameter on an unloaded insert still records in the document.
