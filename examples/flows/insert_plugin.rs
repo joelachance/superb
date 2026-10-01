@@ -14,17 +14,17 @@
 
 use superb::prelude::*;
 use superb::primitives::plugins::PluginFormat;
-use superb::{play, plugins, session};
+use superb::{plugins, session, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut rig = session::create("fx", rate, 256)?;
-    let vox = session::add_track(&mut rig, "vox", TrackKind::Audio)?;
+    let mut session = session::create("fx", rate, 256)?;
+    let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
     let mut tone = PlanarBuffer::new(2, rate.hz() as usize);
     tone.fill(0.25);
-    rig.cache.insert("tone.wav", tone);
+    session.cache.insert("tone.wav", tone);
     session::add_audio_clip(
-        &mut rig,
+        &mut session,
         vox,
         "tone.wav",
         TimePosition::ZERO,
@@ -52,36 +52,36 @@ fn main() -> Result<()> {
 
     match effect {
         Some(desc) => {
-            let fx = plugins::insert(&mut rig, vox, &desc)?;
-            play::start(&mut rig)?; // syncs: the instance is created here
-            match plugins::info(&rig, fx) {
+            let fx = plugins::insert(&mut session, vox, &desc)?;
+            transport::start(&mut session)?; // syncs: the instance is created here
+            match plugins::info(&session, fx) {
                 Some(d) => println!("loaded {} v{}", d.name, d.version),
-                None => println!("did not load: {:?}", plugins::failures(&rig)),
+                None => println!("did not load: {:?}", plugins::failures(&session)),
             }
-            let params = plugins::params(&rig, fx).to_vec();
+            let params = plugins::params(&session, fx).to_vec();
             for p in params.iter().take(6) {
                 println!(
                     "  param {:>4} {:<24} {:.3} in [{:.3}, {:.3}]",
                     p.id, p.name, p.default, p.min, p.max
                 );
             }
-            let dry = play::drive(&mut rig, 4)?.peak();
+            let dry = session::steps::render_blocks(&mut session, 4)?.peak();
             // Turn the first automatable knob to its maximum and listen.
             if let Some(p) = params.iter().find(|p| p.automatable) {
-                plugins::set_param(&mut rig, fx, p.id, p.max)?;
-                let wet = play::drive(&mut rig, 4)?.peak();
+                plugins::set_param(&mut session, fx, p.id, p.max)?;
+                let wet = session::steps::render_blocks(&mut session, 4)?.peak();
                 println!("{} at max: peak {dry:.3} -> {wet:.3}", p.name);
                 println!(
                     "stored in the session: {:?}",
-                    rig.document.insert(fx)?.param(p.id)
+                    session.document.insert(fx)?.param(p.id)
                 );
             }
             // Bypass leaves the plugin out of the console entirely.
-            plugins::set_bypassed(&mut rig, fx, true)?;
-            play::rebuild(&mut rig)?;
+            plugins::set_bypassed(&mut session, fx, true)?;
+            session::steps::rebuild(&mut session)?;
             println!(
                 "bypassed, still loaded: {}",
-                plugins::info(&rig, fx).is_some()
+                plugins::info(&session, fx).is_some()
             );
         }
         None => {
@@ -90,17 +90,17 @@ fn main() -> Result<()> {
             let mut desc =
                 PluginDescriptor::new(PluginFormat::Clap, "com.example.missing", "Missing FX");
             desc.path = "/nowhere/missing.clap".into();
-            let fx = plugins::insert(&mut rig, vox, &desc)?;
-            play::start(&mut rig)?;
+            let fx = plugins::insert(&mut session, vox, &desc)?;
+            transport::start(&mut session)?;
             println!("no audio effect installed; inserted a missing one instead:");
-            for (id, why) in plugins::failures(&rig) {
+            for (id, why) in plugins::failures(&session) {
                 println!("  {id} failed: {why}");
             }
             println!(
                 "the track still plays: peak {:.3}",
-                play::drive(&mut rig, 4)?.peak()
+                session::steps::render_blocks(&mut session, 4)?.peak()
             );
-            plugins::remove(&mut rig, fx)?;
+            plugins::remove(&mut session, fx)?;
         }
     }
     Ok(())

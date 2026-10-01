@@ -6,7 +6,7 @@
 //! one node per audible clip: [`BufferPlayerNode`] for audio the
 //! [`AudioCache`] holds (a missing entry plays as silence), and
 //! [`ScheduledSynthNode`] for MIDI notes converted through the tempo map.
-//! The mixer is then ready to be prepared and run; `play::steps` does that
+//! The mixer is then ready to be prepared and run; `session::steps` does that
 //! for the live engine and `export` for an offline one.
 
 use std::sync::Arc;
@@ -18,7 +18,7 @@ use crate::primitives::session::{Clip, ClipSource, Document, MidiNote, TrackKind
 use crate::primitives::transport::TempoMap;
 use crate::primitives::{BeatPosition, ClipId, NodeId, Result, TrackId};
 
-use crate::play::bridge::{MixerBinding, MixerBridge};
+use crate::session::bridge::{MixerBinding, MixerBridge};
 
 /// One clip wired into the console: the node that plays it and the strip
 /// it feeds.

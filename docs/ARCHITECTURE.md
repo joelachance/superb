@@ -14,7 +14,7 @@ the deadline, every time, without ever waiting. Superb keeps the two apart
 and connects them deliberately.
 
 ```text
- flows (free functions over a Rig)
+ flows (free functions over a Session)
  session · play · mix · midi · record · plugins · export · devices
  ─────────────────────────────────────────────────────────────────────
  primitives
@@ -22,7 +22,7 @@ and connects them deliberately.
 
    session ── tracks, clips, inserts   io::live   EngineHandle ◄─queues─► EngineLoop
    undo    ── history                  io         Engine, offline render, WAV, devices
-                       play::rebuild ───► mixer      tracks, buses, sends, inserts
+                       session::steps::rebuild ───► mixer      tracks, buses, sends, inserts
    automation ─► Arc<AtomicF32> ─────► graph      nodes, schedule, live swap
                                        plugins    PluginNode, CLAP host
                                        transport  playhead, tempo map
@@ -33,16 +33,16 @@ and connects them deliberately.
 ```
 
 Primitives depend downward only and never import a flow. Flows import
-primitives and each other, and all of them work on the `Rig`.
+primitives and each other, and all of them work on the `Session`.
 
-## The Rig
+## The Session
 
-`Rig` (`src/rig.rs`) is a plain record of the primitives a running session
+`Session` (`src/session.rs`) is a plain record of the primitives a running session
 needs: the `Document`, its `UndoStack`, the `AudioCache`, the `EngineHandle`
 control handle, the `EngineLoop` (until a device takes it), the handles
 into the last console that was built (`LiveHandles`: strip and send
 atomics, plugin parameter queues), the take being recorded, and the plugin
-loader. It has constructors and nothing else. Flow verbs take `&mut Rig`
+loader. It has constructors and nothing else. Flow verbs take `&mut Session`
 so a call does not need seven arguments; steps take the fields they need,
 so a program can assemble its own verb.
 
@@ -86,11 +86,11 @@ Data crosses the thread boundary in exactly three ways:
    threads, so it can be cloned, saved as JSON and undone freely. Edits go
    through `primitives::undo` commands, which restore removed objects under
    their original IDs so the UI's handles stay valid.
-2. **`play::rebuild`** turns the session into a console and hands it to the
+2. **`session::steps::rebuild`** turns the session into a console and hands it to the
    engine. Its steps are public:
-   * `build_console` maps session tracks onto mixer strips and buses
-     (`play::bridge`), mirrors gain, pan, mute, solo, outputs and sends,
-     and attaches one source node per audible clip (`play::wiring`):
+   * `build_mixer` maps session tracks onto mixer strips and buses
+     (`session::bridge`), mirrors gain, pan, mute, solo, outputs and sends,
+     and attaches one source node per audible clip (`session::wiring`):
      `BufferPlayerNode` for audio in the cache, `ScheduledSynthNode` for
      MIDI notes converted through the tempo map, plus a live instrument
      for every monitoring MIDI track.
@@ -112,7 +112,7 @@ Data crosses the thread boundary in exactly three ways:
    control side (commands, graph publishing, software MIDI, position and
    state atomics) and `EngineLoop` on the audio side, which applies
    commands, drains MIDI, renders a block through `Engine` and publishes
-   the position. `play::drive` ticks the loop by hand; `play::start_output`
+   the position. `session::steps::render_blocks` ticks the loop by hand; `devices::output`
    moves it into a device callback.
 6. **`primitives::io::Engine`** owns a `Transport` and a processor. Each
    block it advances the playhead, splits the block at loop wraps, delivers
@@ -167,9 +167,9 @@ tap after the last insert.
 **Live engine.** Commands and graphs go one way, position and state come
 back as atomics. A published graph must be prepared for the engine's
 sample rate and block size or it is rejected, never re-prepared on the
-audio thread. The swap queue holds two graphs; `play::rebuild` reclaims
+audio thread. The swap queue holds two graphs; `session::steps::rebuild` reclaims
 retired graphs before building and, while the loop is still owned by the
-`Rig`, applies the swap itself so repeated rebuilds never back up.
+`Session`, applies the swap itself so repeated rebuilds never back up.
 
 **Automation.** Envelope edits allocate and belong on the control thread.
 The read path evaluates into atomics or a caller's scratch buffer without

@@ -15,38 +15,38 @@
 
 use superb::prelude::*;
 use superb::primitives::io::capture::capture_queue;
-use superb::{play, record, session};
+use superb::{record, session, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let block = 256;
-    let mut rig = session::create("record", rate, block)?;
-    let vox = session::add_track(&mut rig, "vox", TrackKind::Audio)?;
-    let _bed = session::add_track(&mut rig, "bed", TrackKind::Audio)?;
+    let mut session = session::create("record", rate, block)?;
+    let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
+    let _bed = session::add_track(&mut session, "bed", TrackKind::Audio)?;
 
     // Arm the vocal. Arming is a switch in the session: undoable, saved.
-    record::arm(&mut rig, vox, true)?;
-    println!("armed: {:?}", record::armed_tracks(&rig));
+    record::arm(&mut session, vox, true)?;
+    println!("armed: {:?}", record::armed_tracks(&session));
 
     // Roll the transport a second in, then punch in there.
-    play::start(&mut rig)?;
-    play::drive(&mut rig, rate.hz() as usize / block)?;
+    transport::start(&mut session)?;
+    session::steps::render_blocks(&mut session, rate.hz() as usize / block)?;
     println!(
         "punching in at {:.3} s",
-        play::position(&rig).to_seconds(rate)
+        transport::playhead(&session).to_seconds(rate)
     );
 
     // Our "microphone": a mono capture queue with 64 pre-allocated blocks.
     // `record::start` would open a real input here and hand us the same
     // consumer end.
     let (mut mic, blocks) = capture_queue(1, block, 64)?;
-    record::start_from(&mut rig, blocks, 1)?;
-    println!("recording: {}", record::is_recording(&rig));
+    record::start_from(&mut session, blocks, 1)?;
+    println!("recording: {}", record::is_recording(&session));
 
     // Half a second of "singing" (a 440 Hz tone), one block at a time,
     // while the engine keeps rolling. On a device both sides run on their
     // own threads; here they take turns. The queue is small, so the take
-    // has to be collected as it goes: `play::drive` does that for a
+    // has to be collected as it goes: `session::steps::render_blocks` does that for a
     // manual capture (a device capture has its own collector thread).
     let mut phase = 0.0f32;
     let mut sung = PlanarBuffer::new(1, block);
@@ -58,45 +58,48 @@ fn main() -> Result<()> {
         }
         let timestamp_us = (n * block) as u64 * 1_000_000 / rate.hz() as u64;
         mic.push(&sung, timestamp_us);
-        play::drive(&mut rig, 1)?;
+        session::steps::render_blocks(&mut session, 1)?;
         if n == blocks / 2 {
             println!(
                 "half way ({:?}): {} frames collected, {} dropped",
-                play::state(&rig),
-                record::collect(&mut rig),
-                rig.recording.as_ref().map_or(0, |r| r.dropped())
+                transport::state(&session),
+                record::collect(&mut session),
+                session.recording.as_ref().map_or(0, |r| r.dropped())
             );
         }
     }
 
     // Stop: the take is drained into the cache and placed on every armed
     // track, starting at the punch-in point.
-    let clips = record::stop(&mut rig)?;
+    let clips = record::stop(&mut session)?;
     for id in &clips {
-        let clip = rig.document.clip(*id)?;
+        let clip = session.document.clip(*id)?;
         println!(
             "clip {:?} on {}: {:.3} s .. {:.3} s (source {:?})",
             clip.name,
-            rig.document.track(rig.document.clip_track(*id)?)?.name,
+            session
+                .document
+                .track(session.document.clip_track(*id)?)?
+                .name,
             clip.start().to_seconds(rate),
             (clip.start() + clip.length()).to_seconds(rate),
             clip.source
         );
     }
-    println!("undo label: {:?}", rig.history.undo_label());
+    println!("undo label: {:?}", session.history.undo_label());
 
     // Hear it back from the punch-in point.
-    play::seek(&mut rig, TimePosition::from_seconds(1.0, rate))?;
-    play::start(&mut rig)?;
-    let heard = play::drive(&mut rig, 8)?;
+    transport::seek(&mut session, TimePosition::from_seconds(1.0, rate))?;
+    transport::start(&mut session)?;
+    let heard = session::steps::render_blocks(&mut session, 8)?;
     println!("playback of the take, peak {:.3}", heard.peak());
 
     // Undo removes the clip (the audio stays in the cache).
-    session::undo(&mut rig)?;
+    session::undo(&mut session)?;
     println!(
         "after undo: {} clips, cache holds {} take(s)",
-        rig.document.clip_count(),
-        rig.cache.len()
+        session.document.clip_count(),
+        session.cache.len()
     );
 
     // With a real interface:
@@ -106,11 +109,11 @@ fn main() -> Result<()> {
         if devices::inputs()?.is_empty() {
             println!("no input device to record from");
         } else {
-            record::arm(&mut rig, vox, true)?;
-            let mic = devices::input_config(&rig, None, 1);
-            record::start(&mut rig, &mic)?; // a collector thread gathers the take
+            record::arm(&mut session, vox, true)?;
+            let mic = devices::input_config(&session, None, 1);
+            record::start(&mut session, &mic)?; // a collector thread gathers the take
             std::thread::sleep(std::time::Duration::from_millis(500));
-            let clips = record::stop(&mut rig)?;
+            let clips = record::stop(&mut session)?;
             println!("recorded {} clip(s) from the default input", clips.len());
         }
     }

@@ -4,42 +4,47 @@
 //! it offline, as fast as the machine allows. The running engine is not
 //! touched, so you can bounce while listening.
 //!
-//! Made of [`play::steps`](crate::play::steps#functions) (the console),
+//! Made of [`session::steps`](crate::session::steps#functions) (the mixer),
 //! `superb::primitives::io::offline` (the render loop) and
 //! `superb::primitives::io::wav` (the file).
 
 use std::path::Path;
 
-use crate::play;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::wav::{self, WavFormat};
 use crate::primitives::io::{offline, Engine};
 use crate::primitives::transport::Transport;
 use crate::primitives::{Result, SuperbError, TimePosition};
-use crate::rig::Rig;
+use crate::session;
+use crate::session::Session;
 
 /// Renders `frames` frames of the document starting at `start` into memory.
 ///
-/// Made of: [`play::steps::build_console`] → [`play::steps::attach_inserts`]
+/// Made of: [`session::steps::build_mixer`] → [`session::steps::attach_inserts`]
 /// → a `Transport` on the document's tempo map, sought to `start` and playing →
 /// `Engine::new` → `offline::render`.
-pub fn render(rig: &mut Rig, start: TimePosition, frames: usize) -> Result<PlanarBuffer> {
-    let (mut mixer, player) = play::steps::build_console(&rig.document, &rig.cache, rig.channels)?;
-    let (_live, failed) =
-        play::steps::attach_inserts(&rig.document, &mut rig.plugins, &mut mixer, &player);
+pub fn render(session: &mut Session, start: TimePosition, frames: usize) -> Result<PlanarBuffer> {
+    let (mut mixer, player) =
+        session::steps::build_mixer(&session.document, &session.cache, session.channels)?;
+    let (_live, failed) = session::steps::attach_inserts(
+        &session.document,
+        &mut session.plugins,
+        &mut mixer,
+        &player,
+    );
     if let Some((id, why)) = failed.first() {
         return Err(SuperbError::Message(format!(
             "cannot export: insert {id} did not load ({why})"
         )));
     }
-    let mut transport = Transport::with_tempo_map(rig.document.tempo_map().clone());
+    let mut transport = Transport::with_tempo_map(session.document.tempo_map().clone());
     transport.seek(start);
     transport.play();
     let mut engine = Engine::new(mixer, transport);
     offline::render(
         &mut engine,
-        rig.document.sample_rate(),
-        rig.engine.max_frames(),
+        session.document.sample_rate(),
+        session.engine.max_frames(),
         frames,
     )
 }
@@ -49,14 +54,14 @@ pub fn render(rig: &mut Rig, start: TimePosition, frames: usize) -> Result<Plana
 ///
 /// Made of: [`render`] → `wav::write`.
 pub fn bounce(
-    rig: &mut Rig,
+    session: &mut Session,
     path: impl AsRef<Path>,
     start: TimePosition,
     frames: usize,
     format: WavFormat,
 ) -> Result<PlanarBuffer> {
-    let audio = render(rig, start, frames)?;
-    wav::write(path, &audio, rig.document.sample_rate(), format)?;
+    let audio = render(session, start, frames)?;
+    wav::write(path, &audio, session.document.sample_rate(), format)?;
     Ok(audio)
 }
 
@@ -65,17 +70,17 @@ pub fn bounce(
 ///
 /// Made of: `Document::end_position` → [`bounce`].
 pub fn bounce_session(
-    rig: &mut Rig,
+    session: &mut Session,
     path: impl AsRef<Path>,
     format: WavFormat,
 ) -> Result<PlanarBuffer> {
-    let end = rig.document.end_position().samples();
+    let end = session.document.end_position().samples();
     if end <= 0 {
         return Err(SuperbError::Message(
             "the document has no clips to bounce".into(),
         ));
     }
-    bounce(rig, path, TimePosition::ZERO, end as usize, format)
+    bounce(session, path, TimePosition::ZERO, end as usize, format)
 }
 
 /// Renders a range, converts it to `rate` and writes it as WAV.
@@ -83,16 +88,16 @@ pub fn bounce_session(
 /// Made of: [`render`] → `files::resample` → `wav::write`.
 #[cfg(feature = "files")]
 pub fn bounce_at_rate(
-    rig: &mut Rig,
+    session: &mut Session,
     path: impl AsRef<Path>,
     start: TimePosition,
     frames: usize,
     rate: crate::primitives::SampleRate,
     format: WavFormat,
 ) -> Result<PlanarBuffer> {
-    let audio = render(rig, start, frames)?;
+    let audio = render(session, start, frames)?;
     let converted =
-        crate::primitives::io::files::resample(&audio, rig.document.sample_rate(), rate)?;
+        crate::primitives::io::files::resample(&audio, session.document.sample_rate(), rate)?;
     wav::write(path, &converted, rate, format)?;
     Ok(converted)
 }
@@ -102,42 +107,42 @@ mod tests {
     use super::*;
     use crate::primitives::session::TrackKind;
     use crate::primitives::{SampleRate, TimeDuration};
-    use crate::session;
+    use crate::transport;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
-    fn tone_rig() -> Rig {
-        let mut rig = session::create("bounce", R, 256).unwrap();
-        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+    fn tone_rig() -> Session {
+        let mut session = session::create("bounce", R, 256).unwrap();
+        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 1_000);
         tone.fill(0.5);
-        rig.cache.insert("tone.wav", tone);
+        session.cache.insert("tone.wav", tone);
         session::add_audio_clip(
-            &mut rig,
+            &mut session,
             vox,
             "tone.wav",
             TimePosition::from_samples(500),
             TimeDuration::from_samples(1_000),
         )
         .unwrap();
-        rig
+        session
     }
 
     #[test]
     fn render_and_bounce_cover_the_requested_range() {
-        let mut rig = tone_rig();
-        let audio = render(&mut rig, TimePosition::ZERO, 2_000).unwrap();
+        let mut session = tone_rig();
+        let audio = render(&mut session, TimePosition::ZERO, 2_000).unwrap();
         assert_eq!(audio.frames(), 2_000);
         assert!(audio.channel(0)[..500].iter().all(|&s| s == 0.0));
         assert!(audio.channel(0)[1_000].abs() > 0.3);
         assert!(audio.channel(0)[1_600..].iter().all(|&s| s.abs() < 1e-6));
         // Rendering did not disturb the live engine.
-        assert_eq!(play::position(&rig), TimePosition::ZERO);
+        assert_eq!(transport::playhead(&session), TimePosition::ZERO);
 
         let dir = std::env::temp_dir().join(format!("superb-export-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("document.wav");
-        let bounced = bounce_session(&mut rig, &path, WavFormat::Float32).unwrap();
+        let bounced = bounce_session(&mut session, &path, WavFormat::Float32).unwrap();
         assert_eq!(bounced.frames(), 1_500, "to the end of the last clip");
         let (read, rate) = wav::read(&path).unwrap();
         assert_eq!(rate, R);
@@ -152,12 +157,12 @@ mod tests {
     #[cfg(feature = "files")]
     #[test]
     fn bounce_at_rate_converts() {
-        let mut rig = tone_rig();
+        let mut session = tone_rig();
         let dir = std::env::temp_dir().join(format!("superb-export-rate-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("cd.wav");
         let out = bounce_at_rate(
-            &mut rig,
+            &mut session,
             &path,
             TimePosition::ZERO,
             4_800,

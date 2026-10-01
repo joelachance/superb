@@ -1,8 +1,8 @@
-//! `devices`: what hardware is there, and a configuration that fits the rig.
+//! `devices`: what hardware is there, and a configuration that fits the session.
 //!
 //! What you'll learn:
 //! - Audio device listings mark the system default and its channel count
-//! - `output_config` / `input_config` copy the rig's sample rate and block
+//! - `output_config` / `input_config` copy the session's sample rate and block
 //!   size, which the engine's published graphs are prepared for
 //! - With feature `midi-io`, MIDI input ports are listed too
 //!
@@ -24,7 +24,7 @@ fn channels(max: usize) -> String {
 }
 
 fn main() -> Result<()> {
-    let rig = session::create("devices", SampleRate::HZ_48K, 256)?;
+    let session = session::create("devices", SampleRate::HZ_48K, 256)?;
 
     println!("outputs:");
     for d in devices::outputs()? {
@@ -45,9 +45,9 @@ fn main() -> Result<()> {
         );
     }
 
-    // Configurations that match the rig. `None` picks the default device;
+    // Configurations that match the session. `None` picks the default device;
     // pass a listed name to choose another.
-    let out = devices::output_config(&rig, None);
+    let out = devices::output_config(&session, None);
     println!(
         "output config: {} Hz, {} ch, {}-frame blocks, device {:?}",
         out.sample_rate.hz(),
@@ -55,7 +55,7 @@ fn main() -> Result<()> {
         out.max_block_frames,
         out.device_name
     );
-    let inp = devices::input_config(&rig, None, 1);
+    let inp = devices::input_config(&session, None, 1);
     println!(
         "input config:  {} Hz, {} ch, {}-frame blocks",
         inp.sample_rate.hz(),

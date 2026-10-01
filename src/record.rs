@@ -5,7 +5,7 @@
 //! queue holds only a fraction of a second. With a device (`start`) a
 //! collector thread does the emptying. With a source of your own
 //! ([`start_from`]) the blocks wait until [`collect`] runs, which
-//! [`play::drive`] does after every block. [`stop`] puts the take in the
+//! [`session::steps::render_blocks`] does after every block. [`stop`] puts the take in the
 //! audio cache and places a clip on every armed track, as one undo step.
 //!
 //! Made of `superb::primitives::io::capture` (the queue),
@@ -16,13 +16,14 @@ use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
-use crate::play;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
 use crate::primitives::io::live::EngineCommand;
 use crate::primitives::session::TrackKind;
 use crate::primitives::{ClipId, Result, SuperbError, TimeDuration, TimePosition, TrackId};
-use crate::rig::Rig;
+use crate::session;
+use crate::session::Session;
+use crate::transport;
 
 /// A take in progress.
 pub struct Recording {
@@ -68,7 +69,7 @@ impl core::fmt::Debug for Recording {
 /// How a take's blocks get from the capture queue into memory.
 pub enum Capture {
     /// Blocks wait on the queue until [`collect`] moves them into `planes`.
-    /// [`play::drive`] collects after every block it renders; with a
+    /// [`session::steps::render_blocks`] collects after every block it renders; with a
     /// device driving the engine you would call [`collect`] from a timer.
     Manual {
         /// The queue's consumer end.
@@ -153,21 +154,22 @@ impl core::fmt::Debug for Collector {
 /// is stopped. A switch: saved with the document, not an undo step.
 ///
 /// Made of: `Track::armed` through `session::switch`.
-pub fn arm(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
-    if rig.document.track(track)?.kind != TrackKind::Audio {
+pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
+    if session.document.track(track)?.kind != TrackKind::Audio {
         return Err(SuperbError::InvalidArgument {
             what: "only audio tracks are armed for recording",
         });
     }
-    crate::session::switch(rig, |s| {
+    crate::session::switch(session, |s| {
         s.track_mut(track)?.armed = on;
         Ok(())
     })
 }
 
 /// The audio tracks currently armed, in track order.
-pub fn armed_tracks(rig: &Rig) -> Vec<TrackId> {
-    rig.document
+pub fn armed_tracks(session: &Session) -> Vec<TrackId> {
+    session
+        .document
         .tracks()
         .iter()
         .filter(|t| t.kind == TrackKind::Audio && t.armed)
@@ -176,8 +178,8 @@ pub fn armed_tracks(rig: &Rig) -> Vec<TrackId> {
 }
 
 /// `true` while a take is being captured.
-pub fn is_recording(rig: &Rig) -> bool {
-    rig.recording.is_some()
+pub fn is_recording(session: &Session) -> bool {
+    session.recording.is_some()
 }
 
 /// Starts recording from a hardware input onto every armed track, from the
@@ -187,12 +189,15 @@ pub fn is_recording(rig: &Rig) -> bool {
 /// Made of: [`steps::open_input`] with 64 queued blocks →
 /// [`steps::spawn_collector`] → the same beginning as [`start_from`].
 #[cfg(feature = "devices")]
-pub fn start(rig: &mut Rig, input: &crate::primitives::io::device::InputConfig) -> Result<()> {
+pub fn start(
+    session: &mut Session,
+    input: &crate::primitives::io::device::InputConfig,
+) -> Result<()> {
     let (stream, blocks) = steps::open_input(input, 64)?;
     let channels = stream.channels();
     let collector = steps::spawn_collector(blocks, channels)?;
-    begin(rig, Capture::Threaded(collector), channels)?;
-    if let Some(recording) = rig.recording.as_mut() {
+    begin(session, Capture::Threaded(collector), channels)?;
+    if let Some(recording) = session.recording.as_mut() {
         recording.stream = Some(stream);
     }
     Ok(())
@@ -200,14 +205,14 @@ pub fn start(rig: &mut Rig, input: &crate::primitives::io::device::InputConfig) 
 
 /// Starts recording from a capture queue you fill yourself (a file, a
 /// generator, a test), onto every armed track from the current playhead.
-/// Blocks wait on the queue until [`collect`] runs; [`play::drive`] does
+/// Blocks wait on the queue until [`collect`] runs; [`session::steps::render_blocks`] does
 /// that after every block, so an offline program never calls it.
 ///
-/// Made of: [`armed_tracks`] → [`play::rebuild`] when needed →
-/// `EngineHandle::send(Record)` → [`play::position`] for the punch-in.
-pub fn start_from(rig: &mut Rig, blocks: CaptureConsumer, channels: usize) -> Result<()> {
+/// Made of: [`armed_tracks`] → [`session::steps::rebuild`] when needed →
+/// `EngineHandle::send(Record)` → [`transport::playhead`] for the punch-in.
+pub fn start_from(session: &mut Session, blocks: CaptureConsumer, channels: usize) -> Result<()> {
     begin(
-        rig,
+        session,
         Capture::Manual {
             blocks,
             planes: vec![Vec::new(); channels],
@@ -217,25 +222,25 @@ pub fn start_from(rig: &mut Rig, blocks: CaptureConsumer, channels: usize) -> Re
 }
 
 /// What every start has in common once the capture exists.
-fn begin(rig: &mut Rig, capture: Capture, channels: usize) -> Result<()> {
-    if rig.recording.is_some() {
+fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()> {
+    if session.recording.is_some() {
         return Err(SuperbError::Message(
             "a take is already being recorded".into(),
         ));
     }
-    let tracks = armed_tracks(rig);
+    let tracks = armed_tracks(session);
     if tracks.is_empty() {
         return Err(SuperbError::Message(
             "arm an audio track before recording".into(),
         ));
     }
-    if rig.needs_rebuild {
-        play::rebuild(rig)?;
+    if session.needs_rebuild {
+        session::steps::rebuild(session)?;
     }
-    rig.engine.send(EngineCommand::Record)?;
-    rig.recording = Some(Recording {
+    session.engine.send(EngineCommand::Record)?;
+    session.recording = Some(Recording {
         capture,
-        punch_in: play::position(rig),
+        punch_in: transport::playhead(session),
         tracks,
         channels,
         #[cfg(feature = "devices")]
@@ -249,8 +254,8 @@ fn begin(rig: &mut Rig, capture: Capture, channels: usize) -> Result<()> {
 /// Returns the frames gathered in total, or zero when no take is running.
 ///
 /// Made of: [`steps::collect`].
-pub fn collect(rig: &mut Rig) -> usize {
-    match rig.recording.as_mut() {
+pub fn collect(session: &mut Session) -> usize {
+    match session.recording.as_mut() {
         Some(recording) => {
             steps::collect(&mut recording.capture);
             recording.frames()
@@ -267,14 +272,14 @@ pub fn collect(rig: &mut Rig) -> usize {
 /// Made of: `EngineHandle::send(Stop)` → drop the input stream →
 /// [`steps::collect`] or `Collector::finish` → [`steps::finish_take`] →
 /// [`steps::take_name`] → [`steps::store_take`] → [`steps::place_clip`] per
-/// track inside an undo group; marks the rig for a rebuild so the take plays
+/// track inside an undo group; marks the session for a rebuild so the take plays
 /// back on its strip.
-pub fn stop(rig: &mut Rig) -> Result<Vec<ClipId>> {
-    let recording = rig
+pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
+    let recording = session
         .recording
         .take()
         .ok_or_else(|| SuperbError::Message("nothing is being recorded".into()))?;
-    rig.engine.send(EngineCommand::Stop)?;
+    session.engine.send(EngineCommand::Stop)?;
     let Recording {
         capture,
         punch_in,
@@ -300,21 +305,21 @@ pub fn stop(rig: &mut Rig) -> Result<Vec<ClipId>> {
         return Ok(Vec::new());
     }
     let length = TimeDuration::from_samples(audio.frames() as i64);
-    let name = steps::take_name(rig);
-    steps::store_take(&mut rig.cache, &name, audio);
-    rig.history.begin_group("Record take");
+    let name = steps::take_name(session);
+    steps::store_take(&mut session.cache, &name, audio);
+    session.history.begin_group("Record take");
     let mut clips = Vec::with_capacity(tracks.len());
     for track in &tracks {
-        match steps::place_clip(rig, *track, &name, punch_in, length) {
+        match steps::place_clip(session, *track, &name, punch_in, length) {
             Ok(clip) => clips.push(clip),
             Err(e) => {
-                rig.history.cancel_group(&mut rig.document)?;
+                session.history.cancel_group(&mut session.document)?;
                 return Err(e);
             }
         }
     }
-    rig.history.end_group();
-    rig.needs_rebuild = true;
+    session.history.end_group();
+    session.needs_rebuild = true;
     Ok(clips)
 }
 
@@ -409,11 +414,11 @@ pub mod steps {
 
     /// A cache key for a new take that no earlier take uses: `take 1`,
     /// `take 2`, ...
-    pub fn take_name(rig: &Rig) -> String {
-        let mut n = rig.cache.len() + 1;
+    pub fn take_name(session: &Session) -> String {
+        let mut n = session.cache.len() + 1;
         loop {
             let name = format!("take {n}");
-            if rig.cache.get(std::path::Path::new(&name)).is_none() {
+            if session.cache.get(std::path::Path::new(&name)).is_none() {
                 return name;
             }
             n += 1;
@@ -433,15 +438,15 @@ pub mod steps {
 
     /// Places a clip of the cached take on `track`.
     ///
-    /// Made of: [`session::add_audio_clip`](crate::session::add_audio_clip).
+    /// Made of: [`session::add_audio_clip`].
     pub fn place_clip(
-        rig: &mut Rig,
+        session: &mut Session,
         track: TrackId,
         take: &str,
         start: TimePosition,
         length: TimeDuration,
     ) -> Result<ClipId> {
-        crate::session::add_audio_clip(rig, track, take, start, length)
+        crate::session::add_audio_clip(session, track, take, start, length)
     }
 }
 
@@ -450,7 +455,7 @@ mod tests {
     use super::*;
     use crate::primitives::io::capture::capture_queue;
     use crate::primitives::SampleRate;
-    use crate::session;
+    use crate::transport;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
@@ -469,88 +474,90 @@ mod tests {
 
     #[test]
     fn a_take_becomes_a_clip_on_every_armed_track() {
-        let mut rig = session::create("rec", R, 64).unwrap();
-        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
-        let gtr = session::add_track(&mut rig, "gtr", TrackKind::Audio).unwrap();
-        let _idle = session::add_track(&mut rig, "idle", TrackKind::Audio).unwrap();
-        arm(&mut rig, vox, true).unwrap();
-        arm(&mut rig, gtr, true).unwrap();
-        assert_eq!(armed_tracks(&rig), [vox, gtr]);
-        assert!(!is_recording(&rig));
+        let mut session = session::create("rec", R, 64).unwrap();
+        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        let gtr = session::add_track(&mut session, "gtr", TrackKind::Audio).unwrap();
+        let _idle = session::add_track(&mut session, "idle", TrackKind::Audio).unwrap();
+        arm(&mut session, vox, true).unwrap();
+        arm(&mut session, gtr, true).unwrap();
+        assert_eq!(armed_tracks(&session), [vox, gtr]);
+        assert!(!is_recording(&session));
 
         // Roll to 640 frames, then punch in there.
-        play::start(&mut rig).unwrap();
-        play::drive(&mut rig, 10).unwrap();
+        transport::start(&mut session).unwrap();
+        session::steps::render_blocks(&mut session, 10).unwrap();
         let (mut mic, blocks) = capture_queue(1, 64, 16).unwrap();
-        start_from(&mut rig, blocks, 1).unwrap();
-        assert!(is_recording(&rig));
+        start_from(&mut session, blocks, 1).unwrap();
+        assert!(is_recording(&session));
         assert_eq!(
-            rig.recording.as_ref().unwrap().punch_in,
+            session.recording.as_ref().unwrap().punch_in,
             TimePosition::from_samples(640)
         );
-        play::drive(&mut rig, 5).unwrap();
+        session::steps::render_blocks(&mut session, 5).unwrap();
         assert_eq!(
-            play::state(&rig),
+            transport::state(&session),
             crate::primitives::transport::TransportState::Recording
         );
         feed(&mut mic, 5, 0.25); // 320 frames of "singing"
 
-        let clips = stop(&mut rig).unwrap();
+        let clips = stop(&mut session).unwrap();
         assert_eq!(clips.len(), 2);
-        assert!(!is_recording(&rig));
+        assert!(!is_recording(&session));
         for clip in &clips {
-            let c = rig.document.clip(*clip).unwrap();
+            let c = session.document.clip(*clip).unwrap();
             assert_eq!(c.start(), TimePosition::from_samples(640));
             assert_eq!(c.length(), TimeDuration::from_samples(320));
             assert_eq!(c.name, "take 1");
         }
-        assert_eq!(rig.document.clip_track(clips[0]).unwrap(), vox);
-        assert_eq!(rig.document.clip_track(clips[1]).unwrap(), gtr);
-        assert_eq!(rig.cache.len(), 1);
-        assert_eq!(rig.history.undo_label(), Some("Record take"));
+        assert_eq!(session.document.clip_track(clips[0]).unwrap(), vox);
+        assert_eq!(session.document.clip_track(clips[1]).unwrap(), gtr);
+        assert_eq!(session.cache.len(), 1);
+        assert_eq!(session.history.undo_label(), Some("Record take"));
 
         // Stopping stopped the transport; the take plays back from its place.
-        play::drive(&mut rig, 1).unwrap();
+        session::steps::render_blocks(&mut session, 1).unwrap();
         assert_eq!(
-            play::state(&rig),
+            transport::state(&session),
             crate::primitives::transport::TransportState::Stopped
         );
-        play::seek(&mut rig, TimePosition::from_samples(640)).unwrap();
-        play::start(&mut rig).unwrap();
-        let heard = play::drive(&mut rig, 4).unwrap();
+        transport::seek(&mut session, TimePosition::from_samples(640)).unwrap();
+        transport::start(&mut session).unwrap();
+        let heard = session::steps::render_blocks(&mut session, 4).unwrap();
         assert!(heard.channel(0)[200].abs() > 0.2, "two tracks of the take");
-        assert_eq!(rig.live.strips.len(), 3, "one handle per track");
+        assert_eq!(session.live.strips.len(), 3, "one handle per track");
 
         // One undo removes both clips.
-        assert!(session::undo(&mut rig).unwrap());
-        assert!(rig.document.clip(clips[0]).is_err() && rig.document.clip(clips[1]).is_err());
-        assert!(session::redo(&mut rig).unwrap());
-        assert!(rig.document.clip(clips[0]).is_ok());
+        assert!(session::undo(&mut session).unwrap());
+        assert!(
+            session.document.clip(clips[0]).is_err() && session.document.clip(clips[1]).is_err()
+        );
+        assert!(session::redo(&mut session).unwrap());
+        assert!(session.document.clip(clips[0]).is_ok());
     }
 
     #[test]
     fn takes_get_distinct_names_and_empty_takes_leave_no_clip() {
-        let mut rig = session::create("rec", R, 64).unwrap();
-        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
-        arm(&mut rig, vox, true).unwrap();
+        let mut session = session::create("rec", R, 64).unwrap();
+        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        arm(&mut session, vox, true).unwrap();
         for i in 1..=2 {
             let (mut mic, blocks) = capture_queue(2, 64, 4).unwrap();
-            start_from(&mut rig, blocks, 2).unwrap();
+            start_from(&mut session, blocks, 2).unwrap();
             feed_stereo(&mut mic, 2);
-            let clips = stop(&mut rig).unwrap();
+            let clips = stop(&mut session).unwrap();
             assert_eq!(
-                rig.document.clip(clips[0]).unwrap().name,
+                session.document.clip(clips[0]).unwrap().name,
                 format!("take {i}")
             );
         }
-        assert_eq!(rig.cache.len(), 2);
+        assert_eq!(session.cache.len(), 2);
         let (_mic, blocks) = capture_queue(2, 64, 4).unwrap();
-        start_from(&mut rig, blocks, 2).unwrap();
+        start_from(&mut session, blocks, 2).unwrap();
         assert!(
-            stop(&mut rig).unwrap().is_empty(),
+            stop(&mut session).unwrap().is_empty(),
             "nothing captured, nothing placed"
         );
-        assert_eq!(rig.document.clip_count(), 2);
+        assert_eq!(session.document.clip_count(), 2);
     }
 
     fn feed_stereo(producer: &mut crate::primitives::io::capture::CaptureProducer, blocks: usize) {
@@ -562,41 +569,44 @@ mod tests {
 
     #[test]
     fn errors_are_explicit() {
-        let mut rig = session::create("rec", R, 64).unwrap();
-        let keys = session::add_track(&mut rig, "keys", TrackKind::Midi).unwrap();
+        let mut session = session::create("rec", R, 64).unwrap();
+        let keys = session::add_track(&mut session, "keys", TrackKind::Midi).unwrap();
         assert!(
-            arm(&mut rig, keys, true).is_err(),
+            arm(&mut session, keys, true).is_err(),
             "MIDI tracks monitor, they do not record audio"
         );
         assert!(
-            matches!(stop(&mut rig), Err(SuperbError::Message(_))),
+            matches!(stop(&mut session), Err(SuperbError::Message(_))),
             "nothing recording"
         );
         let (_mic, blocks) = capture_queue(1, 64, 2).unwrap();
-        assert!(start_from(&mut rig, blocks, 1).is_err(), "no armed track");
-        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
-        arm(&mut rig, vox, true).unwrap();
+        assert!(
+            start_from(&mut session, blocks, 1).is_err(),
+            "no armed track"
+        );
+        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        arm(&mut session, vox, true).unwrap();
         let (_a, blocks) = capture_queue(1, 64, 2).unwrap();
-        start_from(&mut rig, blocks, 1).unwrap();
+        start_from(&mut session, blocks, 1).unwrap();
         let (_b, blocks) = capture_queue(1, 64, 2).unwrap();
         assert!(
-            start_from(&mut rig, blocks, 1).is_err(),
+            start_from(&mut session, blocks, 1).is_err(),
             "already recording"
         );
-        let _ = format!("{:?}", rig.recording.as_ref().unwrap());
+        let _ = format!("{:?}", session.recording.as_ref().unwrap());
     }
 
     #[test]
     fn a_collector_thread_gathers_the_take_by_itself() {
-        let mut rig = session::create("rec", R, 64).unwrap();
-        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
-        arm(&mut rig, vox, true).unwrap();
+        let mut session = session::create("rec", R, 64).unwrap();
+        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        arm(&mut session, vox, true).unwrap();
         // A queue of 64 blocks fed with 200, paced like a device, and no
         // `collect` calls: the thread keeps up on its own. (A failed push
         // counts as a drop, so the accounting below must balance exactly.)
         let (mut mic, blocks) = capture_queue(1, 64, 64).unwrap();
         let collector = steps::spawn_collector(blocks, 1).unwrap();
-        begin(&mut rig, Capture::Threaded(collector), 1).unwrap();
+        begin(&mut session, Capture::Threaded(collector), 1).unwrap();
         let mut block = PlanarBuffer::new(1, 64);
         block.fill(0.5);
         for i in 0..200u64 {
@@ -604,11 +614,11 @@ mod tests {
             std::thread::sleep(core::time::Duration::from_micros(300));
         }
         // `collect` has nothing to do for a threaded capture; it reports.
-        let _ = collect(&mut rig);
-        let _ = format!("{:?}", rig.recording.as_ref().unwrap());
-        let clips = stop(&mut rig).unwrap();
+        let _ = collect(&mut session);
+        let _ = format!("{:?}", session.recording.as_ref().unwrap());
+        let clips = stop(&mut session).unwrap();
         let dropped = mic.dropped() as usize;
-        let clip = rig.document.clip(clips[0]).unwrap();
+        let clip = session.document.clip(clips[0]).unwrap();
         assert_eq!(
             clip.length(),
             TimeDuration::from_samples(((200 - dropped) * 64) as i64),
@@ -618,7 +628,7 @@ mod tests {
             dropped < 100,
             "the collector fell far behind: {dropped} dropped"
         );
-        let take = rig.cache.get("take 1".as_ref()).unwrap();
+        let take = session.cache.get("take 1".as_ref()).unwrap();
         assert!(take.channel(0).iter().all(|&s| s == 0.5));
 
         // An unfinished collector just lets its thread go.
@@ -653,34 +663,34 @@ mod tests {
 
     #[test]
     fn collecting_as_you_go_outlasts_the_queue() {
-        let mut rig = session::create("rec", R, 64).unwrap();
-        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
-        arm(&mut rig, vox, true).unwrap();
+        let mut session = session::create("rec", R, 64).unwrap();
+        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        arm(&mut session, vox, true).unwrap();
         // A queue of only two blocks; the take is ten blocks long.
         let (mut mic, blocks) = capture_queue(1, 64, 2).unwrap();
-        start_from(&mut rig, blocks, 1).unwrap();
+        start_from(&mut session, blocks, 1).unwrap();
         for i in 0..10 {
             feed(&mut mic, 1, 0.5);
             // Advancing the engine collects for us (a UI timer would call
             // `collect` when a device drives the engine).
-            play::drive(&mut rig, 1).unwrap();
-            assert_eq!(rig.recording.as_ref().unwrap().frames(), (i + 1) * 64);
+            session::steps::render_blocks(&mut session, 1).unwrap();
+            assert_eq!(session.recording.as_ref().unwrap().frames(), (i + 1) * 64);
         }
-        assert_eq!(rig.recording.as_ref().unwrap().dropped(), 0);
-        assert_eq!(collect(&mut rig), 640);
-        let clips = stop(&mut rig).unwrap();
+        assert_eq!(session.recording.as_ref().unwrap().dropped(), 0);
+        assert_eq!(collect(&mut session), 640);
+        let clips = stop(&mut session).unwrap();
         assert_eq!(
-            rig.document.clip(clips[0]).unwrap().length(),
+            session.document.clip(clips[0]).unwrap().length(),
             TimeDuration::from_samples(640)
         );
-        assert_eq!(collect(&mut rig), 0, "nothing recording");
+        assert_eq!(collect(&mut session), 0, "nothing recording");
 
         // Without collecting, the input side reports what it had to drop.
         let (mut mic, blocks) = capture_queue(1, 64, 2).unwrap();
-        start_from(&mut rig, blocks, 1).unwrap();
+        start_from(&mut session, blocks, 1).unwrap();
         feed_lossy(&mut mic, 5, 0.5);
-        assert_eq!(rig.recording.as_ref().unwrap().dropped(), 3);
-        stop(&mut rig).unwrap();
+        assert_eq!(session.recording.as_ref().unwrap().dropped(), 3);
+        stop(&mut session).unwrap();
     }
 
     fn feed_lossy(

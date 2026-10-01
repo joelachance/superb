@@ -6,9 +6,9 @@
 //! The crate has two tiers, so you always know what a call will do:
 //!
 //! * **Flows** are top-level modules named after everyday tasks:
-//!   [`session`], [`play`], [`mix`], [`midi`], [`record`], [`plugins`],
+//!   [`session`], [`transport`], [`mix`], [`midi`], [`record`], [`plugins`],
 //!   [`export`] and [`devices`]. Each is a set of free functions over a
-//!   [`Rig`] (the state of a document in progress), and every function's docs
+//!   [`Session`] (the state of a document in progress), and every function's docs
 //!   end with a "Made of:" list of the primitive calls it performs, so you
 //!   can call those yourself when the flow is not quite what you want.
 //! * **[`primitives`]** are the engine: sample-accurate time, buffers, the
@@ -26,20 +26,20 @@
 //!
 //! ```
 //! use superb::prelude::*;
-//! use superb::{mix, play, session};
+//! use superb::{mix, transport, session};
 //!
-//! let mut rig = session::create("demo", SampleRate::HZ_48K, 256)?;
-//! let lead = session::add_track(&mut rig, "lead", TrackKind::Audio)?;
+//! let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
+//! let lead = session::add_track(&mut session, "lead", TrackKind::Audio)?;
 //!
 //! // Clips point at audio in the cache: a decoded file, or a buffer you made.
 //! let mut tone = PlanarBuffer::new(2, 4_800);
 //! tone.fill(0.25);
-//! rig.cache.insert("tone.wav", tone);
-//! session::add_audio_clip(&mut rig, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(4_800))?;
-//! mix::set_gain_db(&mut rig, lead, -6.0)?;
+//! session.cache.insert("tone.wav", tone);
+//! session::add_audio_clip(&mut session, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(4_800))?;
+//! mix::set_gain_db(&mut session, lead, -6.0)?;
 //!
-//! play::start(&mut rig)?;                    // builds the console, starts the transport
-//! let audio = play::drive(&mut rig, 4)?;   // renders 4 blocks of 256 frames
+//! transport::start(&mut session)?;                    // builds the mixer, starts playing
+//! let audio = session::steps::render_blocks(&mut session, 4)?;   // renders 4 blocks of 256 frames
 //! assert_eq!(audio.frames(), 1_024);
 //! assert!(audio.peak() > 0.05);
 //! # Ok::<(), SuperbError>(())
@@ -71,18 +71,16 @@ pub mod devices;
 pub mod export;
 pub mod midi;
 pub mod mix;
-pub mod play;
 pub mod plugins;
 pub mod primitives;
 pub mod record;
-pub mod rig;
 pub mod session;
+pub mod transport;
 
-pub use rig::Rig;
+pub use session::Session;
 
 /// The most commonly used types and functions, for `use superb::prelude::*`.
 pub mod prelude {
-    pub use crate::play::Wiring;
     pub use crate::primitives::automation::{
         AutomationLane, AutomationMode, Envelope, EnvelopePoint,
     };
@@ -114,7 +112,8 @@ pub mod prelude {
         BeatPosition, BusId, ClipId, MarkerId, NodeId, Result, SampleRate, SendId, SuperbError,
         TimeDuration, TimePosition, TimeSignature, TrackId,
     };
-    pub use crate::rig::Rig;
+    pub use crate::session::Session;
+    pub use crate::session::Wiring;
 }
 
 #[cfg(test)]
@@ -151,7 +150,7 @@ mod tests {
         let _ = crate::primitives::plugins::vst3::AVAILABLE;
         let _ = PluginDescriptor::new(crate::primitives::plugins::PluginFormat::Clap, "id", "name");
         let mut mixer = Mixer::new(2);
-        let mut bridge = crate::play::MixerBridge::new();
+        let mut bridge = crate::session::MixerBridge::new();
         assert_eq!(bridge.bind(&document, &mut mixer), 0);
         assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 0);
         let _ = TrackSend::new(track);

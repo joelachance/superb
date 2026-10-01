@@ -14,15 +14,15 @@ no user interface; you bring your own.
 The crate is organised so you always know what a call will do.
 
 **Flows** are top-level modules named after everyday tasks. Each one is a
-set of free functions that take a `Rig` (the state of a session in progress)
+set of free functions that take a `Session` (the state of a session in progress)
 and do the whole job: `session`, `play`, `mix`, `midi`, `record`,
 `plugins`, `export`, `devices`. Every flow function documents the
 primitive calls it is *made of*, so when one does not do exactly what you
 want, you call those primitives yourself. Nothing is hidden behind an
-object; the `Rig` is a plain struct with public fields.
+object; the `Session` is a plain struct with public fields.
 
 **Primitives** live under `superb::primitives` and are the engine proper.
-They know nothing about flows or the `Rig`.
+They know nothing about flows or the `Session`.
 
 | module | in DAW terms | what it holds | doc |
 |---|---|---|---|
@@ -48,10 +48,10 @@ They know nothing about flows or the `Rig`.
 | `record` | arm tracks, capture a take, turn it into clips | [record.md](docs/flows/record.md) |
 | `plugins` | find plugins, insert one on a track, set parameters, bypass | [plugins.md](docs/flows/plugins.md) |
 | `export` | render a range or the whole session to WAV, optionally resampled | [export.md](docs/flows/export.md) |
-| `devices` | list audio and MIDI hardware; configurations that match the rig | [devices.md](docs/flows/devices.md) |
+| `devices` | list audio and MIDI hardware; configurations that match the session | [devices.md](docs/flows/devices.md) |
 
 [docs/flows.md](docs/flows.md) explains how the flows fit together (the
-`Rig`, syncing, the two undo behaviours). [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+`Session`, syncing, the two undo behaviours). [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 covers the engine and the rules every module follows. If the DAW words are
 new to you, start with [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md).
 
@@ -59,20 +59,20 @@ new to you, start with [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md).
 
 ```rust
 use superb::prelude::*;
-use superb::{mix, play, session};
+use superb::{mix, session, transport};
 
-let mut rig = session::create("demo", SampleRate::HZ_48K, 256)?;
-let lead = session::add_track(&mut rig, "lead", TrackKind::Audio)?;
+let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
+let lead = session::add_track(&mut session, "lead", TrackKind::Audio)?;
 
 // Audio comes from the cache: a decoded file, or a buffer you made.
 let mut tone = PlanarBuffer::new(2, 48_000);
 tone.fill(0.25);
-rig.cache.insert("tone.wav", tone);
-session::add_audio_clip(&mut rig, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(48_000))?;
-mix::set_gain_db(&mut rig, lead, -6.0)?;
+session.cache.insert("tone.wav", tone);
+session::add_audio_clip(&mut session, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(48_000))?;
+mix::set_gain_db(&mut session, lead, -6.0)?;
 
-play::start(&mut rig)?;                 // builds the console, starts the transport
-let audio = play::drive(&mut rig, 8)?; // renders 8 blocks without an audio device
+transport::start(&mut session)?;                 // builds the mixer, starts playing
+let audio = session::steps::render_blocks(&mut session, 8)?; // renders 8 blocks without an audio device
 assert!(audio.peak() > 0.1);
 ```
 

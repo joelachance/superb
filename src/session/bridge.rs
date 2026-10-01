@@ -8,7 +8,7 @@
 //! the document onto the atomics, and mirrors the document's routing
 //! (track → bus outputs, sends) onto the mixer topology.
 //!
-//! Clip sources (players, synths) stay with [`crate::play::wiring`] — the
+//! Clip sources (players, synths) stay with [`crate::session::wiring`] — the
 //! bridge only deals with strips, buses, outputs and sends.
 
 use crate::primitives::mixer::{Mixer, SendTap};

@@ -13,24 +13,24 @@ port.
 
 | verb | does |
 |---|---|
-| `monitor(rig, track, on)` | switch monitoring on a MIDI track (saved, not undoable, needs rebuild); audio tracks are refused |
-| `is_monitoring(rig, track)` | |
-| `play_note(rig, channel, note, velocity)` / `release_note(rig, channel, note)` | queue a note for the next block |
-| `send(rig, MidiMessage)` | queue any message |
-| `connect_input(rig, port_index)` (feature `midi-io`) | route a port (listed by `devices::midi_inputs`) into the engine; the connection lives in `rig.midi_inputs` |
+| `monitor(session, track, on)` | switch monitoring on a MIDI track (saved, not undoable, needs rebuild); audio tracks are refused |
+| `is_monitoring(session, track)` | |
+| `play_note(session, channel, note, velocity)` / `release_note(session, channel, note)` | queue a note for the next block |
+| `send(session, MidiMessage)` | queue any message |
+| `connect_input(session, port_index)` (feature `midi-io`) | route a port (listed by `devices::midi_inputs`) into the engine; the connection lives in `session.midi_inputs` |
 
 ## Usage
 
 ```rust
-use superb::{midi, play, session};
+use superb::{midi, session, transport};
 use superb::prelude::*;
 
-let keys = session::add_track(&mut rig, "keys", TrackKind::Midi)?;
-midi::monitor(&mut rig, keys, true)?;
-play::start(&mut rig)?;
-midi::play_note(&mut rig, 0, 60, 100)?;
-let audio = play::drive(&mut rig, 8)?;        // middle C on the keys strip
-midi::release_note(&mut rig, 0, 60)?;
+let keys = session::add_track(&mut session, "keys", TrackKind::Midi)?;
+midi::monitor(&mut session, keys, true)?;
+transport::start(&mut session)?;
+midi::play_note(&mut session, 0, 60, 100)?;
+let audio = session::steps::render_blocks(&mut session, 8)?;        // middle C on the keys strip
+midi::release_note(&mut session, 0, 60)?;
 ```
 
 ## Made of

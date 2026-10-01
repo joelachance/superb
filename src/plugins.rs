@@ -6,13 +6,13 @@
 //! through undo and onto the running instance through its wait-free queue.
 //!
 //! Made of `superb::primitives::plugins` (the host), the document's insert
-//! commands, and [`Rig::plugins`] (which loads bundles and keeps them open).
+//! commands, and [`Session::plugins`] (which loads bundles and keeps them open).
 
 use crate::primitives::plugins::{ParamChange, ParamInfo, PluginDescriptor};
 use crate::primitives::session::commands::{self, AddInsert, RemoveInsert};
 use crate::primitives::session::{Insert, PluginRef};
 use crate::primitives::{InsertId, Result, TrackId};
-use crate::rig::Rig;
+use crate::session::Session;
 
 /// Finds every CLAP plugin in the standard locations and `CLAP_PATH`.
 /// Bundles that fail to load are reported in the result, not fatal.
@@ -28,23 +28,29 @@ pub fn scan() -> Result<crate::primitives::plugins::scan::ScanReport> {
 /// still succeeds and the failure is listed by [`failures`].
 ///
 /// Made of: `Document::allocate_insert_id` → `Insert::with_id` → push
-/// `AddInsert`; marks the rig for a rebuild.
-pub fn insert(rig: &mut Rig, track: TrackId, plugin: &PluginDescriptor) -> Result<InsertId> {
-    let id = rig.document.allocate_insert_id();
+/// `AddInsert`; marks the session for a rebuild.
+pub fn insert(
+    session: &mut Session,
+    track: TrackId,
+    plugin: &PluginDescriptor,
+) -> Result<InsertId> {
+    let id = session.document.allocate_insert_id();
     let insert = Insert::with_id(id, PluginRef::from(plugin));
-    rig.history
-        .push(&mut rig.document, AddInsert::new(track, insert))?;
-    rig.needs_rebuild = true;
+    session
+        .history
+        .push(&mut session.document, AddInsert::new(track, insert))?;
+    session.needs_rebuild = true;
     Ok(id)
 }
 
 /// Removes an insert from its chain.
 ///
-/// Made of: push `RemoveInsert`; marks the rig for a rebuild.
-pub fn remove(rig: &mut Rig, insert: InsertId) -> Result<()> {
-    rig.history
-        .push(&mut rig.document, RemoveInsert::new(insert))?;
-    rig.needs_rebuild = true;
+/// Made of: push `RemoveInsert`; marks the session for a rebuild.
+pub fn remove(session: &mut Session, insert: InsertId) -> Result<()> {
+    session
+        .history
+        .push(&mut session.document, RemoveInsert::new(insert))?;
+    session.needs_rebuild = true;
     Ok(())
 }
 
@@ -54,13 +60,13 @@ pub fn remove(rig: &mut Rig, insert: InsertId) -> Result<()> {
 /// next block.
 ///
 /// Made of: `Insert::bypassed` through `session::switch` → the node's
-/// bypass flag in [`LiveInsert::bypass`](crate::rig::LiveInsert::bypass).
-pub fn set_bypassed(rig: &mut Rig, insert: InsertId, on: bool) -> Result<()> {
-    crate::session::switch(rig, |s| {
+/// bypass flag in [`LiveInsert::bypass`](crate::session::LiveInsert::bypass).
+pub fn set_bypassed(session: &mut Session, insert: InsertId, on: bool) -> Result<()> {
+    crate::session::switch(session, |s| {
         s.insert_mut(insert)?.bypassed = on;
         Ok(())
     })?;
-    if let Some(live) = rig.live.insert(insert) {
+    if let Some(live) = session.live.insert(insert) {
         live.bypass.store(on, core::sync::atomic::Ordering::Relaxed);
     }
     Ok(())
@@ -71,12 +77,12 @@ pub fn set_bypassed(rig: &mut Rig, insert: InsertId, on: bool) -> Result<()> {
 ///
 /// Made of: push `set_insert_param` → `ParamChange` onto the running
 /// instance's queue, when it is loaded.
-pub fn set_param(rig: &mut Rig, insert: InsertId, param: u32, value: f64) -> Result<()> {
-    rig.history.push(
-        &mut rig.document,
+pub fn set_param(session: &mut Session, insert: InsertId, param: u32, value: f64) -> Result<()> {
+    session.history.push(
+        &mut session.document,
         commands::set_insert_param(insert, param, value),
     )?;
-    if let Some(live) = rig.live.insert_mut(insert) {
+    if let Some(live) = session.live.insert_mut(insert) {
         let _ = live.param_queue.push(ParamChange { id: param, value });
     }
     Ok(())
@@ -84,8 +90,9 @@ pub fn set_param(rig: &mut Rig, insert: InsertId, param: u32, value: f64) -> Res
 
 /// The running instance's parameters, in the plugin's order. Empty before
 /// the first rebuild or if the plugin failed to load.
-pub fn params(rig: &Rig, insert: InsertId) -> &[ParamInfo] {
-    rig.live
+pub fn params(session: &Session, insert: InsertId) -> &[ParamInfo] {
+    session
+        .live
         .insert(insert)
         .map(|i| i.params.as_slice())
         .unwrap_or(&[])
@@ -93,133 +100,136 @@ pub fn params(rig: &Rig, insert: InsertId) -> &[ParamInfo] {
 
 /// What the running instance says about itself; `None` before the first
 /// rebuild or if the plugin failed to load (see [`failures`]).
-pub fn info(rig: &Rig, insert: InsertId) -> Option<&PluginDescriptor> {
-    rig.live.insert(insert).map(|i| &i.descriptor)
+pub fn info(session: &Session, insert: InsertId) -> Option<&PluginDescriptor> {
+    session.live.insert(insert).map(|i| &i.descriptor)
 }
 
 /// Inserts that did not load at the last rebuild, with the reason.
-pub fn failures(rig: &Rig) -> &[(InsertId, String)] {
-    &rig.live.failed_inserts
+pub fn failures(session: &Session) -> &[(InsertId, String)] {
+    &session.live.failed_inserts
 }
 
 #[cfg(all(test, feature = "clap"))]
 mod tests {
     use super::*;
-    use crate::play;
     use crate::primitives::buffers::PlanarBuffer;
     use crate::primitives::plugins::clap::{test_plugin, ClapBundle};
     use crate::primitives::plugins::PluginFormat;
     use crate::primitives::session::TrackKind;
     use crate::primitives::{SampleRate, TimeDuration, TimePosition};
     use crate::session;
+    use crate::transport;
 
     const R: SampleRate = SampleRate::HZ_48K;
     const VIRTUAL: &str = "/virtual/test.clap";
 
     /// The in-process test plugin, presented as if it lived at `VIRTUAL`.
-    fn test_descriptor(rig: &mut Rig) -> PluginDescriptor {
+    fn test_descriptor(session: &mut Session) -> PluginDescriptor {
         let bundle = ClapBundle::from_entry(&test_plugin::TEST_ENTRY, VIRTUAL).unwrap();
         let desc = bundle.descriptors().remove(0);
-        rig.plugins.register(VIRTUAL, bundle);
+        session.plugins.register(VIRTUAL, bundle);
         desc
     }
 
-    fn tone_rig() -> (Rig, TrackId) {
-        let mut rig = session::create("fx", R, 64).unwrap();
-        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+    fn tone_rig() -> (Session, TrackId) {
+        let mut session = session::create("fx", R, 64).unwrap();
+        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);
-        rig.cache.insert("tone.wav", tone);
+        session.cache.insert("tone.wav", tone);
         session::add_audio_clip(
-            &mut rig,
+            &mut session,
             vox,
             "tone.wav",
             TimePosition::ZERO,
             TimeDuration::from_samples(4_000),
         )
         .unwrap();
-        (rig, vox)
+        (session, vox)
     }
 
-    fn settled(rig: &mut Rig) -> f32 {
-        let audio = play::drive(rig, 4).unwrap();
+    fn settled(session: &mut Session) -> f32 {
+        let audio = session::steps::render_blocks(session, 4).unwrap();
         audio.channel(0)[audio.frames() - 1].abs()
     }
 
     #[test]
     fn an_insert_is_heard_and_its_knobs_turn() {
-        let (mut rig, vox) = tone_rig();
-        play::start(&mut rig).unwrap();
-        let dry = settled(&mut rig);
-        let desc = test_descriptor(&mut rig);
-        let gain = insert(&mut rig, vox, &desc).unwrap();
-        assert!(rig.needs_rebuild);
+        let (mut session, vox) = tone_rig();
+        transport::start(&mut session).unwrap();
+        let dry = settled(&mut session);
+        let desc = test_descriptor(&mut session);
+        let gain = insert(&mut session, vox, &desc).unwrap();
+        assert!(session.needs_rebuild);
         assert!(
-            params(&rig, gain).is_empty(),
+            params(&session, gain).is_empty(),
             "not loaded until the rebuild"
         );
-        play::rebuild(&mut rig).unwrap();
-        assert!(failures(&rig).is_empty(), "{:?}", failures(&rig));
-        assert_eq!(info(&rig, gain).unwrap().name, "Test Gain");
-        assert_eq!(params(&rig, gain)[0].name, "Gain");
-        assert_eq!(rig.plugins.loaded(), 1);
+        session::steps::rebuild(&mut session).unwrap();
+        assert!(failures(&session).is_empty(), "{:?}", failures(&session));
+        assert_eq!(info(&session, gain).unwrap().name, "Test Gain");
+        assert_eq!(params(&session, gain)[0].name, "Gain");
+        assert_eq!(session.plugins.loaded(), 1);
         // Unity gain: unchanged (the test plugin also reports 16 frames of
         // latency, which the graph compensates).
-        assert!((settled(&mut rig) - dry).abs() < 1e-3);
+        assert!((settled(&mut session) - dry).abs() < 1e-3);
 
-        set_param(&mut rig, gain, 7, 0.5).unwrap();
-        set_param(&mut rig, gain, 7, 0.25).unwrap(); // a knob drag: one step
-        assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3, "heard live");
-        assert_eq!(rig.document.insert(gain).unwrap().param(7), Some(0.25));
+        set_param(&mut session, gain, 7, 0.5).unwrap();
+        set_param(&mut session, gain, 7, 0.25).unwrap(); // a knob drag: one step
+        assert!(
+            (settled(&mut session) - dry * 0.25).abs() < 1e-3,
+            "heard live"
+        );
+        assert_eq!(session.document.insert(gain).unwrap().param(7), Some(0.25));
         // A fresh rebuild re-applies the stored value to the new instance.
-        play::rebuild(&mut rig).unwrap();
-        assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
+        session::steps::rebuild(&mut session).unwrap();
+        assert!((settled(&mut session) - dry * 0.25).abs() < 1e-3);
 
         // Bypass is a live switch: heard at once, no rebuild, not an undo step.
-        let steps = rig.history.undo_len();
-        set_bypassed(&mut rig, gain, true).unwrap();
-        assert!(!rig.needs_rebuild);
-        assert_eq!(rig.history.undo_len(), steps);
-        assert!(rig.document.insert(gain).unwrap().bypassed);
+        let steps = session.history.undo_len();
+        set_bypassed(&mut session, gain, true).unwrap();
+        assert!(!session.needs_rebuild);
+        assert_eq!(session.history.undo_len(), steps);
+        assert!(session.document.insert(gain).unwrap().bypassed);
         assert!(
-            (settled(&mut rig) - dry).abs() < 1e-3,
+            (settled(&mut session) - dry).abs() < 1e-3,
             "input passes through"
         );
-        assert!(info(&rig, gain).is_some(), "the instance stays loaded");
+        assert!(info(&session, gain).is_some(), "the instance stays loaded");
         // A rebuilt console starts bypassed too, from the document.
-        play::rebuild(&mut rig).unwrap();
-        assert!((settled(&mut rig) - dry).abs() < 1e-3);
-        set_bypassed(&mut rig, gain, false).unwrap();
-        assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
-        remove(&mut rig, gain).unwrap();
-        assert!(rig.document.insert(gain).is_err());
-        play::rebuild(&mut rig).unwrap();
-        assert!((settled(&mut rig) - dry).abs() < 1e-3);
+        session::steps::rebuild(&mut session).unwrap();
+        assert!((settled(&mut session) - dry).abs() < 1e-3);
+        set_bypassed(&mut session, gain, false).unwrap();
+        assert!((settled(&mut session) - dry * 0.25).abs() < 1e-3);
+        remove(&mut session, gain).unwrap();
+        assert!(session.document.insert(gain).is_err());
+        session::steps::rebuild(&mut session).unwrap();
+        assert!((settled(&mut session) - dry).abs() < 1e-3);
         // Undo the removal: the insert is back, active, at 0.25.
-        session::undo(&mut rig).unwrap();
-        play::rebuild(&mut rig).unwrap();
-        assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
+        session::undo(&mut session).unwrap();
+        session::steps::rebuild(&mut session).unwrap();
+        assert!((settled(&mut session) - dry * 0.25).abs() < 1e-3);
     }
 
     #[test]
     fn a_missing_plugin_is_reported_and_the_rest_plays() {
-        let (mut rig, vox) = tone_rig();
+        let (mut session, vox) = tone_rig();
         let mut desc = PluginDescriptor::new(PluginFormat::Clap, "com.example.gone", "Gone");
         desc.path = "/nonexistent/gone.clap".into();
-        let gone = insert(&mut rig, vox, &desc).unwrap();
-        play::start(&mut rig).unwrap();
-        assert_eq!(failures(&rig).len(), 1);
-        assert_eq!(failures(&rig)[0].0, gone);
-        assert!(settled(&mut rig) > 0.3, "the track still plays");
+        let gone = insert(&mut session, vox, &desc).unwrap();
+        transport::start(&mut session).unwrap();
+        assert_eq!(failures(&session).len(), 1);
+        assert_eq!(failures(&session)[0].0, gone);
+        assert!(settled(&mut session) > 0.3, "the track still plays");
         let mut vst = PluginDescriptor::new(PluginFormat::Vst3, "x", "X");
         vst.path = "/x.vst3".into();
-        let vst = insert(&mut rig, vox, &vst).unwrap();
-        play::rebuild(&mut rig).unwrap();
-        assert!(failures(&rig)
+        let vst = insert(&mut session, vox, &vst).unwrap();
+        session::steps::rebuild(&mut session).unwrap();
+        assert!(failures(&session)
             .iter()
             .any(|(id, why)| *id == vst && why.contains("VST3")));
         // Setting a parameter on an unloaded insert still records in the document.
-        set_param(&mut rig, gone, 1, 0.5).unwrap();
-        assert_eq!(rig.document.insert(gone).unwrap().param(1), Some(0.5));
+        set_param(&mut session, gone, 1, 0.5).unwrap();
+        assert_eq!(session.document.insert(gone).unwrap().param(1), Some(0.5));
     }
 }

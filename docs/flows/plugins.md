@@ -14,29 +14,29 @@ running instance through its wait-free queue.
 | verb | does |
 |---|---|
 | `scan()` (feature `clap`) | every CLAP plugin in the standard folders and `CLAP_PATH`; failed bundles listed |
-| `insert(rig, track, &PluginDescriptor) -> InsertId` | append to the track's chain; instantiated at the next rebuild |
-| `remove(rig, insert)` | |
-| `set_bypassed(rig, insert, on)` | switch (saved, not undoable); the node passes its input through from the next block, no rebuild |
-| `set_param(rig, insert, param_id, value)` | document (coalescing per parameter) + running instance |
-| `params(rig, insert) -> &[ParamInfo]` | the running instance's parameters; empty before the first rebuild |
-| `info(rig, insert) -> Option<&PluginDescriptor>` | what the running instance says about itself; `None` until it is loaded |
-| `failures(rig) -> &[(InsertId, String)]` | inserts that did not load at the last rebuild, with the reason |
+| `insert(session, track, &PluginDescriptor) -> InsertId` | append to the track's chain; instantiated at the next rebuild |
+| `remove(session, insert)` | |
+| `set_bypassed(session, insert, on)` | switch (saved, not undoable); the node passes its input through from the next block, no rebuild |
+| `set_param(session, insert, param_id, value)` | document (coalescing per parameter) + running instance |
+| `params(session, insert) -> &[ParamInfo]` | the running instance's parameters; empty before the first rebuild |
+| `info(session, insert) -> Option<&PluginDescriptor>` | what the running instance says about itself; `None` until it is loaded |
+| `failures(session) -> &[(InsertId, String)]` | inserts that did not load at the last rebuild, with the reason |
 
 ## Usage
 
 ```rust
-use superb::{play, plugins, session};
+use superb::{plugins, session, transport};
 
 let report = plugins::scan()?;
 if let Some(desc) = report.plugins.iter().find(|p| p.features.iter().any(|f| f == "audio-effect")) {
-    let fx = plugins::insert(&mut rig, vox, desc)?;
-    play::start(&mut rig)?;                       // the instance exists from here
-    if let Some(p) = plugins::params(&rig, fx).first().cloned() {
-        plugins::set_param(&mut rig, fx, p.id, p.max)?;
+    let fx = plugins::insert(&mut session, vox, desc)?;
+    transport::start(&mut session)?;                       // the instance exists from here
+    if let Some(p) = plugins::params(&session, fx).first().cloned() {
+        plugins::set_param(&mut session, fx, p.id, p.max)?;
     }
-    plugins::set_bypassed(&mut rig, fx, true)?;   // needs a rebuild to take effect
+    plugins::set_bypassed(&mut session, fx, true)?;   // needs a rebuild to take effect
 }
-for (id, why) in plugins::failures(&rig) {
+for (id, why) in plugins::failures(&session) {
     eprintln!("{id}: {why}");
 }
 ```
@@ -45,8 +45,8 @@ for (id, why) in plugins::failures(&rig) {
 
 `insert`: `Document::allocate_insert_id` → `Insert::with_id(PluginRef::from(desc))`
 → `AddInsert`, `needs_rebuild`. `set_param`: `set_insert_param` through undo →
-`Producer<ParamChange>::push` on `rig.live.insert_mut(id).param_queue`. At rebuild,
-`play::steps::attach_inserts` calls `PluginLoader::instantiate` (load the
+`Producer<ParamChange>::push` on `session.live.insert_mut(id).param_queue`. At rebuild,
+`session::steps::attach_inserts` calls `PluginLoader::instantiate` (load the
 bundle once, `instantiate`, `load_state`, re-apply stored parameters) and
 `Mixer::add_insert`.
 

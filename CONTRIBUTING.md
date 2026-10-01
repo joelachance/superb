@@ -44,29 +44,29 @@ lowest module that has everything it needs and nothing it does not:
 shared types at the root, then `buffers` and `realtime`, then `transport`,
 `midi` and `automation`, then `graph`, `mixer`, `plugins` and `io`, with
 `undo` and `session` beside them. A primitive never imports a flow or the
-`Rig`.
+`Session`.
 
 **Flows** (`src/<flow>.rs`, one file per everyday task) are free functions
-over the `Rig`. A flow function earns its place by replacing at least three
+over the `Session`. A flow function earns its place by replacing at least three
 primitive calls or by hiding an ordering hazard (rebuild before publish, stop
 before draining a take). Rules:
 
-* A *verb* takes `&mut Rig` and does the whole job. A *step* takes the
+* A *verb* takes `&mut Session` and does the whole job. A *step* takes the
   individual primitives it needs and lives in the flow's `steps` module,
   so a program can build its own verb from the same parts.
 * Every verb's doc comment ends with a **Made of:** list naming the
   primitive and step calls in order. Keep it accurate when you change the
   body; it is the contract that lets a reader bypass the verb.
 * Edits that change the console's shape (tracks, clips, sends, routing,
-  inserts, monitoring) set `rig.needs_rebuild`. Edits to a level go to the
+  inserts, monitoring) set `session.needs_rebuild`. Edits to a level go to the
   document *and* the live handle at once and do not need a rebuild.
 * A continuous edit (fader, knob, clip drag) pushes through the undo stack
-  and coalesces by time (`Rig::COALESCE_WINDOW`), so a drag is one step
+  and coalesces by time (`Session::COALESCE_WINDOW`), so a drag is one step
   without the UI having to say when it ended. A switch (mute, solo, arm,
   monitoring, bypass, send on/off) is not an edit: it goes through
   `session::switch`, which changes the document directly and marks the
   history dirty, and never enters the undo history.
-* No behaviour on the `Rig` itself beyond constructors; it is a record.
+* No behaviour on the `Session` itself beyond constructors; it is a record.
 
 ## Naming
 

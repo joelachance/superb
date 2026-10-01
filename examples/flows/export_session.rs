@@ -14,13 +14,13 @@
 
 use superb::prelude::*;
 use superb::primitives::io::wav::{self, WavFormat};
-use superb::{export, mix, play, session};
+use superb::{export, mix, session, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut rig = session::create("bounce", rate, 256)?;
-    let lead = session::add_track(&mut rig, "lead", TrackKind::Audio)?;
-    let pad = session::add_track(&mut rig, "pad", TrackKind::Audio)?;
+    let mut session = session::create("bounce", rate, 256)?;
+    let lead = session::add_track(&mut session, "lead", TrackKind::Audio)?;
+    let pad = session::add_track(&mut session, "pad", TrackKind::Audio)?;
 
     // Two one-second tones, the second starting at 0.5 s: the document ends at 1.5 s.
     let mut a = PlanarBuffer::new(2, rate.hz() as usize);
@@ -34,24 +34,24 @@ fn main() -> Result<()> {
             b.channel_mut(ch)[i] = sb;
         }
     }
-    rig.cache.insert("a.wav", a);
-    rig.cache.insert("b.wav", b);
+    session.cache.insert("a.wav", a);
+    session.cache.insert("b.wav", b);
     let one = TimeDuration::from_seconds(1.0, rate);
-    session::add_audio_clip(&mut rig, lead, "a.wav", TimePosition::ZERO, one)?;
+    session::add_audio_clip(&mut session, lead, "a.wav", TimePosition::ZERO, one)?;
     session::add_audio_clip(
-        &mut rig,
+        &mut session,
         pad,
         "b.wav",
         TimePosition::from_seconds(0.5, rate),
         one,
     )?;
-    mix::set_gain_db(&mut rig, pad, -6.0)?;
-    mix::set_pan(&mut rig, lead, 0.3)?;
+    mix::set_gain_db(&mut session, pad, -6.0)?;
+    mix::set_pan(&mut session, lead, 0.3)?;
 
     // The live engine is untouched by an export: leave it stopped at zero.
     let dir = std::env::temp_dir();
     let path = dir.join("export_session.wav");
-    let audio = export::bounce_session(&mut rig, &path, WavFormat::Pcm16)?;
+    let audio = export::bounce_session(&mut session, &path, WavFormat::Pcm16)?;
     println!(
         "bounced {:.2} s ({} frames) to {}; peak {:.3}",
         audio.frames() as f64 / rate.hz() as f64,
@@ -61,7 +61,7 @@ fn main() -> Result<()> {
     );
     println!(
         "live playhead still at {:.1} s",
-        play::position(&rig).to_seconds(rate)
+        transport::playhead(&session).to_seconds(rate)
     );
 
     // Read it back to prove the file is what we rendered.
@@ -75,13 +75,13 @@ fn main() -> Result<()> {
 
     // Just the overlap, as 32-bit float, into memory and to a file.
     let overlap = export::render(
-        &mut rig,
+        &mut session,
         TimePosition::from_seconds(0.5, rate),
         rate.hz() as usize / 2,
     )?;
     println!("0.5 s .. 1.0 s in memory: peak {:.3}", overlap.peak());
     export::bounce(
-        &mut rig,
+        &mut session,
         dir.join("export_overlap.wav"),
         TimePosition::from_seconds(0.5, rate),
         rate.hz() as usize / 2,
@@ -92,7 +92,7 @@ fn main() -> Result<()> {
     {
         let cd = dir.join("export_song_44k1.wav");
         let converted = export::bounce_at_rate(
-            &mut rig,
+            &mut session,
             &cd,
             TimePosition::ZERO,
             audio.frames(),

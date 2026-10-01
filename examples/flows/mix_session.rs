@@ -14,13 +14,13 @@
 //! ```
 
 use superb::prelude::*;
-use superb::{mix, play, session};
+use superb::{mix, session, transport};
 
 /// Renders four blocks and returns the peak of the last one, so ramps have
 /// settled: what a meter would show.
-fn level(rig: &mut Rig) -> Result<f32> {
-    let audio = play::drive(rig, 4)?;
-    let last = audio.frames() - rig.engine.max_frames();
+fn level(session: &mut Session) -> Result<f32> {
+    let audio = session::steps::render_blocks(session, 4)?;
+    let last = audio.frames() - session.engine.max_frames();
     Ok(audio.channel(0)[last..]
         .iter()
         .fold(0.0f32, |m, s| m.max(s.abs())))
@@ -28,115 +28,115 @@ fn level(rig: &mut Rig) -> Result<f32> {
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut rig = session::create("mix", rate, 128)?;
-    let vox = session::add_track(&mut rig, "vox", TrackKind::Audio)?;
-    let gtr = session::add_track(&mut rig, "gtr", TrackKind::Audio)?;
+    let mut session = session::create("mix", rate, 128)?;
+    let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
+    let gtr = session::add_track(&mut session, "gtr", TrackKind::Audio)?;
 
     // Two steady tones so levels are easy to read: 0.25 on each track.
     let mut tone = PlanarBuffer::new(2, rate.hz() as usize * 4);
     tone.fill(0.25);
-    rig.cache.insert("tone.wav", tone);
+    session.cache.insert("tone.wav", tone);
     for t in [vox, gtr] {
         session::add_audio_clip(
-            &mut rig,
+            &mut session,
             t,
             "tone.wav",
             TimePosition::ZERO,
             TimeDuration::from_seconds(4.0, rate),
         )?;
     }
-    play::start(&mut rig)?;
+    transport::start(&mut session)?;
     // Strips default to a -3 dB centre pan law; use the plain "balance" law
     // here so the arithmetic below is exact. This is a live-strip primitive:
     // the flows do not wrap it, and you can still reach it.
-    for (_, strip) in &rig.live.strips {
+    for (_, strip) in &session.live.strips {
         strip.set_pan_law(PanLaw::Balance);
     }
     println!(
         "both tracks at 0 dB:     {:.3}  (0.25 + 0.25)",
-        level(&mut rig)?
+        level(&mut session)?
     );
 
     // A fader drag: several moves, one undo step.
     for db in [-2.0, -4.0, -6.0206] {
-        mix::set_gain_db(&mut rig, gtr, db)?;
+        mix::set_gain_db(&mut session, gtr, db)?;
     }
     // Quick successive moves merged above; sealing ends the step at once
     // (a pause of half a second would too).
-    rig.history.seal();
+    session.history.seal();
     println!(
         "gtr at -6 dB:            {:.3}  (0.25 + 0.125)",
-        level(&mut rig)?
+        level(&mut session)?
     );
-    println!("undo steps so far: {}", rig.history.undo_len());
+    println!("undo steps so far: {}", session.history.undo_len());
 
     // Pan and mute/solo are heard immediately as well.
-    mix::set_pan(&mut rig, vox, -1.0)?; // hard left
-    let audio = play::drive(&mut rig, 4)?;
+    mix::set_pan(&mut session, vox, -1.0)?; // hard left
+    let audio = session::steps::render_blocks(&mut session, 4)?;
     let n = audio.frames() - 1;
     println!(
         "vox hard left:           L {:.3}  R {:.3}",
         audio.channel(0)[n],
         audio.channel(1)[n]
     );
-    mix::set_pan(&mut rig, vox, 0.0)?;
-    mix::set_mute(&mut rig, gtr, true)?;
-    println!("gtr muted:               {:.3}", level(&mut rig)?);
-    mix::set_mute(&mut rig, gtr, false)?;
-    mix::set_solo(&mut rig, gtr, true)?;
+    mix::set_pan(&mut session, vox, 0.0)?;
+    mix::set_mute(&mut session, gtr, true)?;
+    println!("gtr muted:               {:.3}", level(&mut session)?);
+    mix::set_mute(&mut session, gtr, false)?;
+    mix::set_solo(&mut session, gtr, true)?;
     println!(
         "gtr soloed:              {:.3}  (vox silenced)",
-        level(&mut rig)?
+        level(&mut session)?
     );
-    mix::set_solo(&mut rig, gtr, false)?;
+    mix::set_solo(&mut session, gtr, false)?;
 
     // A bus fed by sends: the classic reverb return, minus the reverb.
     // Adding the bus and the sends changes the console's shape, so these
-    // mark the rig for a rebuild; `start`/`drive` rebuild for you, or call
-    // `play::rebuild` yourself to control when the swap happens.
-    let room = mix::add_bus(&mut rig, "room")?;
-    let vox_send = mix::add_send(&mut rig, vox, room, -6.0206, SendTap::PostFader)?;
-    let _gtr_send = mix::add_send(&mut rig, gtr, room, -6.0206, SendTap::PostFader)?;
-    println!("needs rebuild: {}", rig.needs_rebuild);
-    play::rebuild(&mut rig)?;
-    for (_, strip) in &rig.live.strips {
+    // mark the session for a rebuild; `start`/`drive` rebuild for you, or call
+    // `session::steps::rebuild` yourself to control when the swap happens.
+    let room = mix::add_bus(&mut session, "room")?;
+    let vox_send = mix::add_send(&mut session, vox, room, -6.0206, SendTap::PostFader)?;
+    let _gtr_send = mix::add_send(&mut session, gtr, room, -6.0206, SendTap::PostFader)?;
+    println!("needs rebuild: {}", session.needs_rebuild);
+    session::steps::rebuild(&mut session)?;
+    for (_, strip) in &session.live.strips {
         strip.set_pan_law(PanLaw::Balance);
     }
     println!(
         "plus bus with two sends: {:.3}  (tracks + half of each)",
-        level(&mut rig)?
+        level(&mut session)?
     );
-    mix::set_send_level_db(&mut rig, vox_send, -12.04)?;
-    println!("vox send at -12 dB:      {:.3}", level(&mut rig)?);
-    mix::set_send_enabled(&mut rig, vox_send, false)?;
-    println!("vox send off:            {:.3}", level(&mut rig)?);
+    mix::set_send_level_db(&mut session, vox_send, -12.04)?;
+    println!("vox send at -12 dB:      {:.3}", level(&mut session)?);
+    mix::set_send_enabled(&mut session, vox_send, false)?;
+    println!("vox send off:            {:.3}", level(&mut session)?);
 
     // Route gtr *through* the bus instead of sending a copy, and turn the
     // bus down: the bus fader now scales gtr.
-    mix::route(&mut rig, gtr, Some(room))?;
-    play::rebuild(&mut rig)?;
-    for (_, strip) in &rig.live.strips {
+    mix::route(&mut session, gtr, Some(room))?;
+    session::steps::rebuild(&mut session)?;
+    for (_, strip) in &session.live.strips {
         strip.set_pan_law(PanLaw::Balance);
     }
-    mix::set_gain_db(&mut rig, room, -6.0206)?;
-    println!("gtr via bus at -6 dB:    {:.3}", level(&mut rig)?);
+    mix::set_gain_db(&mut session, room, -6.0206)?;
+    println!("gtr via bus at -6 dB:    {:.3}", level(&mut session)?);
 
     // Meters: loudest sample per channel since the last read.
-    if let Some([l, r]) = mix::peak(&rig, room) {
+    if let Some([l, r]) = mix::peak(&session, room) {
         println!("room bus meter:          L {l:.3}  R {r:.3}");
     }
 
     // Everything above is in the document. Undo it all and the document is back
     // to two tracks at 0 dB; the console follows on the next rebuild.
-    while rig.history.undo_len() > 4 {
+    while session.history.undo_len() > 4 {
         // 4 = the two tracks and two clips we started with
-        session::undo(&mut rig)?;
+        session::undo(&mut session)?;
     }
     println!(
         "after undo: gtr {} dB, {} tracks, gtr sends {}",
-        rig.document.track(gtr)?.gain_db,
-        rig.document.track_count(),
-        rig.document.track(gtr)?.sends().len()
+        session.document.track(gtr)?.gain_db,
+        session.document.track_count(),
+        session.document.track(gtr)?.sends().len()
     );
     Ok(())
 }

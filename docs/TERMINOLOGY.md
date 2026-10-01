@@ -33,7 +33,7 @@ a musician would use.
 | Effects and instruments | `plugins` | Insert a plugin, turn its knobs, bypass it |
 | Bounce, export, mixdown | `export` | Rendering the session to a file |
 | Hardware, audio interface | `devices` | Which speakers, mics and MIDI ports exist |
-| The rig | `Rig` | Everything a session in progress consists of: document, history, audio, engine |
+| The session | `Session` | Everything a session in progress consists of: document, history, audio, engine |
 
 ## One word per thing
 

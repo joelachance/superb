@@ -18,8 +18,8 @@ One per flow module, in the order you would use them to make a session.
 | `record_take` | `record` | arm, punch in, a take from a synthetic microphone, clips, undo; a real input with `devices` | `cargo run --example record_take` |
 | `insert_plugin` | `plugins` | scan, insert the first effect, read parameters, turn a knob, bypass; the missing-plugin path when none is installed | `cargo run --example insert_plugin` |
 | `export_session` | `export` | bounce the session, a range, render to memory; resample with `files` | `cargo run --example export_session` |
-| `console_steps` | `play::steps` | build the console from a session by hand (`Wiring`, bus, send) and render it through an offline engine | `cargo run --example console_steps` |
-| `list_devices` | `devices` | audio devices and rig-matched configurations; MIDI ports with `midi-io` | `cargo run --example list_devices --features devices` |
+| `session_steps` | `play::steps` | build the console from a session by hand (`Wiring`, bus, send) and render it through an offline engine | `cargo run --example session_steps` |
+| `list_devices` | `devices` | audio devices and session-matched configurations; MIDI ports with `midi-io` | `cargo run --example list_devices --features devices` |
 
 ## Primitives
 

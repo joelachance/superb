@@ -1,12 +1,12 @@
 //! `document`: start a document, put things in it, save it, open it again.
 //!
 //! What you'll learn:
-//! - A `Rig` is the state every flow works on; `session::create` makes one
+//! - A `Session` is the state every flow works on; `session::create` makes one
 //! - Tracks come in three kinds: Audio, Midi, Bus
 //! - Clips point at audio in the `AudioCache` (a real file or, as here, a
 //!   buffer you made) or hold MIDI notes inline
 //! - Every edit is undoable: `session::undo` / `session::redo`
-//! - Save is JSON; open gives you a fresh Rig with the same document
+//! - Save is JSON; open gives you a fresh Session with the same document
 //!
 //! ```text
 //! cargo run --example new_session
@@ -19,17 +19,17 @@ use superb::session;
 fn main() -> Result<()> {
     // 48 kHz, 256-frame blocks. Nothing is playing yet; this is just the
     // document plus an idle engine.
-    let mut rig = session::create("My first document", SampleRate::HZ_48K, 256)?;
+    let mut session = session::create("My first document", SampleRate::HZ_48K, 256)?;
 
     // Tracks. `add_track` returns an ID you keep; names are for people.
-    let vox = session::add_track(&mut rig, "vox", TrackKind::Audio)?;
-    let keys = session::add_track(&mut rig, "keys", TrackKind::Midi)?;
+    let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
+    let keys = session::add_track(&mut session, "keys", TrackKind::Midi)?;
 
     // Audio for the vox clip. A real program calls `session::import_audio`
     // (feature `files`); here we synthesise one second of a soft sine so the
     // example needs no file on disk. The cache key is the "path" the clip
     // refers to.
-    let rate = rig.document.sample_rate();
+    let rate = session.document.sample_rate();
     let mut take = PlanarBuffer::new(2, rate.hz() as usize);
     for ch in 0..2 {
         for (i, s) in take.channel_mut(ch).iter_mut().enumerate() {
@@ -37,10 +37,10 @@ fn main() -> Result<()> {
             *s = 0.3 * (t * 220.0 * core::f32::consts::TAU).sin();
         }
     }
-    rig.cache.insert("vox-take-1.wav", take);
+    session.cache.insert("vox-take-1.wav", take);
     // Put the take on the timeline, starting half a second in.
     let clip = session::add_audio_clip(
-        &mut rig,
+        &mut session,
         vox,
         "vox-take-1.wav",
         TimePosition::from_seconds(0.5, rate),
@@ -61,7 +61,7 @@ fn main() -> Result<()> {
         })
         .collect();
     session::add_midi_clip(
-        &mut rig,
+        &mut session,
         keys,
         "arpeggio",
         TimePosition::ZERO,
@@ -70,48 +70,52 @@ fn main() -> Result<()> {
     )?;
 
     // Document-level settings.
-    session::set_tempo(&mut rig, 100.0)?;
-    session::add_marker(&mut rig, "verse", TimePosition::from_seconds(0.5, rate))?;
+    session::set_tempo(&mut session, 100.0)?;
+    session::add_marker(&mut session, "verse", TimePosition::from_seconds(0.5, rate))?;
     println!(
         "{}: {} tracks, {} clips, {} bpm",
-        rig.document.name(),
-        rig.document.track_count(),
-        rig.document.clip_count(),
-        rig.document.tempo_map().tempo_at(BeatPosition::ZERO)
+        session.document.name(),
+        session.document.track_count(),
+        session.document.clip_count(),
+        session.document.tempo_map().tempo_at(BeatPosition::ZERO)
     );
 
     // Undo works on everything above. Move the clip, change your mind.
-    session::move_clip(&mut rig, clip, TimePosition::from_seconds(2.0, rate))?;
+    session::move_clip(&mut session, clip, TimePosition::from_seconds(2.0, rate))?;
     // Moves of one clip within half a second merge into one undo step, so a
     // drag undoes in one go. Sealing on "mouse up" ends the step at once.
-    rig.history.seal();
+    session.history.seal();
     println!(
         "clip now starts at {:.2} s",
-        rig.document.clip(clip)?.start().to_seconds(rate)
+        session.document.clip(clip)?.start().to_seconds(rate)
     );
-    session::undo(&mut rig)?;
+    session::undo(&mut session)?;
     println!(
         "after undo:      {:.2} s",
-        rig.document.clip(clip)?.start().to_seconds(rate)
+        session.document.clip(clip)?.start().to_seconds(rate)
     );
-    session::redo(&mut rig)?;
+    session::redo(&mut session)?;
     println!(
         "after redo:      {:.2} s",
-        rig.document.clip(clip)?.start().to_seconds(rate)
+        session.document.clip(clip)?.start().to_seconds(rate)
     );
 
-    // Save, then open into a second rig. Audio is not embedded: the clip
+    // Save, then open into a second session. Audio is not embedded: the clip
     // still refers to "vox-take-1.wav", which you re-cache on open (a real
     // program decodes the file; we reuse the buffer).
     let path = std::env::temp_dir().join("new_session.superb.json");
-    println!("saved? {}", session::is_saved(&rig));
-    session::save(&mut rig, &path)?;
-    println!("saved? {} -> {}", session::is_saved(&rig), path.display());
+    println!("saved? {}", session::is_saved(&session));
+    session::save(&mut session, &path)?;
+    println!(
+        "saved? {} -> {}",
+        session::is_saved(&session),
+        path.display()
+    );
 
     let mut again = session::open(&path, 256)?;
     again.cache.insert(
         "vox-take-1.wav",
-        (*rig.cache.get("vox-take-1.wav".as_ref()).unwrap()).clone(),
+        (*session.cache.get("vox-take-1.wav".as_ref()).unwrap()).clone(),
     );
     println!(
         "reopened {:?}: {} tracks, {} clips, marker {:?} at {:.2} s",

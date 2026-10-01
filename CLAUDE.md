@@ -9,10 +9,10 @@ for the engine, `docs/flows.md` for the flow tier, and
 
 ## Layout
 
-- `src/primitives/` is the engine; modules never import a flow or the `Rig`.
+- `src/primitives/` is the engine; modules never import a flow or the `Session`.
 - `src/<flow>.rs` (`session`, `play`, `mix`, `midi`, `record`, `plugins`,
-  `export`, `devices`) are free functions over `src/rig.rs`. Verbs take
-  `&mut Rig`; steps take primitives; every verb doc ends with "Made of:".
+  `export`, `devices`) are free functions over `src/session.rs`. Verbs take
+  `&mut Session`; steps take primitives; every verb doc ends with "Made of:".
 - `examples/flows/`, `examples/primitives/`, registered in `Cargo.toml`.
 - `docs/primitives/<module>.md`, `docs/flows/<flow>.md`.
 
@@ -36,7 +36,7 @@ cargo doc --no-deps
   no-alloc test under `tests/`.
 - No unsafe outside `primitives::realtime::{alloc, spsc}` and
   `primitives::plugins::clap`.
-- Structural edits set `rig.needs_rebuild`; switches (mute, solo, arm,
+- Structural edits set `session.needs_rebuild`; switches (mute, solo, arm,
   bypass) go through `session::switch` and never enter the undo history;
   level edits reach the document and the live handle.
 - Names follow the rules in CONTRIBUTING.md "Naming" and the one-word
