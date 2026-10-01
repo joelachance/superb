@@ -76,9 +76,11 @@ stale; do not keep them across a sync.
 Every *edit* to the session is a command on `rig.history`, so it can be
 undone. Structural edits (add, remove, move) are one step each; a
 continuous edit (fader, pan, send level, plugin parameter, clip drag)
-coalesces, so a drag is one step and not a hundred (see "Coalescing"
-below). `record::stop` groups the clips it places into one step called
-"Record take".
+coalesces: moves of the same control within half a second
+(`Rig::COALESCE_WINDOW`) merge into one step, so a drag is one step and
+not a hundred, and a pause starts the next. A UI that wants mouse-up
+precision calls the primitive `rig.history.seal()`. `record::stop` groups
+the clips it places into one step called "Record take".
 
 *Switches* (mute, solo, arm, monitoring, bypass, send on/off) are not
 edits. They are saved with the session, and they are heard at the next

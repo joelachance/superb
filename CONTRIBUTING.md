@@ -61,7 +61,8 @@ before draining a take). Rules:
   inserts, monitoring) set `rig.needs_sync`. Edits to a level go to the
   document *and* the live handle at once and do not need a sync.
 * A continuous edit (fader, knob, clip drag) pushes through the undo stack
-  and coalesces, so a drag is one step. A switch (mute, solo, arm,
+  and coalesces by time (`Rig::COALESCE_WINDOW`), so a drag is one step
+  without the UI having to say when it ended. A switch (mute, solo, arm,
   monitoring, bypass, send on/off) is not an edit: it goes through
   `project::switch`, which changes the document directly and marks the
   history dirty, and never enters the undo history.

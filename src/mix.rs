@@ -16,10 +16,9 @@ use crate::primitives::session::{TrackKind, TrackSend};
 use crate::primitives::{Result, SendId, TrackId};
 use crate::rig::Rig;
 
-pub use crate::project::finish_gesture;
-
-/// Sets a track's or bus's fader in dB. Consecutive moves are one undo
-/// step; call [`finish_gesture`] when the fader is released.
+/// Sets a track's or bus's fader in dB. Moves within
+/// [`Rig::COALESCE_WINDOW`] of each other are one undo step, so a fader
+/// ride undoes in one go.
 ///
 /// Made of: push `set_track_gain_db` → `StripParams::set_gain_db` on the live strip.
 pub fn set_gain_db(rig: &mut Rig, track: TrackId, db: f32) -> Result<()> {
@@ -214,7 +213,7 @@ mod tests {
 
         set_gain_db(&mut rig, vox, -6.0206).unwrap();
         set_gain_db(&mut rig, vox, -6.0206).unwrap(); // a drag: one step
-        finish_gesture(&mut rig);
+        rig.history.seal();
         assert!((rig.session.track(vox).unwrap().gain_db + 6.0206).abs() < 1e-6);
         assert!(
             (settled(&mut rig) - 0.25).abs() < 1e-3,

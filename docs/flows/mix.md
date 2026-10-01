@@ -22,7 +22,6 @@ structural edit and marks the rig for a sync.
 | `set_send_level_db(rig, send, db)` | document + live send | drag |
 | `set_send_enabled(rig, send, on)` | document + live send | switch (not undoable) |
 | `peak(rig, track) -> Option<[f32; 2]>` | live strip meter, read and reset | — |
-| `finish_gesture(rig)` | re-export of `project::finish_gesture` | |
 
 Buses are tracks of kind `Bus`; `add_bus` is `project::add_track` with that
 kind. `track` arguments accept a bus's ID wherever a strip makes sense.
@@ -39,7 +38,8 @@ play::sync(&mut rig)?;                                          // the console h
 for db in [-1.0, -2.0, -3.0] {
     mix::set_gain_db(&mut rig, vox, db)?;                       // heard immediately
 }
-mix::finish_gesture(&mut rig);                                  // one undo step
+// Moves within half a second merged into one undo step; a UI may also
+// call `rig.history.seal()` on mouse up.
 mix::set_mute(&mut rig, vox, true)?;                            // a switch: saved, not undoable
 if let Some([l, r]) = mix::peak(&rig, room) {
     println!("room {l:.2} {r:.2}");

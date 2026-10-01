@@ -82,7 +82,9 @@ fn main() -> Result<()> {
 
     // Undo works on everything above. Move the clip, change your mind.
     project::move_clip(&mut rig, clip, TimePosition::from_seconds(2.0, rate))?;
-    project::finish_gesture(&mut rig); // "mouse up": the drag is one step
+    // Moves of one clip within half a second merge into one undo step, so a
+    // drag undoes in one go. Sealing on "mouse up" ends the step at once.
+    rig.history.seal();
     println!(
         "clip now starts at {:.2} s",
         rig.session.clip(clip)?.start().to_seconds(rate)

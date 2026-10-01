@@ -6,8 +6,8 @@
 //! - Buses collect tracks; `route` sends a track's output into one
 //! - Sends tap a copy of a track into a bus, pre- or post-fader
 //! - Peak meters are read (and reset) per strip
-//! - A fader drag is one undo step: many `set_gain_db` calls, then
-//!   `finish_gesture`. Switches (mute, solo) are one step each.
+//! - A fader drag is one undo step: moves within half a second merge.
+//!   Switches (mute, solo) are saved but never undo steps.
 //!
 //! ```text
 //! cargo run --example mix_session
@@ -61,7 +61,9 @@ fn main() -> Result<()> {
     for db in [-2.0, -4.0, -6.0206] {
         mix::set_gain_db(&mut rig, gtr, db)?;
     }
-    mix::finish_gesture(&mut rig);
+    // Quick successive moves merged above; sealing ends the step at once
+    // (a pause of half a second would too).
+    rig.history.seal();
     println!(
         "gtr at -6 dB:            {:.3}  (0.25 + 0.125)",
         level(&mut rig)?

@@ -30,8 +30,12 @@ use crate::primitives::{InsertId, Result, SendId, TrackId};
 pub struct Rig {
     /// The song: tracks, clips, markers, routing, inserts, tempo.
     pub session: Session,
-    /// Undo history for `session`. Every flow that changes the song pushes
-    /// through this stack, so every change is reversible.
+    /// Undo history for `session`. Every flow edit pushes through this
+    /// stack, so every edit is reversible. Consecutive edits of the same
+    /// control (a fader, a knob, a clip being dragged) merge into one step
+    /// while they arrive within [`Rig::COALESCE_WINDOW`] of each other; a
+    /// pause starts a new step. Call `history.seal()` to end a step sooner
+    /// (on mouse up, say).
     pub history: UndoStack<Session>,
     /// Audio held in memory, keyed by the path clips refer to.
     pub cache: AudioCache,
@@ -63,6 +67,10 @@ pub struct Rig {
 }
 
 impl Rig {
+    /// How long a pause between two edits of the same control turns them
+    /// into separate undo steps.
+    pub const COALESCE_WINDOW: core::time::Duration = core::time::Duration::from_millis(500);
+
     /// A stereo rig around `session`, with an engine that renders blocks of
     /// at most `block_size` frames at the session's sample rate.
     pub fn new(session: Session, block_size: usize) -> Result<Rig> {
@@ -75,9 +83,11 @@ impl Rig {
             .tempo_map()
             .tempo_at(crate::primitives::BeatPosition::ZERO);
         let (engine, engine_loop) = live_engine(session.sample_rate(), block_size, bpm)?;
+        let mut history = UndoStack::new();
+        history.set_coalesce_window(Some(Self::COALESCE_WINDOW));
         Ok(Rig {
             session,
-            history: UndoStack::new(),
+            history,
             cache: AudioCache::new(),
             engine,
             engine_loop: Some(engine_loop),

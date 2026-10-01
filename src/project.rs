@@ -127,8 +127,9 @@ pub fn add_midi_clip(
     Ok(id)
 }
 
-/// Moves a clip to start at `start`. A drag (many moves) is one undo step;
-/// call [`finish_gesture`] when the mouse goes up.
+/// Moves a clip to start at `start`. Moves of the same clip within
+/// [`Rig::COALESCE_WINDOW`] of each other are one undo step, so a drag
+/// undoes in one go.
 ///
 /// Made of: push `MoveClip`.
 pub fn move_clip(rig: &mut Rig, clip: ClipId, start: TimePosition) -> Result<()> {
@@ -190,14 +191,6 @@ pub fn redo(rig: &mut Rig) -> Result<bool> {
     Ok(done)
 }
 
-/// Ends the current run of coalescing edits (a fader drag, a clip drag), so
-/// the next edit starts a new undo step. Call it on "mouse up".
-///
-/// Made of: `UndoStack::seal`.
-pub fn finish_gesture(rig: &mut Rig) {
-    rig.history.seal();
-}
-
 /// Decodes an audio file, converts it to the song's sample rate, caches it
 /// and places a clip of its full length at `at`.
 ///
@@ -240,6 +233,7 @@ pub(crate) fn switch(rig: &mut Rig, flip: impl FnOnce(&mut Session) -> Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::time::Duration;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
@@ -265,7 +259,7 @@ mod tests {
         assert_eq!(rig.session.clip(clip).unwrap().name, "take 1");
         move_clip(&mut rig, clip, TimePosition::from_samples(200)).unwrap();
         move_clip(&mut rig, clip, TimePosition::from_samples(300)).unwrap();
-        finish_gesture(&mut rig);
+        rig.history.seal(); // "mouse up"; a pause would do the same
         let marker = add_marker(&mut rig, "verse", TimePosition::ZERO).unwrap();
         set_tempo(&mut rig, 90.0).unwrap();
         assert_eq!(
@@ -290,6 +284,37 @@ mod tests {
         assert!(rig.session.track(vox).is_err(), "back to the empty song");
         assert!(!undo(&mut rig).unwrap());
         assert!(is_saved(&rig));
+    }
+
+    #[test]
+    fn a_pause_between_edits_starts_a_new_undo_step() {
+        use std::time::Instant;
+        let mut rig = create("demo", R, 64).unwrap();
+        let vox = add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let steps = rig.history.undo_len();
+        let t0 = Instant::now();
+        // Three moves in quick succession: one step.
+        for (i, db) in [-1.0, -2.0, -3.0].iter().enumerate() {
+            rig.history
+                .push_at(
+                    &mut rig.session,
+                    Box::new(commands::set_track_gain_db(vox, *db)),
+                    t0 + Duration::from_millis(50 * i as u64),
+                )
+                .unwrap();
+        }
+        assert_eq!(rig.history.undo_len(), steps + 1);
+        // A move after a pause longer than the window: a new step.
+        rig.history
+            .push_at(
+                &mut rig.session,
+                Box::new(commands::set_track_gain_db(vox, -4.0)),
+                t0 + Rig::COALESCE_WINDOW + Duration::from_secs(1),
+            )
+            .unwrap();
+        assert_eq!(rig.history.undo_len(), steps + 2);
+        assert!(undo(&mut rig).unwrap());
+        assert_eq!(rig.session.track(vox).unwrap().gain_db, -3.0);
     }
 
     #[test]
