@@ -82,7 +82,7 @@ pub use rig::Rig;
 
 /// The most commonly used types and functions, for `use superb::prelude::*`.
 pub mod prelude {
-    pub use crate::play::{AudioCache, RenderOptions, SessionPlayer};
+    pub use crate::play::Wiring;
     pub use crate::primitives::automation::{
         AutomationLane, AutomationMode, Envelope, EnvelopePoint,
     };
@@ -95,6 +95,7 @@ pub mod prelude {
         live_pair, AudioGraph, BlockProcessor, BlockTime, GraphCommand, GraphEditor, LiveGraph,
         MidiEdge, MidiPort, Node, NodeChannels, ProcessContext, ProcessStatus,
     };
+    pub use crate::primitives::io::cache::AudioCache;
     #[cfg(feature = "files")]
     pub use crate::primitives::io::files::AudioFile;
     pub use crate::primitives::io::{Engine, EngineStats, MidiTiming};

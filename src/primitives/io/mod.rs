@@ -9,6 +9,7 @@
 //!   sample-accurately via `superb::primitives::midi::timing::FrameMapper` against the
 //!   engine's stream clock ([`MidiTiming::Stream`], the default) or forced
 //!   to frame 0 ([`MidiTiming::BlockStart`]).
+//! * [`cache`] — audio held in memory, keyed by the path clips refer to.
 //! * [`capture`] — a pre-allocated queue of planar blocks for handing
 //!   captured audio from a callback to another thread. Pure Rust; the
 //!   device layer fills it, tests and offline code can too.
@@ -48,6 +49,7 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod cache;
 pub mod capture;
 #[cfg(feature = "devices")]
 pub mod device;

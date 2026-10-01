@@ -18,6 +18,7 @@ One per flow module, in the order you would use them to make a session.
 | `record_take` | `record` | arm, punch in, a take from a synthetic microphone, clips, undo; a real input with `devices` | `cargo run --example record_take` |
 | `insert_plugin` | `plugins` | scan, insert the first effect, read parameters, turn a knob, bypass; the missing-plugin path when none is installed | `cargo run --example insert_plugin` |
 | `export_session` | `export` | bounce the session, a range, render to memory; resample with `files` | `cargo run --example export_session` |
+| `console_steps` | `play::steps` | build the console from a session by hand (`Wiring`, bus, send) and render it through an offline engine | `cargo run --example console_steps` |
 | `list_devices` | `devices` | audio devices and rig-matched configurations; MIDI ports with `midi-io` | `cargo run --example list_devices --features devices` |
 
 ## Primitives
@@ -34,7 +35,6 @@ One per flow module, in the order you would use them to make a session.
 | `play_sine_device` | `io::device` | a sine on the default output device, with load stats | `cargo run --example play_sine_device --features devices` |
 | `decode_bounce` | `io::files` | bounce → decode → resample → export | `cargo run --example decode_bounce --features files` |
 | `session_undo` | `session`, `undo` | undoable document edits, JSON save and load | `cargo run --example session_undo` |
-| `session_playback` | `play::playback` | session clips, a bus and a send rendered to WAV | `cargo run --example session_playback` |
 | `clap_host_scan` | `plugins::clap` | scan and instantiate a CLAP plugin, render offline | `cargo run --example clap_host_scan -- [dir ...] [--id …]` |
 
 The `buffers` and `undo` modules have no example of their own: every

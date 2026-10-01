@@ -168,6 +168,7 @@ saving it as JSON and reloading it.
 Mirroring a session into a live [`Mixer`](mixer.md) is handled by
 `superb::play::bridge::SessionMixerBridge` (separate `TrackId` namespaces,
 `rebuild` + `apply_routing` + `apply_strip_params`). Playing clips onto those strips is
-`superb::play::{SessionPlayer, render_region, AudioCache}` — offline
-region render first; see `docs/flows/play.md` and the `session_playback` example.
+`superb::play::Wiring` attaches a node per clip onto those strips, and
+`superb::export::render` runs the result offline; see `docs/flows/play.md`
+and the `console_steps` example.
 

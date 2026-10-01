@@ -15,7 +15,8 @@
 use core::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use crate::play::{AudioCache, SessionPlayer};
+use crate::play::Wiring;
+use crate::primitives::io::cache::AudioCache;
 use crate::primitives::io::live::{engine_pair, EngineHandle, EngineLoop};
 use crate::primitives::mixer::{SendParams, StripParams};
 #[cfg(feature = "clap")]
@@ -138,8 +139,9 @@ pub struct LiveHandles {
     pub sends: SendHandles,
     /// Session insert → the loaded plugin's parameter queue and info.
     pub inserts: Vec<LiveInsert>,
-    /// Which session objects map to which console objects.
-    pub player: Option<SessionPlayer>,
+    /// How the session was wired into that console: which strip each
+    /// track got, which node plays each clip.
+    pub wiring: Option<Wiring>,
     /// Inserts that could not be loaded, with the reason. The rest of the
     /// console still runs.
     pub failed_inserts: Vec<(InsertId, String)>,

@@ -59,10 +59,6 @@ name = "session_undo"
 path = "examples/primitives/session_undo.rs"
 
 [[example]]
-name = "session_playback"
-path = "examples/primitives/session_playback.rs"
-
-[[example]]
 name = "clap_host_scan"
 path = "examples/primitives/clap_host_scan.rs"
 required-features = ["clap"]
@@ -118,6 +114,10 @@ required-features = ["clap"]
 [[example]]
 name = "export_session"
 path = "examples/flows/export_session.rs"
+
+[[example]]
+name = "console_steps"
+path = "examples/flows/console_steps.rs"
 
 [[example]]
 name = "list_devices"

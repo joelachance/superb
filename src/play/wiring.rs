@@ -1,113 +1,54 @@
-//! Offline playback of session clips onto mixer strips.
+//! How a session is wired into a console: which strip each track got, and
+//! a source node for every clip.
 //!
-//! Builds on [`crate::play::bridge::SessionMixerBridge`]: after strips exist,
-//! [`SessionPlayer::wire`] attaches a source node per audible clip —
-//! [`BufferPlayerNode`] for cached
-//! audio (and empty clips stay silent), [`ScheduledSynthNode`] for MIDI —
-//! then [`render_region`] seeks the transport and runs the offline engine.
-//!
-//! Audio files are **not** decoded here by default. Populate an
-//! [`AudioCache`] with planar buffers (tests use synthetic data; apps can
-//! fill via `superb::primitives::io::files::decode` behind the `files` feature). Missing
-//! cache entries for `ClipSource::Audio` are skipped (treated as silence)
-//! so a partial cache still renders.
+//! [`Wiring::wire`] binds strips and buses through the
+//! [`SessionMixerBridge`], mirrors routing and strip settings, then attaches
+//! one node per audible clip: [`BufferPlayerNode`] for audio the
+//! [`AudioCache`] holds (a missing entry plays as silence), and
+//! [`ScheduledSynthNode`] for MIDI notes converted through the tempo map.
+//! The mixer is then ready to be prepared and run; `play::steps` does that
+//! for the live engine and `export` for an offline one.
 
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::nodes::{BufferPlayerNode, ScheduledNoteEvent, ScheduledSynthNode};
-use crate::primitives::io::{offline, Engine};
+use crate::primitives::io::cache::AudioCache;
 use crate::primitives::mixer::Mixer;
 use crate::primitives::session::{Clip, ClipSource, MidiNote, Session, TrackKind};
-use crate::primitives::transport::{TempoMap, Transport};
-#[cfg(feature = "files")]
-use crate::primitives::SampleRate;
-use crate::primitives::{BeatPosition, ClipId, NodeId, Result, SuperbError, TimePosition, TrackId};
+use crate::primitives::transport::TempoMap;
+use crate::primitives::{BeatPosition, ClipId, NodeId, Result, TrackId};
 
 use crate::play::bridge::{MixerBinding, SessionMixerBridge};
 
-/// In-memory path → planar buffer map used by audio clip players.
-#[derive(Clone, Debug, Default)]
-pub struct AudioCache {
-    entries: HashMap<PathBuf, Arc<PlanarBuffer>>,
-}
-
-impl AudioCache {
-    /// Empty cache.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Inserts (or replaces) a buffer for `path`, returning the shared handle.
-    pub fn insert(&mut self, path: impl Into<PathBuf>, buffer: PlanarBuffer) -> Arc<PlanarBuffer> {
-        let arc = Arc::new(buffer);
-        self.entries.insert(path.into(), Arc::clone(&arc));
-        arc
-    }
-
-    /// Shared buffer for `path`, if present.
-    pub fn get(&self, path: &Path) -> Option<Arc<PlanarBuffer>> {
-        self.entries.get(path).map(Arc::clone)
-    }
-
-    /// Number of cached files.
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    /// `true` when empty.
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
-    /// Decodes `path` at `target_rate` (resampled when needed) and caches it.
-    ///
-    /// Requires the facade `files` feature (symphonia + rubato).
-    #[cfg(feature = "files")]
-    pub fn load(
-        &mut self,
-        path: impl AsRef<Path>,
-        target_rate: SampleRate,
-    ) -> Result<Arc<PlanarBuffer>> {
-        let path = path.as_ref();
-        if let Some(existing) = self.get(path) {
-            return Ok(existing);
-        }
-        let file = crate::primitives::io::files::decode_at_rate(path, target_rate)?;
-        Ok(self.insert(path.to_path_buf(), file.buffer))
-    }
-}
-
-/// One wired source: session clip → graph node on a mixer track.
+/// One clip wired into the console: the node that plays it and the strip
+/// it feeds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PlaybackSource {
+pub struct WiredClip {
     /// Session clip.
     pub clip: ClipId,
     /// Session track that owns the clip.
     pub session_track: TrackId,
     /// Mixer track the source feeds.
     pub mixer_track: TrackId,
-    /// Graph node id of the player / synth.
+    /// The node playing the clip (a buffer player or a scheduled synth).
     pub node: NodeId,
 }
 
-/// Wired session → mixer playback graph.
+/// The map from a session onto the console built for it.
 ///
-/// Owns the [`SessionMixerBridge`] side table plus the list of source nodes
-/// created for clips. Structural edits on the session require a fresh
-/// [`wire`](SessionPlayer::wire) (or a later incremental update).
+/// Owns the [`SessionMixerBridge`] side table (track → strip, send → send)
+/// plus the clip nodes created. A structural edit to the session means a
+/// fresh [`wire`](Wiring::wire) of a fresh mixer.
 #[derive(Clone, Debug)]
-pub struct SessionPlayer {
+pub struct Wiring {
     bridge: SessionMixerBridge,
-    sources: Vec<PlaybackSource>,
+    clips: Vec<WiredClip>,
 }
 
-impl SessionPlayer {
-    /// Syncs the mixer to the session, mirrors strip params and routing
-    /// (track → bus outputs, sends), and attaches one source node per
-    /// non-muted, non-empty clip that can be rendered.
+impl Wiring {
+    /// Binds strips and buses, mirrors strip settings and routing (track →
+    /// bus outputs, sends), and attaches one source node per non-muted,
+    /// non-empty clip that can be rendered.
     ///
     /// * [`ClipSource::Empty`] — no node (silence).
     /// * [`ClipSource::Audio`] — [`BufferPlayerNode`] when `cache` has the
@@ -115,8 +56,8 @@ impl SessionPlayer {
     /// * [`ClipSource::Midi`] — [`ScheduledSynthNode`] with notes converted
     ///   through the session tempo map.
     ///
-    /// Bus tracks never receive clip sources. Returns the player; the mixer
-    /// must be `prepare`d (via the engine) before rendering.
+    /// Bus tracks never receive clip sources. The mixer must be prepared
+    /// (by the engine) before it renders.
     pub fn wire(session: &Session, mixer: &mut Mixer, cache: &AudioCache) -> Result<Self> {
         let mut bridge = SessionMixerBridge::new();
         bridge.bind(session, mixer);
@@ -125,7 +66,7 @@ impl SessionPlayer {
 
         let channels = mixer.channels();
         let tempo = session.tempo_map();
-        let mut sources = Vec::new();
+        let mut clips = Vec::new();
 
         for track in session.tracks() {
             if track.kind == TrackKind::Bus {
@@ -162,7 +103,7 @@ impl SessionPlayer {
                         id
                     }
                 };
-                sources.push(PlaybackSource {
+                clips.push(WiredClip {
                     clip: clip.id(),
                     session_track: track.id(),
                     mixer_track,
@@ -171,7 +112,7 @@ impl SessionPlayer {
             }
         }
 
-        Ok(Self { bridge, sources })
+        Ok(Self { bridge, clips })
     }
 
     /// Side table from the last [`wire`](Self::wire).
@@ -179,9 +120,9 @@ impl SessionPlayer {
         &self.bridge
     }
 
-    /// Wired clip sources.
-    pub fn sources(&self) -> &[PlaybackSource] {
-        &self.sources
+    /// The clips that got a node.
+    pub fn clips(&self) -> &[WiredClip] {
+        &self.clips
     }
 }
 
@@ -244,92 +185,33 @@ pub fn schedule_midi_notes(
     Arc::from(events)
 }
 
-/// Options for [`render_region`].
-#[derive(Clone, Debug)]
-pub struct RenderOptions {
-    /// Block size for the offline engine (must be `> 0`).
-    pub block_size: usize,
-    /// Mixer channel count (2 = stereo).
-    pub channels: usize,
-}
-
-impl Default for RenderOptions {
-    fn default() -> Self {
-        Self {
-            block_size: 256,
-            channels: 2,
-        }
-    }
-}
-
-/// Builds a mixer, wires session playback, seeks to `start`, and renders
-/// `frames` of audio offline.
-///
-/// Clear API for “play this session region”:
-///
-/// ```
-/// use superb::play::{render_region, AudioCache, RenderOptions};
-/// use superb::prelude::*;
-///
-/// let mut session = Session::new("demo", SampleRate::HZ_48K);
-/// let track = session.add_track("keys", TrackKind::Midi);
-/// let notes = vec![superb::primitives::session::MidiNote {
-///     beat: 0.0, length: 0.5, note: 69, velocity: 100, channel: 0,
-/// }];
-/// let clip = Clip::new(
-///     "n",
-///     TimePosition::ZERO,
-///     TimeDuration::from_samples(24_000),
-///     ClipSource::Midi { notes },
-/// ).unwrap();
-/// session.add_clip(track, clip).unwrap();
-///
-/// let audio = render_region(
-///     &session,
-///     &AudioCache::new(),
-///     TimePosition::ZERO,
-///     24_000,
-///     &RenderOptions::default(),
-/// ).unwrap();
-/// assert_eq!(audio.frames(), 24_000);
-/// assert!(audio.peak() > 0.1);
-/// ```
-pub fn render_region(
-    session: &Session,
-    cache: &AudioCache,
-    start: TimePosition,
-    frames: usize,
-    options: &RenderOptions,
-) -> Result<PlanarBuffer> {
-    if options.block_size == 0 {
-        return Err(SuperbError::InvalidArgument { what: "block_size" });
-    }
-    if options.channels == 0 {
-        return Err(SuperbError::InvalidArgument { what: "channels" });
-    }
-
-    let rate = session.sample_rate();
-    let mut mixer = Mixer::new(options.channels);
-    let _player = SessionPlayer::wire(session, &mut mixer, cache)?;
-
-    let mut transport = Transport::with_tempo_map(session.tempo_map().clone());
-    // Offline region render does not auto-enable the session loop;
-    // callers that want looping can `set_loop` on a custom engine path.
-    if let Some(loop_range) = session.loop_range() {
-        transport.set_loop(Some(loop_range));
-    }
-    transport.seek(start);
-    transport.play();
-
-    let mut engine = Engine::new(mixer, transport);
-    offline::render(&mut engine, rate, options.block_size, frames)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::primitives::buffers::PlanarBuffer;
+    use crate::primitives::io::{offline, Engine};
     use crate::primitives::session::TrackKind;
-    use crate::primitives::{SampleRate, TimeDuration};
+    use crate::primitives::transport::Transport;
+    use crate::primitives::{SampleRate, TimeDuration, TimePosition};
+    use std::path::PathBuf;
+
+    /// Wires a fresh mixer and renders `frames` from `start` offline, the
+    /// way `export::render` does.
+    fn render(
+        session: &Session,
+        cache: &AudioCache,
+        start: TimePosition,
+        frames: usize,
+        block: usize,
+    ) -> PlanarBuffer {
+        let mut mixer = Mixer::new(2);
+        Wiring::wire(session, &mut mixer, cache).unwrap();
+        let mut transport = Transport::with_tempo_map(session.tempo_map().clone());
+        transport.seek(start);
+        transport.play();
+        let mut engine = Engine::new(mixer, transport);
+        offline::render(&mut engine, session.sample_rate(), block, frames).unwrap()
+    }
 
     fn tone_buffer(frames: usize, value: f32) -> PlanarBuffer {
         let mut b = PlanarBuffer::new(2, frames);
@@ -376,13 +258,13 @@ mod tests {
         cache.insert("tone.wav", tone_buffer(100, 0.5));
 
         let mut mixer = Mixer::new(2);
-        let player = SessionPlayer::wire(&session, &mut mixer, &cache).unwrap();
-        assert_eq!(player.sources().len(), 1);
-        assert!(player.bridge().mixer_track(audio).is_some());
+        let wiring = Wiring::wire(&session, &mut mixer, &cache).unwrap();
+        assert_eq!(wiring.clips().len(), 1);
+        assert!(wiring.bridge().mixer_track(audio).is_some());
     }
 
     #[test]
-    fn render_region_plays_cached_audio_clip() {
+    fn wired_audio_clip_plays_in_its_place() {
         let mut session = Session::new("demo", SampleRate::HZ_48K);
         let track = session.add_track("vox", TrackKind::Audio);
         let clip = Clip::new(
@@ -400,17 +282,7 @@ mod tests {
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(200, 0.25));
 
-        let audio = render_region(
-            &session,
-            &cache,
-            TimePosition::ZERO,
-            400,
-            &RenderOptions {
-                block_size: 64,
-                channels: 2,
-            },
-        )
-        .unwrap();
+        let audio = render(&session, &cache, TimePosition::ZERO, 400, 64);
         assert_eq!(audio.frames(), 400);
         // Before the clip: silence
         assert!(audio.channel(0)[..100].iter().all(|&s| s == 0.0));
@@ -425,7 +297,7 @@ mod tests {
     }
 
     #[test]
-    fn render_region_plays_midi_clip_through_scheduled_synth() {
+    fn wired_midi_clip_plays_through_the_scheduled_synth() {
         let mut session = Session::new("demo", SampleRate::HZ_48K);
         let track = session.add_track("keys", TrackKind::Midi);
         let notes = vec![MidiNote {
@@ -445,17 +317,13 @@ mod tests {
         .unwrap();
         session.add_clip(track, clip).unwrap();
 
-        let audio = render_region(
+        let audio = render(
             &session,
             &AudioCache::new(),
             TimePosition::ZERO,
             12_000,
-            &RenderOptions {
-                block_size: 128,
-                channels: 2,
-            },
-        )
-        .unwrap();
+            128,
+        );
         assert!(audio.peak() > 0.2, "peak {}", audio.peak());
         // After the note (6000 samples) plus a little: near silence
         let tail = &audio.channel(0)[7000..];
@@ -482,23 +350,13 @@ mod tests {
     }
 
     fn steady_level(session: &Session, cache: &AudioCache) -> f32 {
-        let audio = render_region(
-            session,
-            cache,
-            TimePosition::ZERO,
-            400,
-            &RenderOptions {
-                block_size: 64,
-                channels: 2,
-            },
-        )
-        .unwrap();
+        let audio = render(session, cache, TimePosition::ZERO, 400, 64);
         // Last sample: gain ramps have settled.
         audio.channel(0)[399].abs()
     }
 
     #[test]
-    fn render_region_honours_session_bus_routing_and_sends() {
+    fn wiring_honours_bus_routing_and_sends() {
         let (mut session, cache, vox) = tone_session(SampleRate::HZ_48K);
         let direct = steady_level(&session, &cache);
         assert!(direct > 0.1, "direct {direct}");
@@ -530,11 +388,11 @@ mod tests {
         session.track_mut(fx).unwrap().muted = true;
         session.send_mut(send).unwrap().enabled = true;
         assert!((steady_level(&session, &cache) - through_bus).abs() < 1e-3);
-        let player = {
+        let wiring = {
             let mut mixer = Mixer::new(2);
-            SessionPlayer::wire(&session, &mut mixer, &cache).unwrap()
+            Wiring::wire(&session, &mut mixer, &cache).unwrap()
         };
-        assert!(player.bridge().mixer_send(send).is_some());
+        assert!(wiring.bridge().mixer_send(send).is_some());
     }
 
     #[test]
@@ -582,7 +440,7 @@ mod tests {
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(100, 1.0));
         let mut mixer = Mixer::new(2);
-        let player = SessionPlayer::wire(&session, &mut mixer, &cache).unwrap();
-        assert!(player.sources().is_empty());
+        let wiring = Wiring::wire(&session, &mut mixer, &cache).unwrap();
+        assert!(wiring.clips().is_empty());
     }
 }

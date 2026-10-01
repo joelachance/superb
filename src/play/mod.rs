@@ -9,17 +9,15 @@
 //!
 //! Made of `superb::primitives::io::live` (the running engine),
 //! `superb::primitives::mixer` (the console) and the two modules below:
-//! [`bridge`] maps session objects onto console objects and [`playback`]
-//! attaches a player per clip. Each function lists the steps it is made of;
+//! [`bridge`] maps session tracks onto console strips and [`wiring`]
+//! attaches a node per clip. Each function lists the steps it is made of;
 //! the steps are public in [`steps`].
 
 pub mod bridge;
-pub mod playback;
+pub mod wiring;
 
 pub use bridge::{MixerBinding, SessionMixerBridge};
-pub use playback::{
-    render_region, schedule_midi_notes, AudioCache, PlaybackSource, RenderOptions, SessionPlayer,
-};
+pub use wiring::{schedule_midi_notes, WiredClip, Wiring};
 
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::live::EngineCommand;
@@ -39,10 +37,10 @@ use crate::rig::{LiveHandles, Rig};
 /// listed in `live.failed_inserts`; the rest of the console runs.
 pub fn rebuild(rig: &mut Rig) -> Result<()> {
     rig.engine.reclaim();
-    let (mut mixer, player) = steps::build_console(&rig.session, &rig.cache, rig.channels)?;
+    let (mut mixer, wiring) = steps::build_console(&rig.session, &rig.cache, rig.channels)?;
     let (inserts, failed_inserts) =
-        steps::attach_inserts(&rig.session, &mut rig.plugins, &mut mixer, &player);
-    let (strips, sends) = steps::collect_handles(&mixer, &player);
+        steps::attach_inserts(&rig.session, &mut rig.plugins, &mut mixer, &wiring);
+    let (strips, sends) = steps::collect_handles(&mixer, &wiring);
     steps::publish(&mut rig.engine, mixer)?;
     if let Some(engine_loop) = rig.engine_loop.as_mut() {
         // Nothing is pulling audio yet, so nobody would swap the graph in
@@ -53,7 +51,7 @@ pub fn rebuild(rig: &mut Rig) -> Result<()> {
         strips,
         sends,
         inserts,
-        player: Some(player),
+        wiring: Some(wiring),
         failed_inserts,
     };
     rig.needs_rebuild = false;
@@ -170,9 +168,10 @@ pub fn start_output(
 
 /// The steps [`rebuild`] is made of, for building your own.
 pub mod steps {
-    use crate::play::{MixerBinding, SessionPlayer};
+    use crate::play::{MixerBinding, Wiring};
     use crate::primitives::graph::nodes::MonoSynthNode;
     use crate::primitives::graph::MidiPort;
+    use crate::primitives::io::cache::AudioCache;
     use crate::primitives::io::live::EngineHandle;
     use crate::primitives::mixer::{Mixer, StripId};
     use crate::primitives::plugins::PluginNode;
@@ -180,26 +179,24 @@ pub mod steps {
     use crate::primitives::{InsertId, Result};
     use crate::rig::{LiveInsert, PluginLoader, SendHandles, StripHandles};
 
-    use super::AudioCache;
-
     /// Builds a fresh console for the session: a strip per track and bus,
-    /// routing and sends, a player per audible clip, and a live instrument
+    /// routing and sends, a node per audible clip, and a live instrument
     /// on every armed MIDI track so it sounds when you play.
     ///
-    /// Made of: `Mixer::new` → `SessionPlayer::wire` → one `MonoSynthNode`
+    /// Made of: `Mixer::new` → `Wiring::wire` → one `MonoSynthNode`
     /// plus a MIDI edge per armed MIDI track.
     pub fn build_console(
         session: &Session,
         cache: &AudioCache,
         channels: usize,
-    ) -> Result<(Mixer, SessionPlayer)> {
+    ) -> Result<(Mixer, Wiring)> {
         let mut mixer = Mixer::new(channels);
-        let player = SessionPlayer::wire(session, &mut mixer, cache)?;
+        let wiring = Wiring::wire(session, &mut mixer, cache)?;
         for track in session.tracks() {
             if track.kind != TrackKind::Midi || !track.armed {
                 continue;
             }
-            let Some(MixerBinding::Track(strip)) = player.bridge().binding(track.id()) else {
+            let Some(MixerBinding::Track(strip)) = wiring.bridge().binding(track.id()) else {
                 continue;
             };
             let synth = mixer
@@ -208,7 +205,7 @@ pub mod steps {
             mixer.connect_source(synth, strip)?;
             mixer.graph_mut().connect_midi(MidiPort::External, synth)?;
         }
-        Ok((mixer, player))
+        Ok((mixer, wiring))
     }
 
     /// Loads every insert in the session and splices it into its strip's chain,
@@ -221,12 +218,12 @@ pub mod steps {
         session: &Session,
         loader: &mut PluginLoader,
         mixer: &mut Mixer,
-        player: &SessionPlayer,
+        wiring: &Wiring,
     ) -> (Vec<LiveInsert>, Vec<(InsertId, String)>) {
         let mut live = Vec::new();
         let mut failed = Vec::new();
         for track in session.tracks() {
-            let strip: StripId = match player.bridge().binding(track.id()) {
+            let strip: StripId = match wiring.bridge().binding(track.id()) {
                 Some(MixerBinding::Track(id)) => id.into(),
                 Some(MixerBinding::Bus(id)) => id.into(),
                 None => continue,
@@ -265,8 +262,8 @@ pub mod steps {
     /// Collects the atomics the control side keeps after the mixer's graph
     /// has been handed to the engine: one strip handle per session track or
     /// bus, one send handle per session send.
-    pub fn collect_handles(mixer: &Mixer, player: &SessionPlayer) -> (StripHandles, SendHandles) {
-        let strips = player
+    pub fn collect_handles(mixer: &Mixer, wiring: &Wiring) -> (StripHandles, SendHandles) {
+        let strips = wiring
             .bridge()
             .entries()
             .iter()
@@ -278,7 +275,7 @@ pub mod steps {
                 Some((*session_track, params))
             })
             .collect();
-        let sends = player
+        let sends = wiring
             .bridge()
             .send_entries()
             .iter()
@@ -334,7 +331,7 @@ mod tests {
         start(&mut rig).unwrap();
         assert!(!rig.needs_rebuild);
         assert!(rig.live.strip(vox).is_some());
-        assert!(rig.live.player.is_some());
+        assert!(rig.live.wiring.is_some());
         let audio = drive(&mut rig, 10).unwrap(); // 640 frames
         assert_eq!(audio.frames(), 640);
         // Constant-power pan at centre: 0.5 * ~0.707 per side once the ramp settled.
@@ -410,13 +407,13 @@ mod tests {
         let mut rig = session::create("keys", R, 64).unwrap();
         let keys = session::add_track(&mut rig, "keys", TrackKind::Midi).unwrap();
         start(&mut rig).unwrap();
-        let (mixer, player) = steps::build_console(&rig.session, &rig.cache, 2).unwrap();
+        let (mixer, wiring) = steps::build_console(&rig.session, &rig.cache, 2).unwrap();
         assert_eq!(
             mixer.graph().node_count(),
             4,
             "master pair + track pair, no instrument"
         );
-        drop(player);
+        drop(wiring);
         rig.session.track_mut(keys).unwrap().armed = true;
         let (mixer, _) = steps::build_console(&rig.session, &rig.cache, 2).unwrap();
         assert_eq!(mixer.graph().node_count(), 5, "plus the live synth");

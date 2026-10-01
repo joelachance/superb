@@ -424,7 +424,7 @@ pub mod steps {
     ///
     /// Made of: `AudioCache::insert`.
     pub fn store_take(
-        cache: &mut crate::play::AudioCache,
+        cache: &mut crate::primitives::io::cache::AudioCache,
         name: &str,
         audio: PlanarBuffer,
     ) -> Arc<PlanarBuffer> {

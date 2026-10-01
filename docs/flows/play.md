@@ -26,15 +26,16 @@ device, `drive` renders blocks by hand.
 
 | step | does |
 |---|---|
-| `build_console(&session, &cache, channels) -> (Mixer, SessionPlayer)` | strips, buses, sends, clip sources, live instruments for monitoring MIDI tracks |
-| `attach_inserts(&session, &mut PluginLoader, &mut Mixer, &SessionPlayer) -> (Vec<LiveInsert>, failed)` | instantiate and chain each track's inserts; failures are returned, not fatal |
-| `collect_handles(&Mixer, &SessionPlayer) -> (StripHandles, SendHandles)` | the atomics the control side keeps |
+| `build_console(&session, &cache, channels) -> (Mixer, Wiring)` | strips, buses, sends, clip sources, live instruments for monitoring MIDI tracks |
+| `attach_inserts(&session, &mut PluginLoader, &mut Mixer, &Wiring) -> (Vec<LiveInsert>, failed)` | instantiate and chain each track's inserts; failures are returned, not fatal |
+| `collect_handles(&Mixer, &Wiring) -> (StripHandles, SendHandles)` | the atomics the control side keeps |
 | `publish(&mut EngineHandle, Mixer)` | prepare and hand the graph to the engine |
 
-`play::bridge` (`SessionMixerBridge`: session track ↔ mixer strip map,
-routing and parameter mirroring) and `play::playback` (`AudioCache`,
-`SessionPlayer`, `render_region`, `schedule_midi_notes`) are the
-lower-level pieces the steps use; they predate the flow and remain public.
+`play::bridge` (`SessionMixerBridge`: the session track ↔ mixer strip
+map, with routing and parameter mirroring) and `play::wiring` (`Wiring`,
+`WiredClip`, `schedule_midi_notes`: a node per clip) are the pieces the
+steps use; `AudioCache` lives in `primitives::io::cache`. The
+`console_steps` example builds a console from them without a `Rig`.
 
 ## Usage
 

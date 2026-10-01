@@ -90,7 +90,7 @@ Data crosses the thread boundary in exactly three ways:
    engine. Its steps are public:
    * `build_console` maps session tracks onto mixer strips and buses
      (`play::bridge`), mirrors gain, pan, mute, solo, outputs and sends,
-     and attaches one source node per audible clip (`play::playback`):
+     and attaches one source node per audible clip (`play::wiring`):
      `BufferPlayerNode` for audio in the cache, `ScheduledSynthNode` for
      MIDI notes converted through the tempo map, plus a live instrument
      for every monitoring MIDI track.
