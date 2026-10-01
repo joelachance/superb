@@ -1,8 +1,8 @@
 //! `play`: hear the session, move the playhead, loop a section.
 //!
 //! What you'll learn:
-//! - `play::start` syncs the console from the session and starts the transport
-//! - Without an audio device, `play::advance` renders blocks and hands you
+//! - `play::start` rebuilds the console from the session and starts the transport
+//! - Without an audio device, `play::drive` renders blocks and hands you
 //!   the audio (tests and headless tools work this way)
 //! - The playhead is read from atomics: `position`, `state`, `is_rolling`
 //! - A loop range lives in the session (`session::set_loop`); `set_loop_enabled`
@@ -44,14 +44,14 @@ fn main() -> Result<()> {
         )?;
     }
 
-    // Start. `needs_sync` is set by every structural edit above; `start`
+    // Start. `needs_rebuild` is set by every structural edit above; `start`
     // notices and builds the console first.
-    println!("needs sync before start: {}", rig.needs_sync);
+    println!("needs rebuild before start: {}", rig.needs_rebuild);
     play::start(&mut rig)?;
 
     // Render 0.25 s (47 blocks of 256) and look at what came out. Commands
-    // reach the engine at its next block, so state is read after advancing.
-    let audio = play::advance(&mut rig, 47)?;
+    // reach the engine at its next block, so state is read after driving.
+    let audio = play::drive(&mut rig, 47)?;
     println!(
         "state: {:?}, rolling: {}",
         play::state(&rig),
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
 
     // Jump around. Seeks take effect at the next block.
     play::seek(&mut rig, TimePosition::from_seconds(1.0, rate))?;
-    play::advance(&mut rig, 1)?;
+    play::drive(&mut rig, 1)?;
     println!("after seek: {:.3} s", play::position(&rig).to_seconds(rate));
 
     // Loop the middle pluck. The range is part of the session (undoable,
@@ -79,21 +79,21 @@ fn main() -> Result<()> {
     play::set_loop_enabled(&mut rig, true)?;
     play::seek(&mut rig, range.start())?;
     // 0.75 s of playback inside a 0.5 s loop: the playhead wraps once.
-    play::advance(&mut rig, 141)?;
+    play::drive(&mut rig, 141)?;
     println!(
         "looping: {:.3} s (inside 0.5..1.0)",
         play::position(&rig).to_seconds(rate)
     );
 
     play::stop(&mut rig)?;
-    play::advance(&mut rig, 1)?; // the Stop command is applied at the next block
+    play::drive(&mut rig, 1)?; // the Stop command is applied at the next block
     println!("state: {:?}", play::state(&rig));
     play::rewind(&mut rig)?;
-    play::advance(&mut rig, 1)?;
+    play::drive(&mut rig, 1)?;
     println!("rewound to {:.3} s", play::position(&rig).to_seconds(rate));
 
     // On a real device the same rig plays through the speakers. From here
-    // the device pulls blocks, so `advance` is no longer available.
+    // the device pulls blocks, so `drive` is no longer available.
     #[cfg(feature = "devices")]
     {
         use superb::devices;

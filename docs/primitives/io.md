@@ -8,7 +8,7 @@ Where audio leaves and enters the Superb DAW SDK.
 other engine module and is generic over any
 `superb::primitives::graph::BlockProcessor` — an `AudioGraph` or a `superb::primitives::mixer::Mixer`
 both qualify. It owns the block loop that turns a prepared processor plus a
-`Transport` into rendered audio: advancing the transport, splitting each
+`Transport` into rendered audio: driving the transport, splitting each
 block at loop points, delivering queued MIDI, running the processor per
 segment, and recording DSP load. This is the layer that drives offline
 bounces, WAV files, and (behind the `devices` feature) real cpal output
@@ -131,7 +131,7 @@ let in_memory = decode_bytes(std::fs::read("take.wav")?, Some("wav"))?;
 
 * `decode(path)` opens the file (seekable, so trailing metadata is read),
   `decode_bytes(Vec<u8>, hint)` decodes from memory, `decode_from(reader)`
-  consumes any `Read + Send + Sync` stream without seeking.
+  consumes any `Read + Send + Rebuild` stream without seeking.
 * Formats with the default `files` build: WAV (PCM 8/16/24/32-bit, float)
   and FLAC. More containers/codecs are a matter of adding symphonia
   features in `Cargo.toml` — nothing else changes.

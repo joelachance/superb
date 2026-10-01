@@ -72,7 +72,7 @@ session::add_audio_clip(&mut rig, lead, "tone.wav", TimePosition::ZERO, TimeDura
 mix::set_gain_db(&mut rig, lead, -6.0)?;
 
 play::start(&mut rig)?;                 // builds the console, starts the transport
-let audio = play::advance(&mut rig, 8)?; // renders 8 blocks without an audio device
+let audio = play::drive(&mut rig, 8)?; // renders 8 blocks without an audio device
 assert!(audio.peak() > 0.1);
 ```
 
@@ -131,7 +131,7 @@ edits reaching the running instance; file decoding, resampling and
 bouncing behind the `files` feature.
 
 Not yet: duplex device streams, aligning hardware MIDI timestamps with the
-audio clock, updating a running console incrementally (a sync rebuilds it,
+audio clock, updating a running console incrementally (a rebuild replaces it,
 which resets plugin tails), monitoring a live input through a strip while
 recording, punch-in/out and loop recording, VST3 hosting, SysEx and
 Standard MIDI Files, and encoders other than WAV.

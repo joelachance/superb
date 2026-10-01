@@ -8,7 +8,7 @@ The document model: what a session *is*.
 `primitives::transport` (for `TempoMap` and `LoopRange`), `primitives::undo`,
 and `serde` + `serde_json` for snapshots. It holds the editable description of
 a session — tracks, clips, markers, tempo map, loop range — and nothing about
-rendering. Turning a `Session` into a mixer is the job of `play::sync` (see
+rendering. Turning a `Session` into a mixer is the job of `play::rebuild` (see
 `docs/flows/play.md`); the session is deliberately free of `Arc<AtomicF32>`
 handles and audio-thread concerns, so it can be cloned, diffed, serialised and
 undone freely.
@@ -167,7 +167,7 @@ saving it as JSON and reloading it.
 
 Mirroring a session into a live [`Mixer`](mixer.md) is handled by
 `superb::play::bridge::SessionMixerBridge` (separate `TrackId` namespaces,
-`sync` + `apply_routing` + `apply_strip_params`). Playing clips onto those strips is
+`rebuild` + `apply_routing` + `apply_strip_params`). Playing clips onto those strips is
 `superb::play::{SessionPlayer, render_region, AudioCache}` — offline
 region render first; see `docs/flows/play.md` and the `session_playback` example.
 

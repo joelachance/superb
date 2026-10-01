@@ -4,7 +4,7 @@
 //! What you'll learn:
 //! - `TempoMap` converts beats <-> samples with tempo and meter changes
 //! - Bars/beats/ticks (`Bbt`) for display
-//! - `Transport` holds the playhead and loop; `advance` returns the
+//! - `Transport` holds the playhead and loop; `drive` returns the
 //!   `Segment`s a block covers, so nodes can render across a loop point
 //!
 //! ```text

@@ -43,19 +43,19 @@ pub struct Rig {
     pub engine: LiveEngine,
     /// The engine's audio side. Present until it is moved into a device
     /// stream (`play::start_output`, feature `devices`); while
-    /// present, [`play::advance`](crate::play::advance) drives it by hand.
+    /// present, [`play::drive`](crate::play::drive) drives it by hand.
     pub engine_loop: Option<EngineLoop>,
     /// Handles into the console built by the last
-    /// [`play::sync`](crate::play::sync).
+    /// [`play::rebuild`](crate::play::rebuild).
     pub live: LiveHandles,
     /// A take being recorded, if any.
     pub recording: Option<crate::record::Recording>,
     /// Channels per strip and at the output (2 = stereo).
     pub channels: usize,
     /// Set by every edit that changes the console's structure (a new track,
-    /// a moved clip, a send). Cleared by [`play::sync`](crate::play::sync),
+    /// a moved clip, a send). Cleared by [`play::rebuild`](crate::play::rebuild),
     /// which the flows that start audio call for you.
-    pub needs_sync: bool,
+    pub needs_rebuild: bool,
     /// The running output stream, once started.
     #[cfg(feature = "devices")]
     pub output: Option<crate::primitives::io::device::OutputStream>,
@@ -94,7 +94,7 @@ impl Rig {
             live: LiveHandles::default(),
             recording: None,
             channels,
-            needs_sync: true,
+            needs_rebuild: true,
             #[cfg(feature = "devices")]
             output: None,
             #[cfg(feature = "midi-io")]
@@ -115,7 +115,7 @@ impl core::fmt::Debug for Rig {
             .field("engine_loop_attached", &self.engine_loop.is_some())
             .field("recording", &self.recording.is_some())
             .field("channels", &self.channels)
-            .field("needs_sync", &self.needs_sync)
+            .field("needs_rebuild", &self.needs_rebuild)
             .finish()
     }
 }
@@ -127,7 +127,7 @@ pub type SendHandles = Vec<(SendId, Arc<SendParams>)>;
 
 /// Handles into the console the engine is currently running.
 ///
-/// Rebuilt by every [`play::sync`](crate::play::sync); the atomics behind
+/// Rebuilt by every [`play::rebuild`](crate::play::rebuild); the atomics behind
 /// them are what the audio thread reads, so a change made through them is
 /// heard on the next block.
 #[derive(Debug, Default)]

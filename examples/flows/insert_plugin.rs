@@ -3,7 +3,7 @@
 //! What you'll learn:
 //! - `plugins::scan` looks in the standard folders and `CLAP_PATH`
 //! - An insert is stored in the session; the running instance is created at
-//!   the next sync, so a session with a missing plugin still opens and plays
+//!   the next rebuild, so a session with a missing plugin still opens and plays
 //! - `set_param` reaches the document and the running instance at once
 //! - `failed` tells you which inserts did not load and why
 //!
@@ -65,11 +65,11 @@ fn main() -> Result<()> {
                     p.id, p.name, p.default, p.min, p.max
                 );
             }
-            let dry = play::advance(&mut rig, 4)?.peak();
+            let dry = play::drive(&mut rig, 4)?.peak();
             // Turn the first automatable knob to its maximum and listen.
             if let Some(p) = params.iter().find(|p| p.automatable) {
                 plugins::set_param(&mut rig, fx, p.id, p.max)?;
-                let wet = play::advance(&mut rig, 4)?.peak();
+                let wet = play::drive(&mut rig, 4)?.peak();
                 println!("{} at max: peak {dry:.3} -> {wet:.3}", p.name);
                 println!(
                     "stored in the session: {:?}",
@@ -78,7 +78,7 @@ fn main() -> Result<()> {
             }
             // Bypass leaves the plugin out of the console entirely.
             plugins::set_bypassed(&mut rig, fx, true)?;
-            play::sync(&mut rig)?;
+            play::rebuild(&mut rig)?;
             println!("bypassed: loaded = {}", plugins::loaded(&rig, fx).is_some());
         }
         None => {
@@ -95,7 +95,7 @@ fn main() -> Result<()> {
             }
             println!(
                 "the track still plays: peak {:.3}",
-                play::advance(&mut rig, 4)?.peak()
+                play::drive(&mut rig, 4)?.peak()
             );
             plugins::remove(&mut rig, fx)?;
         }

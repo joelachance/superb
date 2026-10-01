@@ -119,7 +119,7 @@ impl SessionPlayer {
     /// must be `prepare`d (via the engine) before rendering.
     pub fn wire(session: &Session, mixer: &mut Mixer, cache: &AudioCache) -> Result<Self> {
         let mut bridge = SessionMixerBridge::new();
-        bridge.sync(session, mixer);
+        bridge.bind(session, mixer);
         bridge.apply_routing(session, mixer)?;
         bridge.apply_strip_params(session, mixer);
 

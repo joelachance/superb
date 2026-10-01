@@ -6,7 +6,7 @@ Which audio and MIDI devices exist, and configurations that match the rig.
 
 Everything here needs a feature: `devices` for audio, `midi-io` for MIDI
 ports. Without them the module is empty and the rig renders through
-`play::advance` or `export`.
+`play::drive` or `export`.
 
 ## Verbs
 

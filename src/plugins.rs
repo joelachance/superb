@@ -24,27 +24,27 @@ pub fn scan() -> Result<crate::primitives::plugins::scan::ScanReport> {
 }
 
 /// Adds `plugin` at the end of a track's (or bus's) insert chain. The
-/// instance is created at the next sync; if it cannot be loaded, the sync
+/// instance is created at the next rebuild; if it cannot be loaded, the rebuild
 /// still succeeds and the failure is listed by [`failed`].
 ///
 /// Made of: `Session::allocate_insert_id` → `Insert::with_id` → push
-/// `AddInsert`; marks the rig for a sync.
+/// `AddInsert`; marks the rig for a rebuild.
 pub fn insert(rig: &mut Rig, track: TrackId, plugin: &PluginDescriptor) -> Result<InsertId> {
     let id = rig.session.allocate_insert_id();
     let insert = Insert::with_id(id, PluginRef::from(plugin));
     rig.history
         .push(&mut rig.session, AddInsert::new(track, insert))?;
-    rig.needs_sync = true;
+    rig.needs_rebuild = true;
     Ok(id)
 }
 
 /// Removes an insert from its chain.
 ///
-/// Made of: push `RemoveInsert`; marks the rig for a sync.
+/// Made of: push `RemoveInsert`; marks the rig for a rebuild.
 pub fn remove(rig: &mut Rig, insert: InsertId) -> Result<()> {
     rig.history
         .push(&mut rig.session, RemoveInsert::new(insert))?;
-    rig.needs_sync = true;
+    rig.needs_rebuild = true;
     Ok(())
 }
 
@@ -83,7 +83,7 @@ pub fn set_param(rig: &mut Rig, insert: InsertId, param: u32, value: f64) -> Res
 }
 
 /// The running instance's parameters, in the plugin's order. Empty before
-/// the first sync or if the plugin failed to load.
+/// the first rebuild or if the plugin failed to load.
 pub fn params(rig: &Rig, insert: InsertId) -> &[ParamInfo] {
     rig.live
         .insert(insert)
@@ -96,7 +96,7 @@ pub fn loaded(rig: &Rig, insert: InsertId) -> Option<&PluginDescriptor> {
     rig.live.insert(insert).map(|i| &i.descriptor)
 }
 
-/// Inserts that did not load at the last sync, with the reason.
+/// Inserts that did not load at the last rebuild, with the reason.
 pub fn failed(rig: &Rig) -> &[(InsertId, String)] {
     &rig.live.failed_inserts
 }
@@ -141,7 +141,7 @@ mod tests {
     }
 
     fn settled(rig: &mut Rig) -> f32 {
-        let audio = play::advance(rig, 4).unwrap();
+        let audio = play::drive(rig, 4).unwrap();
         audio.channel(0)[audio.frames() - 1].abs()
     }
 
@@ -152,9 +152,12 @@ mod tests {
         let dry = settled(&mut rig);
         let desc = test_descriptor(&mut rig);
         let gain = insert(&mut rig, vox, &desc).unwrap();
-        assert!(rig.needs_sync);
-        assert!(params(&rig, gain).is_empty(), "not loaded until the sync");
-        play::sync(&mut rig).unwrap();
+        assert!(rig.needs_rebuild);
+        assert!(
+            params(&rig, gain).is_empty(),
+            "not loaded until the rebuild"
+        );
+        play::rebuild(&mut rig).unwrap();
         assert!(failed(&rig).is_empty(), "{:?}", failed(&rig));
         assert_eq!(loaded(&rig, gain).unwrap().name, "Test Gain");
         assert_eq!(params(&rig, gain)[0].name, "Gain");
@@ -167,14 +170,14 @@ mod tests {
         set_param(&mut rig, gain, 7, 0.25).unwrap(); // a knob drag: one step
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3, "heard live");
         assert_eq!(rig.session.insert(gain).unwrap().param(7), Some(0.25));
-        // A fresh sync re-applies the stored value to the new instance.
-        play::sync(&mut rig).unwrap();
+        // A fresh rebuild re-applies the stored value to the new instance.
+        play::rebuild(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
 
-        // Bypass is a live switch: heard at once, no sync, not an undo step.
+        // Bypass is a live switch: heard at once, no rebuild, not an undo step.
         let steps = rig.history.undo_len();
         set_bypassed(&mut rig, gain, true).unwrap();
-        assert!(!rig.needs_sync);
+        assert!(!rig.needs_rebuild);
         assert_eq!(rig.history.undo_len(), steps);
         assert!(rig.session.insert(gain).unwrap().bypassed);
         assert!(
@@ -183,17 +186,17 @@ mod tests {
         );
         assert!(loaded(&rig, gain).is_some(), "the instance stays loaded");
         // A rebuilt console starts bypassed too, from the document.
-        play::sync(&mut rig).unwrap();
+        play::rebuild(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry).abs() < 1e-3);
         set_bypassed(&mut rig, gain, false).unwrap();
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
         remove(&mut rig, gain).unwrap();
         assert!(rig.session.insert(gain).is_err());
-        play::sync(&mut rig).unwrap();
+        play::rebuild(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry).abs() < 1e-3);
         // Undo the removal: the insert is back, active, at 0.25.
         session::undo(&mut rig).unwrap();
-        play::sync(&mut rig).unwrap();
+        play::rebuild(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
     }
 
@@ -210,7 +213,7 @@ mod tests {
         let mut vst = PluginDescriptor::new(PluginFormat::Vst3, "x", "X");
         vst.path = "/x.vst3".into();
         let vst = insert(&mut rig, vox, &vst).unwrap();
-        play::sync(&mut rig).unwrap();
+        play::rebuild(&mut rig).unwrap();
         assert!(failed(&rig)
             .iter()
             .any(|(id, why)| *id == vst && why.contains("VST3")));

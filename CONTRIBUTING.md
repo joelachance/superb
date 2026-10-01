@@ -48,7 +48,7 @@ shared types at the root, then `buffers` and `realtime`, then `transport`,
 
 **Flows** (`src/<flow>.rs`, one file per everyday task) are free functions
 over the `Rig`. A flow function earns its place by replacing at least three
-primitive calls or by hiding an ordering hazard (sync before publish, stop
+primitive calls or by hiding an ordering hazard (rebuild before publish, stop
 before draining a take). Rules:
 
 * A *verb* takes `&mut Rig` and does the whole job. A *step* takes the
@@ -58,8 +58,8 @@ before draining a take). Rules:
   primitive and step calls in order. Keep it accurate when you change the
   body; it is the contract that lets a reader bypass the verb.
 * Edits that change the console's shape (tracks, clips, sends, routing,
-  inserts, monitoring) set `rig.needs_sync`. Edits to a level go to the
-  document *and* the live handle at once and do not need a sync.
+  inserts, monitoring) set `rig.needs_rebuild`. Edits to a level go to the
+  document *and* the live handle at once and do not need a rebuild.
 * A continuous edit (fader, knob, clip drag) pushes through the undo stack
   and coalesces by time (`Rig::COALESCE_WINDOW`), so a drag is one step
   without the UI having to say when it ended. A switch (mute, solo, arm,

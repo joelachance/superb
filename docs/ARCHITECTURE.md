@@ -22,7 +22,7 @@ and connects them deliberately.
 
    session ── tracks, clips, inserts   io::live   LiveEngine ◄─queues─► EngineLoop
    undo    ── history                  io         Engine, offline render, WAV, devices
-                       play::sync ───► mixer      tracks, buses, sends, inserts
+                       play::rebuild ───► mixer      tracks, buses, sends, inserts
    automation ─► Arc<AtomicF32> ─────► graph      nodes, schedule, live swap
                                        plugins    PluginNode, CLAP host
                                        transport  playhead, tempo map
@@ -86,7 +86,7 @@ Data crosses the thread boundary in exactly three ways:
    threads, so it can be cloned, saved as JSON and undone freely. Edits go
    through `primitives::undo` commands, which restore removed objects under
    their original IDs so the UI's handles stay valid.
-2. **`play::sync`** turns the session into a console and hands it to the
+2. **`play::rebuild`** turns the session into a console and hands it to the
    engine. Its steps are public:
    * `build_console` maps session tracks onto mixer strips and buses
      (`play::bridge`), mirrors gain, pan, mute, solo, outputs and sends,
@@ -112,10 +112,10 @@ Data crosses the thread boundary in exactly three ways:
    control side (commands, graph publishing, software MIDI, position and
    state atomics) and `EngineLoop` on the audio side, which applies
    commands, drains MIDI, renders a block through `Engine` and publishes
-   the position. `play::advance` ticks the loop by hand; `play::start_output`
+   the position. `play::drive` ticks the loop by hand; `play::start_output`
    moves it into a device callback.
 6. **`primitives::io::Engine`** owns a `Transport` and a processor. Each
-   block it advances the playhead, splits the block at loop wraps, delivers
+   block it drives the playhead, splits the block at loop wraps, delivers
    queued MIDI at sample-accurate frames, runs the processor and copies the
    result out. `offline::render` drives a private engine for `export`.
 
@@ -167,9 +167,9 @@ tap after the last insert.
 **Live engine.** Commands and graphs go one way, position and state come
 back as atomics. A published graph must be prepared for the engine's
 sample rate and block size or it is rejected, never re-prepared on the
-audio thread. The swap queue holds two graphs; `play::sync` reclaims
+audio thread. The swap queue holds two graphs; `play::rebuild` reclaims
 retired graphs before building and, while the loop is still owned by the
-`Rig`, applies the swap itself so repeated syncs never back up.
+`Rig`, applies the swap itself so repeated rebuilds never back up.
 
 **Automation.** Envelope edits allocate and belong on the control thread.
 The read path evaluates into atomics or a caller's scratch buffer without
@@ -207,12 +207,12 @@ states its invariant, and the host is tested against an in-process plugin
 so no shared library is needed. `start_processing` is deferred to the
 first `process` and `stop_processing` to `deactivate`. The session stores a
 plugin reference, parameter values and saved state; the instance is
-recreated at every sync and the stored values re-applied.
+recreated at every rebuild and the stored values re-applied.
 
-**Sync.** A sync builds a whole new console and swaps it in; it never
+**Rebuild.** A rebuild builds a whole new console and swaps it in; it never
 edits the running one. That keeps the audio thread's contract simple at
 the cost of resetting plugin tails and meters when the console's shape
-changes. Level edits do not need a sync because they go to the live
+changes. Level edits do not need a rebuild because they go to the live
 handles directly.
 
 **Features.** Hardware (`devices`, `midi-io`) and the copyleft decoder
@@ -236,7 +236,7 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 ## Not there yet
 
 Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
-Incremental edits to a running console (a sync rebuilds it). Monitoring a
+Incremental edits to a running console (a rebuild replaces it). Monitoring a
 live input through a strip while recording. Punch-in/out and loop
 recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
 Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes

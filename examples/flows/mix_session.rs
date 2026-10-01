@@ -2,7 +2,7 @@
 //!
 //! What you'll learn:
 //! - Level changes go two places at once: the session (undoable) and the live
-//!   strip (heard on the next block, no sync)
+//!   strip (heard on the next block, no rebuild)
 //! - Buses collect tracks; `route` sends a track's output into one
 //! - Sends tap a copy of a track into a bus, pre- or post-fader
 //! - Peak meters are read (and reset) per strip
@@ -19,7 +19,7 @@ use superb::{mix, play, session};
 /// Renders four blocks and returns the peak of the last one, so ramps have
 /// settled: what a meter would show.
 fn level(rig: &mut Rig) -> Result<f32> {
-    let audio = play::advance(rig, 4)?;
+    let audio = play::drive(rig, 4)?;
     let last = audio.frames() - rig.engine.max_frames();
     Ok(audio.channel(0)[last..]
         .iter()
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
 
     // Pan and mute/solo are heard immediately as well.
     mix::set_pan(&mut rig, vox, -1.0)?; // hard left
-    let audio = play::advance(&mut rig, 4)?;
+    let audio = play::drive(&mut rig, 4)?;
     let n = audio.frames() - 1;
     println!(
         "vox hard left:           L {:.3}  R {:.3}",
@@ -92,13 +92,13 @@ fn main() -> Result<()> {
 
     // A bus fed by sends: the classic reverb return, minus the reverb.
     // Adding the bus and the sends changes the console's shape, so these
-    // mark the rig for a sync; `start`/`advance` sync for you, or call
-    // `play::sync` yourself to control when the swap happens.
+    // mark the rig for a rebuild; `start`/`drive` rebuild for you, or call
+    // `play::rebuild` yourself to control when the swap happens.
     let room = mix::add_bus(&mut rig, "room")?;
     let vox_send = mix::add_send(&mut rig, vox, room, -6.0206, false)?;
     let _gtr_send = mix::add_send(&mut rig, gtr, room, -6.0206, false)?;
-    println!("needs sync: {}", rig.needs_sync);
-    play::sync(&mut rig)?;
+    println!("needs rebuild: {}", rig.needs_rebuild);
+    play::rebuild(&mut rig)?;
     for (_, strip) in &rig.live.strips {
         strip.set_pan_law(PanLaw::Balance);
     }
@@ -114,7 +114,7 @@ fn main() -> Result<()> {
     // Route gtr *through* the bus instead of sending a copy, and turn the
     // bus down: the bus fader now scales gtr.
     mix::route(&mut rig, gtr, Some(room))?;
-    play::sync(&mut rig)?;
+    play::rebuild(&mut rig)?;
     for (_, strip) in &rig.live.strips {
         strip.set_pan_law(PanLaw::Balance);
     }
@@ -127,7 +127,7 @@ fn main() -> Result<()> {
     }
 
     // Everything above is in the session. Undo it all and the document is back
-    // to two tracks at 0 dB; the console follows on the next sync.
+    // to two tracks at 0 dB; the console follows on the next rebuild.
     while rig.history.undo_len() > 4 {
         // 4 = the two tracks and two clips we started with
         session::undo(&mut rig)?;

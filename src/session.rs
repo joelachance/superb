@@ -4,7 +4,7 @@
 //! Every edit here goes through the undo history, so [`undo`] and [`redo`]
 //! always work and a save can tell whether anything changed. Edits that
 //! change what the console has to look like (tracks, clips, routing) mark
-//! the rig as needing a [`play::sync`](crate::play::sync); the flows that
+//! the rig as needing a [`play::rebuild`](crate::play::rebuild); the flows that
 //! start audio run it for you, or call it yourself to hear a change now.
 //!
 //! Made of `superb::primitives::session` (the document and its commands)
@@ -170,23 +170,23 @@ pub fn set_loop(rig: &mut Rig, range: Option<LoopRange>) -> Result<()> {
 
 /// Reverts the last edit. Returns `false` if there was nothing to undo.
 ///
-/// Made of: `UndoStack::undo`; the console is marked for a sync because the
+/// Made of: `UndoStack::undo`; the console is marked for a rebuild because the
 /// undone edit may have been structural.
 pub fn undo(rig: &mut Rig) -> Result<bool> {
     let done = rig.history.undo(&mut rig.session)?;
     if done {
-        rig.needs_sync = true;
+        rig.needs_rebuild = true;
     }
     Ok(done)
 }
 
 /// Re-applies the last undone edit.
 ///
-/// Made of: `UndoStack::redo`, then the same sync marking as [`undo`].
+/// Made of: `UndoStack::redo`, then the same rebuild marking as [`undo`].
 pub fn redo(rig: &mut Rig) -> Result<bool> {
     let done = rig.history.redo(&mut rig.session)?;
     if done {
-        rig.needs_sync = true;
+        rig.needs_rebuild = true;
     }
     Ok(done)
 }
@@ -216,7 +216,7 @@ pub(crate) fn edit(rig: &mut Rig, command: impl Command<Session>) -> Result<()> 
 /// Pushes an edit that changes what the console must look like.
 pub(crate) fn structural(rig: &mut Rig, command: impl Command<Session>) -> Result<()> {
     edit(rig, command)?;
-    rig.needs_sync = true;
+    rig.needs_rebuild = true;
     Ok(())
 }
 
@@ -241,11 +241,11 @@ mod tests {
     fn create_edit_undo_redo() {
         let mut rig = create("demo", R, 64).unwrap();
         assert!(is_saved(&rig));
-        assert!(rig.needs_sync, "a fresh rig has no console yet");
-        rig.needs_sync = false;
+        assert!(rig.needs_rebuild, "a fresh rig has no console yet");
+        rig.needs_rebuild = false;
 
         let vox = add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
-        assert!(rig.needs_sync);
+        assert!(rig.needs_rebuild);
         rename_track(&mut rig, vox, "vocals").unwrap();
         assert_eq!(rig.session.track(vox).unwrap().name, "vocals");
         let clip = add_audio_clip(

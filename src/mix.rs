@@ -2,11 +2,11 @@
 //!
 //! A level change takes two paths at once: into the document through the
 //! undo history, so it is saved and reversible, and onto the live strip's
-//! atomics, so it is heard on the next block without a sync. Switches
+//! atomics, so it is heard on the next block without a rebuild. Switches
 //! (mute, solo, send on/off) take the same two paths but skip the history:
 //! they are saved with the session, not undone. Changing the console's
 //! shape (a new bus, a new send, a new route) is a structural edit like any
-//! other and marks the rig for a [`play::sync`](crate::play::sync).
+//! other and marks the rig for a [`play::rebuild`](crate::play::rebuild).
 //!
 //! Made of `superb::primitives::session::commands` (the document side) and
 //! `superb::primitives::mixer` (`StripParams`, `SendParams`: the live side).
@@ -85,11 +85,11 @@ pub fn add_bus(rig: &mut Rig, name: &str) -> Result<TrackId> {
 /// Sends a track's (or bus's) output into `bus`, or back to the master
 /// with `None`. Bus chains that would loop are refused.
 ///
-/// Made of: push `SetTrackOutput`; marks the rig for a sync.
+/// Made of: push `SetTrackOutput`; marks the rig for a rebuild.
 pub fn route(rig: &mut Rig, track: TrackId, bus: Option<TrackId>) -> Result<()> {
     rig.history
         .push(&mut rig.session, SetTrackOutput::new(track, bus))?;
-    rig.needs_sync = true;
+    rig.needs_rebuild = true;
     Ok(())
 }
 
@@ -97,7 +97,7 @@ pub fn route(rig: &mut Rig, track: TrackId, bus: Option<TrackId>) -> Result<()> 
 /// after the fader.
 ///
 /// Made of: `Session::allocate_send_id` → `TrackSend::with_id` → push
-/// `AddSend`; marks the rig for a sync.
+/// `AddSend`; marks the rig for a rebuild.
 pub fn add_send(
     rig: &mut Rig,
     track: TrackId,
@@ -112,16 +112,16 @@ pub fn add_send(
     }
     rig.history
         .push(&mut rig.session, AddSend::new(track, send))?;
-    rig.needs_sync = true;
+    rig.needs_rebuild = true;
     Ok(id)
 }
 
 /// Removes a send.
 ///
-/// Made of: push `RemoveSend`; marks the rig for a sync.
+/// Made of: push `RemoveSend`; marks the rig for a rebuild.
 pub fn remove_send(rig: &mut Rig, send: SendId) -> Result<()> {
     rig.history.push(&mut rig.session, RemoveSend::new(send))?;
-    rig.needs_sync = true;
+    rig.needs_rebuild = true;
     Ok(())
 }
 
@@ -153,7 +153,7 @@ pub fn set_send_enabled(rig: &mut Rig, send: SendId, on: bool) -> Result<()> {
 }
 
 /// Reads and resets a strip's peak meter: the loudest sample per channel
-/// since the last call, as linear amplitude. `None` before the first sync.
+/// since the last call, as linear amplitude. `None` before the first rebuild.
 ///
 /// Made of: `StripParams::take_peak` for channels 0 and 1.
 pub fn peak(rig: &Rig, track: TrackId) -> Option<[f32; 2]> {
@@ -187,13 +187,13 @@ mod tests {
         )
         .unwrap();
         // Balance pan law on every strip keeps the arithmetic obvious.
-        play::sync(&mut rig).unwrap();
+        play::rebuild(&mut rig).unwrap();
         (rig, vox)
     }
 
     /// Level of the last sample after enough blocks for ramps to settle.
     fn settled(rig: &mut Rig) -> f32 {
-        let audio = play::advance(rig, 4).unwrap();
+        let audio = play::drive(rig, 4).unwrap();
         audio.channel(0)[audio.frames() - 1]
     }
 
@@ -217,12 +217,12 @@ mod tests {
         assert!((rig.session.track(vox).unwrap().gain_db + 6.0206).abs() < 1e-6);
         assert!(
             (settled(&mut rig) - 0.25).abs() < 1e-3,
-            "heard without a sync"
+            "heard without a rebuild"
         );
-        assert!(!rig.needs_sync);
+        assert!(!rig.needs_rebuild);
 
         set_pan(&mut rig, vox, -1.0).unwrap();
-        let audio = play::advance(&mut rig, 4).unwrap();
+        let audio = play::drive(&mut rig, 4).unwrap();
         assert!((audio.channel(0)[255] - 0.25).abs() < 1e-3);
         assert!(
             audio.channel(1)[255].abs() < 1e-6,
@@ -236,7 +236,7 @@ mod tests {
         set_mute(&mut rig, vox, false).unwrap();
 
         let other = session::add_track(&mut rig, "other", TrackKind::Audio).unwrap();
-        play::sync(&mut rig).unwrap();
+        play::rebuild(&mut rig).unwrap();
         balance_all(&rig);
         set_solo(&mut rig, other, true).unwrap();
         assert!(
@@ -264,11 +264,11 @@ mod tests {
         let direct = settled(&mut rig);
 
         let room = add_bus(&mut rig, "room").unwrap();
-        assert!(rig.needs_sync);
+        assert!(rig.needs_rebuild);
         let send = add_send(&mut rig, vox, room, 0.0, false).unwrap();
         assert_eq!(rig.session.send(send).unwrap().bus(), room);
         assert!(!rig.session.send(send).unwrap().pre_fader);
-        play::sync(&mut rig).unwrap();
+        play::rebuild(&mut rig).unwrap();
         balance_all(&rig);
         assert!(
             (settled(&mut rig) - direct * 2.0).abs() < 1e-3,
@@ -289,7 +289,7 @@ mod tests {
 
         // Route the track through the bus and turn the bus down.
         route(&mut rig, vox, Some(room)).unwrap();
-        play::sync(&mut rig).unwrap();
+        play::rebuild(&mut rig).unwrap();
         balance_all(&rig);
         set_gain_db(&mut rig, room, -6.0206).unwrap();
         assert!((settled(&mut rig) - direct * 0.5).abs() < 1e-3);
@@ -301,7 +301,7 @@ mod tests {
         remove_send(&mut rig, send).unwrap();
         assert!(rig.session.send(send).is_err());
         route(&mut rig, vox, None).unwrap();
-        play::sync(&mut rig).unwrap();
+        play::rebuild(&mut rig).unwrap();
         balance_all(&rig);
         assert!((settled(&mut rig) - direct).abs() < 1e-3);
     }
@@ -311,7 +311,7 @@ mod tests {
         let (mut rig, vox) = tone_rig();
         assert!(peak(&rig, TrackId::from_raw(99)).is_none());
         play::start(&mut rig).unwrap();
-        play::advance(&mut rig, 4).unwrap();
+        play::drive(&mut rig, 4).unwrap();
         let [l, r] = peak(&rig, vox).unwrap();
         assert!(l > 0.3 && r > 0.3, "{l} {r}");
         // Reading resets the hold; nothing rendered since, so zero.

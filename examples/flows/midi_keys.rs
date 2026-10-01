@@ -27,24 +27,24 @@ fn main() -> Result<()> {
     println!("monitoring: {}", midi::is_monitoring(&rig, keys));
     println!(
         "silence before any note: {}",
-        play::advance(&mut rig, 2)?.is_silent()
+        play::drive(&mut rig, 2)?.is_silent()
     );
 
     // Middle C, then a chord on top. Channel 0, velocity 100.
     midi::play_note(&mut rig, 0, 60, 100)?;
-    let audio = play::advance(&mut rig, 8)?;
+    let audio = play::drive(&mut rig, 8)?;
     println!("C4 sounding, peak {:.3}", audio.peak());
     for note in [64, 67] {
         midi::play_note(&mut rig, 0, note, 90)?;
     }
-    let audio = play::advance(&mut rig, 8)?;
+    let audio = play::drive(&mut rig, 8)?;
     println!("C major chord, peak {:.3}", audio.peak());
 
     // Release everything. The instrument stops at once (no release tail).
     for note in [60, 64, 67] {
         midi::release_note(&mut rig, 0, note)?;
     }
-    let audio = play::advance(&mut rig, 4)?;
+    let audio = play::drive(&mut rig, 4)?;
     println!("after release, last block silent: {}", {
         let block = rig.engine.max_frames();
         audio.channel(0)[audio.frames() - block..]
@@ -80,12 +80,12 @@ fn main() -> Result<()> {
         }
     }
 
-    // Monitoring off: the instrument leaves the console at the next sync.
+    // Monitoring off: the instrument leaves the console at the next rebuild.
     midi::monitor(&mut rig, keys, false)?;
     midi::play_note(&mut rig, 0, 60, 100)?;
     println!(
         "monitor off, note ignored: {}",
-        play::advance(&mut rig, 4)?.is_silent()
+        play::drive(&mut rig, 4)?.is_silent()
     );
     Ok(())
 }

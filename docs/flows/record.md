@@ -19,7 +19,7 @@ from any source.
 | `armed_tracks(rig)` / `is_recording(rig)` | |
 | `start(rig, &InputConfig)` (feature `devices`) | open a hardware input, spawn a collector thread, begin at the playhead |
 | `start_from(rig, CaptureConsumer, channels)` | begin from a queue you fill yourself; blocks wait for `collect` |
-| `collect(rig) -> frames` | move waiting blocks into a manual take (`play::advance` does this); nothing to do for a threaded one |
+| `collect(rig) -> frames` | move waiting blocks into a manual take (`play::drive` does this); nothing to do for a threaded one |
 | `stop(rig) -> Vec<ClipId>` | stop the transport, collect, store the take, place clips ("Record take") |
 
 ## Steps (`record::steps`)
@@ -54,7 +54,7 @@ let (mut mic, blocks) = capture_queue(1, 256, 64)?;
 record::start_from(&mut rig, blocks, 1)?;
 for block in my_audio_blocks() {
     mic.push(&block, timestamp_us);
-    play::advance(&mut rig, 1)?;          // renders and collects
+    play::drive(&mut rig, 1)?;          // renders and collects
 }
 let clips = record::stop(&mut rig)?;      // one clip per armed track
 ```
@@ -71,18 +71,18 @@ let clips = record::stop(&mut rig)?;
 ## Made of
 
 `start_from` (and `start` after opening the input and spawning the
-collector): `armed_tracks` → `play::sync` if needed →
+collector): `armed_tracks` → `play::rebuild` if needed →
 `LiveEngine::send(Record)` → `play::position` for the punch-in. `stop`:
 `LiveEngine::send(Stop)` → drop the stream → `collect` or
 `Collector::finish` → `finish_take` →
 `take_name` → `AudioCache::insert` → `UndoStack::begin_group` →
-`add_audio_clip` per track → `end_group`, `needs_sync`.
+`add_audio_clip` per track → `end_group`, `needs_rebuild`.
 
 ## Notes
 
 * The queue holds only a fraction of a second (`start` uses 64 blocks),
   which is why a device capture gets a collector thread. A manual capture
-  relies on `play::advance` collecting after every block.
+  relies on `play::drive` collecting after every block.
   `Recording::dropped` tells you if blocks were lost either way.
 * The take is placed at the punch-in position on every track that was
   armed when the take began, with the same audio. Per-track inputs are not

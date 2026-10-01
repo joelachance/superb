@@ -7,7 +7,7 @@ flow has its own note in `docs/flows/`.
 | flow | doc |
 |---|---|
 | `session` — new, open, save; tracks, clips, markers, tempo, loop; undo | [session.md](flows/session.md) |
-| `play` — sync the console, start, stop, seek, loop, render offline or on a device | [play.md](flows/play.md) |
+| `play` — rebuild the console, start, stop, seek, loop, render offline or on a device | [play.md](flows/play.md) |
 | `mix` — faders, pan, mute, solo, buses, sends, routing, meters | [mix.md](flows/mix.md) |
 | `midi` — monitor a MIDI track, send notes, connect a keyboard | [midi.md](flows/midi.md) |
 | `record` — arm, capture a take, place clips | [record.md](flows/record.md) |
@@ -41,10 +41,10 @@ pub struct Rig {
     pub cache: AudioCache,           // audio in memory, keyed by the path clips use
     pub engine: LiveEngine,          // control handle: commands, graph swaps, position
     pub engine_loop: Option<EngineLoop>, // the audio side, until a device takes it
-    pub live: LiveHandles,           // strip, send and plugin handles from the last sync
+    pub live: LiveHandles,           // strip, send and plugin handles from the last rebuild
     pub recording: Option<Recording>,
     pub channels: usize,             // 2 = stereo
-    pub needs_sync: bool,
+    pub needs_rebuild: bool,
     pub output: Option<OutputStream>,          // feature devices
     pub midi_inputs: Vec<MidiInputBridge>,      // feature midi-io
     pub plugins: PluginLoader,
@@ -54,22 +54,22 @@ pub struct Rig {
 `session::create` or `session::open` makes one; `Rig::new` wraps a
 `Session` you already have.
 
-## Syncing
+## Rebuilding the console
 
 The console the engine runs is built from the session. Edits that change its
 *shape* (a new track, a clip moved, a send, a route, an insert, monitoring
-on a MIDI track) set `rig.needs_sync`. `play::sync` rebuilds the console
+on a MIDI track) set `rig.needs_rebuild`. `play::rebuild` rebuilds the console
 and publishes it as a whole prepared graph; the engine swaps it in between
-two blocks. `play::start`, `play::advance` and `record::start_from` sync
-for you when the flag is set, so most programs never call `sync` directly.
+two blocks. `play::start`, `play::drive` and `record::start_from` rebuild
+for you when the flag is set, so most programs never call `rebuild` directly.
 Call it yourself when you want to choose the moment the swap happens.
 
 Edits to a *level* (gain, pan, mute, solo, send level, plugin parameter) do
-not need a sync: the flow writes them to the document and to the live
+not need a rebuild: the flow writes them to the document and to the live
 handle in `rig.live` at once, and they are heard on the next block.
 
-After a sync, `rig.live` points at the new console. Handles from before are
-stale; do not keep them across a sync.
+After a rebuild, `rig.live` points at the new console. Handles from before are
+stale; do not keep them across a rebuild.
 
 ## Edits and switches
 
@@ -93,12 +93,12 @@ tells the history that the saved state is gone, so `is_saved` turns false.
 `play::start`, `stop`, `seek` and friends send a command over a queue.
 The engine applies it at the start of its next block, so reading
 `play::state` immediately after `play::start` still shows `Stopped`. With
-`play::advance` the next block is the one you render; on a device it is a
+`play::drive` the next block is the one you render; on a device it is a
 few milliseconds away.
 
 ## Without hardware
 
-Everything runs without an audio device. `play::advance(&mut rig, blocks)`
+Everything runs without an audio device. `play::drive(&mut rig, blocks)`
 ticks the engine loop by hand and hands you the audio, which is how the
 tests and most examples hear the rig. `export` renders through its own
 offline engine. `record::start_from` accepts any capture producer, so a
@@ -110,6 +110,6 @@ take can come from a file or a generator. With the `devices` feature,
 
 A verb earns its place by replacing at least three primitive calls or by
 hiding an ordering hazard. Put the shared parts in `steps`, end every verb
-doc with **Made of:**, set `needs_sync` for structural edits, flip switches
+doc with **Made of:**, set `needs_rebuild` for structural edits, flip switches
 through `session::switch`, add tests that run without hardware and an
 example under `examples/flows/`. See [CONTRIBUTING.md](../CONTRIBUTING.md).

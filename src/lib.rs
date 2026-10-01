@@ -39,7 +39,7 @@
 //! mix::set_gain_db(&mut rig, lead, -6.0)?;
 //!
 //! play::start(&mut rig)?;                    // builds the console, starts the transport
-//! let audio = play::advance(&mut rig, 4)?;   // renders 4 blocks of 256 frames
+//! let audio = play::drive(&mut rig, 4)?;   // renders 4 blocks of 256 frames
 //! assert_eq!(audio.frames(), 1_024);
 //! assert!(audio.peak() > 0.05);
 //! # Ok::<(), SuperbError>(())
@@ -151,7 +151,7 @@ mod tests {
         let _ = PluginDescriptor::new(crate::primitives::plugins::PluginFormat::Clap, "id", "name");
         let mut mixer = Mixer::new(2);
         let mut bridge = crate::play::SessionMixerBridge::new();
-        assert_eq!(bridge.sync(&session, &mut mixer), 0);
+        assert_eq!(bridge.bind(&session, &mut mixer), 0);
         assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 0);
         let _ = TrackSend::new(track);
     }

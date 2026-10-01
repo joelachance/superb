@@ -36,7 +36,7 @@ cargo doc --no-deps
   no-alloc test under `tests/`.
 - No unsafe outside `primitives::realtime::{alloc, spsc}` and
   `primitives::plugins::clap`.
-- Structural edits set `rig.needs_sync`; switches (mute, solo, arm,
+- Structural edits set `rig.needs_rebuild`; switches (mute, solo, arm,
   bypass) go through `session::switch` and never enter the undo history;
   level edits reach the document and the live handle.
 - Every public item is documented; update the doc note and the example

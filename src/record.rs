@@ -5,7 +5,7 @@
 //! queue holds only a fraction of a second. With a device (`start`) a
 //! collector thread does the emptying. With a source of your own
 //! ([`start_from`]) the blocks wait until [`collect`] runs, which
-//! [`play::advance`] does after every block. [`stop`] puts the take in the
+//! [`play::drive`] does after every block. [`stop`] puts the take in the
 //! audio cache and places a clip on every armed track, as one undo step.
 //!
 //! Made of `superb::primitives::io::capture` (the queue),
@@ -68,7 +68,7 @@ impl core::fmt::Debug for Recording {
 /// How a take's blocks get from the capture queue into memory.
 pub enum Capture {
     /// Blocks wait on the queue until [`collect`] moves them into `planes`.
-    /// [`play::advance`] collects after every block it renders; with a
+    /// [`play::drive`] collects after every block it renders; with a
     /// device driving the engine you would call [`collect`] from a timer.
     Manual {
         /// The queue's consumer end.
@@ -200,10 +200,10 @@ pub fn start(rig: &mut Rig, input: &crate::primitives::io::device::InputConfig) 
 
 /// Starts recording from a capture queue you fill yourself (a file, a
 /// generator, a test), onto every armed track from the current playhead.
-/// Blocks wait on the queue until [`collect`] runs; [`play::advance`] does
+/// Blocks wait on the queue until [`collect`] runs; [`play::drive`] does
 /// that after every block, so an offline program never calls it.
 ///
-/// Made of: [`armed_tracks`] → [`play::sync`] when needed →
+/// Made of: [`armed_tracks`] → [`play::rebuild`] when needed →
 /// `LiveEngine::send(Record)` → [`play::position`] for the punch-in.
 pub fn start_from(rig: &mut Rig, blocks: CaptureConsumer, channels: usize) -> Result<()> {
     begin(
@@ -229,8 +229,8 @@ fn begin(rig: &mut Rig, capture: Capture, channels: usize) -> Result<()> {
             "arm an audio track before recording".into(),
         ));
     }
-    if rig.needs_sync {
-        play::sync(rig)?;
+    if rig.needs_rebuild {
+        play::rebuild(rig)?;
     }
     rig.engine.send(EngineCommand::Record)?;
     rig.recording = Some(Recording {
@@ -267,7 +267,7 @@ pub fn collect(rig: &mut Rig) -> usize {
 /// Made of: `LiveEngine::send(Stop)` → drop the input stream →
 /// [`steps::collect`] or `Collector::finish` → [`steps::finish_take`] →
 /// [`steps::take_name`] → [`steps::store_take`] → [`steps::place_clip`] per
-/// track inside an undo group; marks the rig for a sync so the take plays
+/// track inside an undo group; marks the rig for a rebuild so the take plays
 /// back on its strip.
 pub fn stop(rig: &mut Rig) -> Result<Vec<ClipId>> {
     let recording = rig
@@ -314,7 +314,7 @@ pub fn stop(rig: &mut Rig) -> Result<Vec<ClipId>> {
         }
     }
     rig.history.end_group();
-    rig.needs_sync = true;
+    rig.needs_rebuild = true;
     Ok(clips)
 }
 
@@ -480,7 +480,7 @@ mod tests {
 
         // Roll to 640 frames, then punch in there.
         play::start(&mut rig).unwrap();
-        play::advance(&mut rig, 10).unwrap();
+        play::drive(&mut rig, 10).unwrap();
         let (mut mic, blocks) = capture_queue(1, 64, 16).unwrap();
         start_from(&mut rig, blocks, 1).unwrap();
         assert!(is_recording(&rig));
@@ -488,7 +488,7 @@ mod tests {
             rig.recording.as_ref().unwrap().punch_in,
             TimePosition::from_samples(640)
         );
-        play::advance(&mut rig, 5).unwrap();
+        play::drive(&mut rig, 5).unwrap();
         assert_eq!(
             play::state(&rig),
             crate::primitives::transport::TransportState::Recording
@@ -510,14 +510,14 @@ mod tests {
         assert_eq!(rig.history.undo_label(), Some("Record take"));
 
         // Stopping stopped the transport; the take plays back from its place.
-        play::advance(&mut rig, 1).unwrap();
+        play::drive(&mut rig, 1).unwrap();
         assert_eq!(
             play::state(&rig),
             crate::primitives::transport::TransportState::Stopped
         );
         play::seek(&mut rig, TimePosition::from_samples(640)).unwrap();
         play::start(&mut rig).unwrap();
-        let heard = play::advance(&mut rig, 4).unwrap();
+        let heard = play::drive(&mut rig, 4).unwrap();
         assert!(heard.channel(0)[200].abs() > 0.2, "two tracks of the take");
         assert_eq!(rig.live.strips.len(), 3, "one handle per track");
 
@@ -663,7 +663,7 @@ mod tests {
             feed(&mut mic, 1, 0.5);
             // Advancing the engine collects for us (a UI timer would call
             // `collect` when a device drives the engine).
-            play::advance(&mut rig, 1).unwrap();
+            play::drive(&mut rig, 1).unwrap();
             assert_eq!(rig.recording.as_ref().unwrap().frames(), (i + 1) * 64);
         }
         assert_eq!(rig.recording.as_ref().unwrap().dropped(), 0);

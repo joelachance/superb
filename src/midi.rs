@@ -18,10 +18,10 @@ use crate::rig::Rig;
 /// carries an instrument that plays whatever MIDI reaches the engine. A
 /// switch: saved with the session (as the track's arm flag), not an undo
 /// step. It does change the console's shape, so it takes effect at the next
-/// sync.
+/// rebuild.
 ///
 /// Made of: `Track::armed` through `session::switch`; marks the rig for a
-/// sync (the instrument is a node in the console).
+/// rebuild (the instrument is a node in the console).
 pub fn monitor(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
     if rig.session.track(track)?.kind != TrackKind::Midi {
         return Err(SuperbError::InvalidArgument {
@@ -32,7 +32,7 @@ pub fn monitor(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
         s.track_mut(track)?.armed = on;
         Ok(())
     })?;
-    rig.needs_sync = true;
+    rig.needs_rebuild = true;
     Ok(())
 }
 
@@ -116,20 +116,20 @@ mod tests {
         assert!(is_monitoring(&rig, keys));
         play::start(&mut rig).unwrap();
         // Nothing played yet: silence.
-        assert!(play::advance(&mut rig, 2).unwrap().is_silent());
+        assert!(play::drive(&mut rig, 2).unwrap().is_silent());
         play_note(&mut rig, 0, 69, 100).unwrap();
-        let sounding = play::advance(&mut rig, 4).unwrap();
+        let sounding = play::drive(&mut rig, 4).unwrap();
         assert!(sounding.peak() > 0.5, "peak {}", sounding.peak());
         release_note(&mut rig, 0, 69).unwrap();
-        let released = play::advance(&mut rig, 4).unwrap();
+        let released = play::drive(&mut rig, 4).unwrap();
         assert!(released.channel(0)[128..].iter().all(|&s| s == 0.0));
-        // Turning monitoring off removes the instrument at the next sync.
+        // Turning monitoring off removes the instrument at the next rebuild.
         // It is a switch: nothing lands in the undo history.
         let steps = rig.history.undo_len();
         monitor(&mut rig, keys, false).unwrap();
         assert_eq!(rig.history.undo_len(), steps);
         play_note(&mut rig, 0, 69, 100).unwrap();
-        assert!(play::advance(&mut rig, 4).unwrap().is_silent());
+        assert!(play::drive(&mut rig, 4).unwrap().is_silent());
     }
 
     #[test]

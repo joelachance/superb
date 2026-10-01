@@ -3,7 +3,7 @@
 //!
 //! Everything here needs a feature: `devices` for audio, `midi-io` for
 //! MIDI ports. Without them the module is empty and the rig renders through
-//! [`play::advance`](crate::play::advance) or [`export`](crate::export).
+//! [`play::drive`](crate::play::drive) or [`export`](crate::export).
 //!
 //! Made of `superb::primitives::io::device` and `superb::primitives::midi::input`.
 

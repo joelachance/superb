@@ -13,7 +13,7 @@ port.
 
 | verb | does |
 |---|---|
-| `monitor(rig, track, on)` | switch monitoring on a MIDI track (saved, not undoable, needs sync); audio tracks are refused |
+| `monitor(rig, track, on)` | switch monitoring on a MIDI track (saved, not undoable, needs rebuild); audio tracks are refused |
 | `is_monitoring(rig, track)` | |
 | `play_note(rig, channel, note, velocity)` / `release_note(rig, channel, note)` | queue a note for the next block |
 | `send(rig, MidiMessage)` | queue any message |
@@ -30,14 +30,14 @@ let keys = session::add_track(&mut rig, "keys", TrackKind::Midi)?;
 midi::monitor(&mut rig, keys, true)?;
 play::start(&mut rig)?;
 midi::play_note(&mut rig, 0, 60, 100)?;
-let audio = play::advance(&mut rig, 8)?;        // middle C on the keys strip
+let audio = play::drive(&mut rig, 8)?;        // middle C on the keys strip
 midi::release_note(&mut rig, 0, 60)?;
 ```
 
 ## Made of
 
 `monitor`: `Track::armed` through `session::switch` (a MIDI track's
-"armed" flag means monitoring), `needs_sync`. `play_note` / `release_note`:
+"armed" flag means monitoring), `needs_rebuild`. `play_note` / `release_note`:
 `MidiMessage::note_on` / `note_off` → `send`. `send`:
 `LiveEngine::push_midi` with a zero timestamp. `connect_input`:
 `MidiInputBridge::connect` → `LiveEngine::send(EngineCommand::AddMidiInput)`.

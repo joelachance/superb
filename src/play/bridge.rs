@@ -39,7 +39,7 @@ impl SessionMixerBridge {
         Self::default()
     }
 
-    /// Session revision last seen by [`sync`](Self::sync) /
+    /// Session revision last seen by [`bind`](Self::bind) /
     /// [`apply_strip_params`](Self::apply_strip_params) /
     /// [`apply_routing`](Self::apply_routing).
     pub fn session_revision(&self) -> u64 {
@@ -103,7 +103,7 @@ impl SessionMixerBridge {
     ///
     /// Routing is not touched here; call [`apply_routing`](Self::apply_routing)
     /// afterwards. Returns the number of newly created mixer objects.
-    pub fn sync(&mut self, session: &Session, mixer: &mut Mixer) -> usize {
+    pub fn bind(&mut self, session: &Session, mixer: &mut Mixer) -> usize {
         // Drop stale bindings.
         self.entries.retain(|(sid, _)| session.track(*sid).is_ok());
 
@@ -188,7 +188,7 @@ impl SessionMixerBridge {
     ///   mixer sends whose session send disappeared are removed. Send level
     ///   / enable are mirrored as well.
     ///
-    /// Call after [`sync`](Self::sync) so every bus is bound. Returns the
+    /// Call after [`bind`](Self::bind) so every bus is bound. Returns the
     /// number of structural mixer edits (re-routes, sends added or
     /// removed); when it is non-zero the mixer needs a `prepare` before the
     /// next `process`. Strip-parameter mirroring is *not* part of this
@@ -309,8 +309,8 @@ mod tests {
 
         let mut mixer = Mixer::new(2);
         let mut bridge = SessionMixerBridge::new();
-        assert_eq!(bridge.sync(&session, &mut mixer), 3);
-        assert_eq!(bridge.sync(&session, &mut mixer), 0); // idempotent
+        assert_eq!(bridge.bind(&session, &mut mixer), 3);
+        assert_eq!(bridge.bind(&session, &mut mixer), 0); // idempotent
 
         assert_eq!(mixer.tracks().len(), 2);
         assert!(bridge.mixer_track(audio).is_some());
@@ -329,7 +329,7 @@ mod tests {
 
         let mut mixer = Mixer::new(2);
         let mut bridge = SessionMixerBridge::new();
-        bridge.sync(&session, &mut mixer);
+        bridge.bind(&session, &mut mixer);
         bridge.apply_strip_params(&session, &mixer);
 
         let mid = bridge.mixer_track(id).unwrap();
@@ -345,10 +345,10 @@ mod tests {
         let id = session.add_track("lead", TrackKind::Audio);
         let mut mixer = Mixer::new(2);
         let mut bridge = SessionMixerBridge::new();
-        bridge.sync(&session, &mut mixer);
+        bridge.bind(&session, &mut mixer);
         let mid = bridge.mixer_track(id).unwrap();
         session.remove_track(id).unwrap();
-        assert_eq!(bridge.sync(&session, &mut mixer), 0);
+        assert_eq!(bridge.bind(&session, &mut mixer), 0);
         assert!(bridge.binding(id).is_none());
         assert_eq!(mixer.tracks().len(), 1);
         assert!(mixer.track(mid).is_ok());
@@ -366,7 +366,7 @@ mod tests {
 
         let mut mixer = Mixer::new(2);
         let mut bridge = SessionMixerBridge::new();
-        bridge.sync(&session, &mut mixer);
+        bridge.bind(&session, &mut mixer);
         assert_eq!(
             bridge.apply_routing(&session, &mut mixer).unwrap(),
             2,
@@ -399,11 +399,11 @@ mod tests {
         assert_eq!(mixer.bus(m_sub).unwrap().output, Some(mixer.master()));
 
         // Removing the session bus detaches in the document; the mixer bus
-        // stays (sync never removes strips) but nothing routes into it.
+        // stays (bind never removes strips) but nothing routes into it.
         session.set_track_output(lead, Some(room)).unwrap();
         bridge.apply_routing(&session, &mut mixer).unwrap();
         session.remove_track(room).unwrap();
-        bridge.sync(&session, &mut mixer);
+        bridge.bind(&session, &mut mixer);
         assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 1);
         assert_eq!(mixer.track(m_lead).unwrap().output, mixer.master());
         assert!(mixer.bus(m_room).is_ok());
@@ -426,7 +426,7 @@ mod tests {
 
         let mut mixer = Mixer::new(2);
         let mut bridge = SessionMixerBridge::new();
-        bridge.sync(&session, &mut mixer);
+        bridge.bind(&session, &mut mixer);
         assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 2);
         assert_eq!(mixer.sends().len(), 2);
         let ma = bridge.mixer_send(a).unwrap();
@@ -474,7 +474,7 @@ mod tests {
         // Removing the destination bus drops the send in the document and
         // therefore in the mixer; the mixer bus itself stays.
         session.remove_track(room).unwrap();
-        bridge.sync(&session, &mut mixer);
+        bridge.bind(&session, &mut mixer);
         assert_eq!(bridge.apply_routing(&session, &mut mixer).unwrap(), 1);
         assert!(mixer.sends().is_empty());
         assert!(bridge.send_entries().is_empty());
@@ -490,7 +490,7 @@ mod tests {
         session.add_send(lead, TrackSend::new(fx)).unwrap();
         let mut mixer = Mixer::new(2);
         let mut bridge = SessionMixerBridge::new();
-        bridge.sync(&session, &mut mixer);
+        bridge.bind(&session, &mut mixer);
         bridge.apply_routing(&session, &mut mixer).unwrap();
         // The app tears down the bus and the strip behind the bridge's back.
         mixer.remove_bus(bridge.mixer_bus(fx).unwrap()).unwrap();

@@ -7,7 +7,7 @@ Starting a session, putting things in it, saving it, undoing.
 `session` owns the document side of a `Rig`: it creates and opens rigs,
 and every edit to the session's *structure* goes through it. Each edit is an
 undoable command on `rig.history`; structural ones also mark the rig for a
-sync so the console follows.
+rebuild so the console follows.
 
 ## Verbs
 
@@ -22,7 +22,7 @@ sync so the console follows.
 | `add_marker(rig, name, at)` | | one |
 | `set_tempo(rig, bpm)` | initial tempo of the tempo map | one |
 | `set_loop(rig, Option<LoopRange>)` | the session's loop range; also told to the engine | one |
-| `undo(rig)` / `redo(rig)` | return `false` when there is nothing to do; mark the rig for a sync | |
+| `undo(rig)` / `redo(rig)` | return `false` when there is nothing to do; mark the rig for a rebuild | |
 | `import_audio(rig, track, path, at)` (feature `files`) | decode, resample to the session's rate, cache, place a clip of the full length | one |
 
 The crate-private helpers `edit`, `structural` and `switch` are how the

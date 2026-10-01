@@ -41,9 +41,9 @@ a musician would use.
 - **Real-time (RT)** — The audio callback must finish filling the next buffer before the interface needs it, or you hear clicks/dropouts. It is **not** a pub/sub event bus. Closer to: hardware demands audio on a schedule; UI *pushes* parameter changes into atomics/queues the callback *pulls*.
 - **Control / UI thread** — Where you click Play, drag a fader, edit clips. That work is allowed to allocate and wait. It must not do heavy DSP inside the audio callback.
 - **Signal path (we also say "graph")** — The wiring of processors. Same idea as inserts, sends, and buses on a console.
-- **Sync** — In Superb, rebuilding the console from the session and swapping it into the running engine. Happens for you when you start playing; structural edits mark it as needed.
+- **Rebuild** — In Superb, rebuilding the console from the session and swapping it into the running engine. Happens for you when you start playing; structural edits mark it as needed.
 - **Take** — One pass of recording. It lands in the audio cache and becomes a clip on each armed track.
-- **Insert** — An effect or instrument sitting in a track's signal path, in order. Stored in the session; instantiated at sync.
+- **Insert** — An effect or instrument sitting in a track's signal path, in order. Stored in the session; instantiated at rebuild.
 - **Switch vs. edit** — Mute, solo, arm, monitoring, bypass and send on/off are switches: saved with the session, heard at once, never undo steps. Everything else you change in the session is an edit and can be undone.
 
 ## Plugin formats (short map)

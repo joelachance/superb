@@ -30,7 +30,7 @@ fn main() -> Result<()> {
 
     // Roll the transport a second in, then punch in there.
     play::start(&mut rig)?;
-    play::advance(&mut rig, rate.hz() as usize / block)?;
+    play::drive(&mut rig, rate.hz() as usize / block)?;
     println!(
         "punching in at {:.3} s",
         play::position(&rig).to_seconds(rate)
@@ -46,7 +46,7 @@ fn main() -> Result<()> {
     // Half a second of "singing" (a 440 Hz tone), one block at a time,
     // while the engine keeps rolling. On a device both sides run on their
     // own threads; here they take turns. The queue is small, so the take
-    // has to be collected as it goes: `play::advance` does that for a
+    // has to be collected as it goes: `play::drive` does that for a
     // manual capture (a device capture has its own collector thread).
     let mut phase = 0.0f32;
     let mut sung = PlanarBuffer::new(1, block);
@@ -58,7 +58,7 @@ fn main() -> Result<()> {
         }
         let timestamp_us = (n * block) as u64 * 1_000_000 / rate.hz() as u64;
         mic.push(&sung, timestamp_us);
-        play::advance(&mut rig, 1)?;
+        play::drive(&mut rig, 1)?;
         if n == blocks / 2 {
             println!(
                 "half way ({:?}): {} frames collected, {} dropped",
@@ -88,7 +88,7 @@ fn main() -> Result<()> {
     // Hear it back from the punch-in point.
     play::seek(&mut rig, TimePosition::from_seconds(1.0, rate))?;
     play::start(&mut rig)?;
-    let heard = play::advance(&mut rig, 8)?;
+    let heard = play::drive(&mut rig, 8)?;
     println!("playback of the take, peak {:.3}", heard.peak());
 
     // Undo removes the clip (the audio stays in the cache).

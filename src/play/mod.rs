@@ -1,10 +1,10 @@
 //! Playing the session: build the console from the document, hand it to the
 //! running engine, and drive the transport.
 //!
-//! The engine never sees the document. [`sync`] turns the session into a
+//! The engine never sees the document. [`rebuild`] turns the session into a
 //! [`Mixer`](crate::primitives::mixer::Mixer) (tracks, buses, sends, clip players, live instruments, plugin
 //! inserts) and publishes its graph to the engine, which swaps it in
-//! between two blocks without a glitch. Flows that start audio call `sync`
+//! between two blocks without a glitch. Flows that start audio call `rebuild`
 //! when the rig says it is needed; call it yourself to hear an edit at once.
 //!
 //! Made of `superb::primitives::io::live` (the running engine),
@@ -33,11 +33,11 @@ use crate::rig::{LiveHandles, Rig};
 /// this thread) → [`steps::build_console`] → [`steps::attach_inserts`] →
 /// [`steps::collect_handles`] → [`steps::publish`], and while the engine
 /// loop is still in the rig, `LiveGraph::apply_pending` so the swap does not
-/// wait for an [`advance`]. Afterwards
+/// wait for an [`drive`]. Afterwards
 /// [`Rig::live`] points at the new strips, sends and plugins, and
-/// [`Rig::needs_sync`] is clear. Inserts whose plugin failed to load are
+/// [`Rig::needs_rebuild`] is clear. Inserts whose plugin failed to load are
 /// listed in `live.failed_inserts`; the rest of the console runs.
-pub fn sync(rig: &mut Rig) -> Result<()> {
+pub fn rebuild(rig: &mut Rig) -> Result<()> {
     rig.engine.reclaim();
     let (mut mixer, player) = steps::build_console(&rig.session, &rig.cache, rig.channels)?;
     let (inserts, failed_inserts) =
@@ -46,7 +46,7 @@ pub fn sync(rig: &mut Rig) -> Result<()> {
     steps::publish(&mut rig.engine, mixer)?;
     if let Some(engine_loop) = rig.engine_loop.as_mut() {
         // Nothing is pulling audio yet, so nobody would swap the graph in
-        // before the next `advance`; do it now so syncs never back up.
+        // before the next `drive`; do it now so rebuilds never back up.
         engine_loop.engine_mut().processor_mut().apply_pending();
     }
     rig.live = LiveHandles {
@@ -56,16 +56,16 @@ pub fn sync(rig: &mut Rig) -> Result<()> {
         player: Some(player),
         failed_inserts,
     };
-    rig.needs_sync = false;
+    rig.needs_rebuild = false;
     Ok(())
 }
 
 /// Starts the transport from where it is. Syncs first if the session changed.
 ///
-/// Made of: [`sync`] when needed → `LiveEngine::send(Play)`.
+/// Made of: [`rebuild`] when needed → `LiveEngine::send(Play)`.
 pub fn start(rig: &mut Rig) -> Result<()> {
-    if rig.needs_sync {
-        sync(rig)?;
+    if rig.needs_rebuild {
+        rebuild(rig)?;
     }
     rig.engine.send(EngineCommand::Play)
 }
@@ -119,12 +119,12 @@ pub fn is_rolling(rig: &Rig) -> bool {
 /// headless renderer) hears the rig; once the loop has been moved into a
 /// device stream it fails with a message saying so.
 ///
-/// Made of: [`sync`] when needed → `EngineLoop::tick` per block, with
+/// Made of: [`rebuild`] when needed → `EngineLoop::tick` per block, with
 /// [`record::steps::collect`](crate::record::steps::collect) after each
 /// while a take is running.
-pub fn advance(rig: &mut Rig, blocks: usize) -> Result<PlanarBuffer> {
-    if rig.needs_sync {
-        sync(rig)?;
+pub fn drive(rig: &mut Rig, blocks: usize) -> Result<PlanarBuffer> {
+    if rig.needs_rebuild {
+        rebuild(rig)?;
     }
     let block = rig.engine.max_frames();
     let engine_loop = rig.engine_loop.as_mut().ok_or_else(|| {
@@ -144,17 +144,17 @@ pub fn advance(rig: &mut Rig, blocks: usize) -> Result<PlanarBuffer> {
 }
 
 /// Moves the engine loop into a real output stream and starts it. From then
-/// on the device drives the engine and [`advance`] is unavailable.
+/// on the device drives the engine and [`drive`] is unavailable.
 ///
-/// Made of: [`sync`] when needed → `EngineLoop::run_on_device`; the stream
+/// Made of: [`rebuild`] when needed → `EngineLoop::run_on_device`; the stream
 /// is kept in [`Rig::output`] and stops when dropped.
 #[cfg(feature = "devices")]
 pub fn start_output(
     rig: &mut Rig,
     config: &crate::primitives::io::device::OutputConfig,
 ) -> Result<()> {
-    if rig.needs_sync {
-        sync(rig)?;
+    if rig.needs_rebuild {
+        rebuild(rig)?;
     }
     let engine_loop = rig.engine_loop.take().ok_or_else(|| {
         SuperbError::Message("the engine loop is already running on a device stream".into())
@@ -168,7 +168,7 @@ pub fn start_output(
     }
 }
 
-/// The steps [`sync`] is made of, for building your own.
+/// The steps [`rebuild`] is made of, for building your own.
 pub mod steps {
     use crate::play::{MixerBinding, SessionPlayer};
     use crate::primitives::graph::nodes::MonoSynthNode;
@@ -330,12 +330,12 @@ mod tests {
     #[test]
     fn start_syncs_and_the_clip_is_heard_at_its_place() {
         let (mut rig, vox) = tone_rig();
-        assert!(rig.needs_sync);
+        assert!(rig.needs_rebuild);
         start(&mut rig).unwrap();
-        assert!(!rig.needs_sync);
+        assert!(!rig.needs_rebuild);
         assert!(rig.live.strip(vox).is_some());
         assert!(rig.live.player.is_some());
-        let audio = advance(&mut rig, 10).unwrap(); // 640 frames
+        let audio = drive(&mut rig, 10).unwrap(); // 640 frames
         assert_eq!(audio.frames(), 640);
         // Constant-power pan at centre: 0.5 * ~0.707 per side once the ramp settled.
         let level = audio.channel(0)[300].abs();
@@ -353,27 +353,27 @@ mod tests {
     fn stop_seek_rewind_and_loop() {
         let (mut rig, _) = tone_rig();
         seek(&mut rig, TimePosition::from_samples(1_000)).unwrap();
-        advance(&mut rig, 1).unwrap();
+        drive(&mut rig, 1).unwrap();
         assert_eq!(
             position(&rig),
             TimePosition::from_samples(1_000),
             "stopped: no motion"
         );
         start(&mut rig).unwrap();
-        advance(&mut rig, 2).unwrap();
+        drive(&mut rig, 2).unwrap();
         assert_eq!(position(&rig), TimePosition::from_samples(1_128));
         stop(&mut rig).unwrap();
-        advance(&mut rig, 1).unwrap();
+        drive(&mut rig, 1).unwrap();
         assert_eq!(state(&rig), TransportState::Stopped);
         rewind(&mut rig).unwrap();
-        advance(&mut rig, 1).unwrap();
+        drive(&mut rig, 1).unwrap();
         assert_eq!(position(&rig), TimePosition::ZERO);
 
         let range = LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(100)).unwrap();
         session::set_loop(&mut rig, Some(range)).unwrap();
         set_loop_enabled(&mut rig, true).unwrap();
         start(&mut rig).unwrap();
-        advance(&mut rig, 3).unwrap(); // 192 frames through a 100-frame loop
+        drive(&mut rig, 3).unwrap(); // 192 frames through a 100-frame loop
         assert_eq!(position(&rig), TimePosition::from_samples(92));
     }
 
@@ -381,9 +381,9 @@ mod tests {
     fn a_structural_edit_is_heard_after_the_next_sync() {
         let (mut rig, _) = tone_rig();
         start(&mut rig).unwrap();
-        let before = advance(&mut rig, 2).unwrap();
+        let before = drive(&mut rig, 2).unwrap();
         assert!(before.peak() > 0.3);
-        // Mute the track in the document: parameter-only, mirrored on sync.
+        // Mute the track in the document: parameter-only, mirrored on rebuild.
         let vox = rig.session.tracks()[0].id();
         rig.history
             .push(
@@ -392,16 +392,16 @@ mod tests {
             )
             .unwrap();
         rewind(&mut rig).unwrap();
-        sync(&mut rig).unwrap();
-        let after = advance(&mut rig, 3).unwrap();
+        rebuild(&mut rig).unwrap();
+        let after = drive(&mut rig, 3).unwrap();
         assert!(after.channel(0)[150..].iter().all(|&s| s.abs() < 1e-6));
-        // Removing the track marks a sync; `advance` runs it.
+        // Removing the track marks a rebuild; `drive` runs it.
         session::remove_track(&mut rig, vox).unwrap();
-        assert!(rig.needs_sync);
+        assert!(rig.needs_rebuild);
         rewind(&mut rig).unwrap();
-        let gone = advance(&mut rig, 2).unwrap();
+        let gone = drive(&mut rig, 2).unwrap();
         assert!(gone.is_silent());
-        assert!(!rig.needs_sync);
+        assert!(!rig.needs_rebuild);
         assert!(rig.live.strip(vox).is_none());
     }
 
@@ -427,6 +427,6 @@ mod tests {
     fn advance_fails_once_the_loop_has_left() {
         let (mut rig, _) = tone_rig();
         rig.engine_loop = None;
-        assert!(matches!(advance(&mut rig, 1), Err(SuperbError::Message(_))));
+        assert!(matches!(drive(&mut rig, 1), Err(SuperbError::Message(_))));
     }
 }
