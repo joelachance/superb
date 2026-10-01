@@ -14,7 +14,7 @@ from any source.
 
 | verb | does |
 |---|---|
-| `arm(rig, track, on)` | switch an audio track's arm (undoable); MIDI tracks are refused |
+| `arm(rig, track, on)` | switch an audio track's arm (saved, not undoable); MIDI tracks are refused |
 | `armed_tracks(rig)` / `is_recording(rig)` | |
 | `start(rig, &InputConfig)` (feature `devices`) | open a hardware input and begin at the playhead |
 | `collect(rig) -> frames` | move waiting blocks into the take; call regularly while a device drives the engine |

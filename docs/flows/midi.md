@@ -13,7 +13,7 @@ port.
 
 | verb | does |
 |---|---|
-| `monitor(rig, track, on)` | switch monitoring on a MIDI track (undoable, needs sync); audio tracks are refused |
+| `monitor(rig, track, on)` | switch monitoring on a MIDI track (saved, not undoable, needs sync); audio tracks are refused |
 | `is_monitoring(rig, track)` | |
 | `play_note(rig, channel, note, velocity)` / `release_note(rig, channel, note)` | queue a note for the next block |
 | `send(rig, MidiMessage)` | queue any message |
@@ -36,7 +36,7 @@ midi::release_note(&mut rig, 0, 60)?;
 
 ## Made of
 
-`monitor`: `set_track_armed` through `project::switch` (a MIDI track's
+`monitor`: `Track::armed` through `project::switch` (a MIDI track's
 "armed" flag means monitoring), `needs_sync`. `play_note` / `release_note`:
 `MidiMessage::note_on` / `note_off` → `send`. `send`:
 `LiveEngine::push_midi` with a zero timestamp. `connect_input`:

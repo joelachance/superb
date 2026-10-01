@@ -48,14 +48,21 @@ pub fn remove(rig: &mut Rig, insert: InsertId) -> Result<()> {
     Ok(())
 }
 
-/// Bypasses an insert (its input passes straight through) or brings it
-/// back. A bypassed insert is left out of the console entirely.
+/// Bypasses an insert (its input passes straight through, the plugin is
+/// not run) or brings it back. A switch, not an edit: it is saved with the
+/// session but not recorded in the undo history, and it is heard at the
+/// next block.
 ///
-/// Made of: push `set_insert_bypassed` (its own undo step); marks the rig
-/// for a sync.
+/// Made of: `Insert::bypassed` through `project::switch` → the node's
+/// bypass flag in [`LiveInsert::bypass`](crate::rig::LiveInsert::bypass).
 pub fn set_bypassed(rig: &mut Rig, insert: InsertId, on: bool) -> Result<()> {
-    crate::project::switch(rig, commands::set_insert_bypassed(insert, on))?;
-    rig.needs_sync = true;
+    crate::project::switch(rig, |s| {
+        s.insert_mut(insert)?.bypassed = on;
+        Ok(())
+    })?;
+    if let Some(live) = rig.live.insert(insert) {
+        live.bypass.store(on, core::sync::atomic::Ordering::Relaxed);
+    }
     Ok(())
 }
 
@@ -164,21 +171,27 @@ mod tests {
         play::sync(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
 
+        // Bypass is a live switch: heard at once, no sync, not an undo step.
+        let steps = rig.history.undo_len();
         set_bypassed(&mut rig, gain, true).unwrap();
-        play::sync(&mut rig).unwrap();
+        assert!(!rig.needs_sync);
+        assert_eq!(rig.history.undo_len(), steps);
+        assert!(rig.session.insert(gain).unwrap().bypassed);
         assert!(
-            loaded(&rig, gain).is_none(),
-            "bypassed inserts are not built"
+            (settled(&mut rig) - dry).abs() < 1e-3,
+            "input passes through"
         );
+        assert!(loaded(&rig, gain).is_some(), "the instance stays loaded");
+        // A rebuilt console starts bypassed too, from the document.
+        play::sync(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry).abs() < 1e-3);
         set_bypassed(&mut rig, gain, false).unwrap();
+        assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
         remove(&mut rig, gain).unwrap();
         assert!(rig.session.insert(gain).is_err());
         play::sync(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry).abs() < 1e-3);
-        // Undo the removal and the bypass toggles: the insert is back, active, at 0.25.
-        project::undo(&mut rig).unwrap();
-        project::undo(&mut rig).unwrap();
+        // Undo the removal: the insert is back, active, at 0.25.
         project::undo(&mut rig).unwrap();
         play::sync(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);

@@ -48,8 +48,8 @@ shared types at the root, then `buffers` and `realtime`, then `transport`,
 
 **Flows** (`src/<flow>.rs`, one file per everyday task) are free functions
 over the `Rig`. A flow function earns its place by replacing at least three
-primitive calls or by hiding an ordering hazard (sync before publish, seal
-after a switch, stop before draining a take). Rules:
+primitive calls or by hiding an ordering hazard (sync before publish, stop
+before draining a take). Rules:
 
 * A *verb* takes `&mut Rig` and does the whole job. A *step* takes the
   individual primitives it needs and lives in the flow's `steps` module,
@@ -61,8 +61,10 @@ after a switch, stop before draining a take). Rules:
   inserts, monitoring) set `rig.needs_sync`. Edits to a level go to the
   document *and* the live handle at once and do not need a sync.
 * A continuous edit (fader, knob, clip drag) pushes through the undo stack
-  and coalesces until `finish_gesture`. A switch (mute, arm, bypass) goes
-  through `project::switch`, which seals it as its own step.
+  and coalesces, so a drag is one step. A switch (mute, solo, arm,
+  monitoring, bypass, send on/off) is not an edit: it goes through
+  `project::switch`, which changes the document directly and marks the
+  history dirty, and never enters the undo history.
 * No behaviour on the `Rig` itself beyond constructors; it is a record.
 
 Names follow [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md): prefer the word a

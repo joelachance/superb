@@ -360,6 +360,14 @@ impl<T: 'static> UndoStack<T> {
         self.clean = Some(self.undo.len());
     }
 
+    /// Records that the document changed *outside* the history (a setting
+    /// flipped directly, not through a command). No amount of undo or redo
+    /// reaches the saved state any more, so [`is_clean`](Self::is_clean)
+    /// stays `false` until the next [`mark_clean`](Self::mark_clean).
+    pub fn mark_dirty(&mut self) {
+        self.clean = None;
+    }
+
     /// `true` if the document matches the state at the last
     /// [`mark_clean`](Self::mark_clean) (or creation). Open groups count as
     /// dirty.
@@ -597,6 +605,20 @@ mod tests {
         assert_eq!(doc.name, "");
         h.undo(&mut doc).unwrap(); // whole 1,2,3 run
         assert_eq!(doc.n, 0);
+        assert!(h.is_clean());
+    }
+
+    #[test]
+    fn a_change_outside_the_history_dirties_until_the_next_save() {
+        let mut doc = Doc::default();
+        let mut h: UndoStack<Doc> = UndoStack::new();
+        assert!(h.is_clean());
+        h.mark_dirty();
+        assert!(!h.is_clean());
+        h.push(&mut doc, Add(1)).unwrap();
+        assert!(h.undo(&mut doc).unwrap());
+        assert!(!h.is_clean(), "undoing does not bring the saved state back");
+        h.mark_clean();
         assert!(h.is_clean());
     }
 

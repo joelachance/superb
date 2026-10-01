@@ -44,7 +44,7 @@ a musician would use.
 - **Sync** — In Superb, rebuilding the console from the song and swapping it into the running engine. Happens for you when you start playing; structural edits mark it as needed.
 - **Take** — One pass of recording. It lands in the audio cache and becomes a clip on each armed track.
 - **Insert** — An effect or instrument sitting in a track's signal path, in order. Stored in the song; instantiated at sync.
-- **Switch vs. drag** — Mute, arm and bypass are switches: each flip is its own undo step. A fader or knob move is a drag: many moves coalesce into one step until you let go (`finish_gesture`).
+- **Switch vs. edit** — Mute, solo, arm, monitoring, bypass and send on/off are switches: saved with the session, heard at once, never undo steps. Everything else you change in the session is an edit and can be undone.
 
 ## Plugin formats (short map)
 

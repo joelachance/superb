@@ -12,6 +12,7 @@
 //! [`project::open`](crate::project::open), or with [`Rig::new`] from a
 //! [`Session`] you already have.
 
+use core::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use crate::play::{AudioCache, SessionPlayer};
@@ -262,4 +263,6 @@ pub struct LiveInsert {
     pub params: Vec<ParamInfo>,
     /// Wait-free queue into the running instance; changes apply at the next block.
     pub sender: Producer<ParamChange>,
+    /// The node's bypass switch; flips are heard at the next block.
+    pub bypass: Arc<AtomicBool>,
 }

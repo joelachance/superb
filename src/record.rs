@@ -21,7 +21,6 @@ use crate::play;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
 use crate::primitives::io::live::EngineCommand;
-use crate::primitives::session::commands;
 use crate::primitives::session::TrackKind;
 use crate::primitives::{ClipId, Result, SuperbError, TimeDuration, TimePosition, TrackId};
 use crate::rig::Rig;
@@ -71,16 +70,19 @@ impl core::fmt::Debug for Recording {
 }
 
 /// Arms or disarms an audio track. Armed tracks receive a clip when a take
-/// is stopped.
+/// is stopped. A switch: saved with the session, not an undo step.
 ///
-/// Made of: push `set_track_armed` (its own undo step).
+/// Made of: `Track::armed` through `project::switch`.
 pub fn arm(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
     if rig.session.track(track)?.kind != TrackKind::Audio {
         return Err(SuperbError::InvalidArgument {
             what: "only audio tracks are armed for recording",
         });
     }
-    crate::project::switch(rig, commands::set_track_armed(track, on))
+    crate::project::switch(rig, |s| {
+        s.track_mut(track)?.armed = on;
+        Ok(())
+    })
 }
 
 /// The audio tracks currently armed, in track order.

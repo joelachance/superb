@@ -211,8 +211,9 @@ pub mod steps {
         Ok((mixer, player))
     }
 
-    /// Loads every non-bypassed insert in the song and splices it into its
-    /// strip's chain. Failures are collected, not fatal.
+    /// Loads every insert in the song and splices it into its strip's chain,
+    /// with the node's bypass switch set to match the document. Failures
+    /// are collected, not fatal.
     ///
     /// Made of: `PluginLoader::instantiate` → `PluginNode::new` →
     /// `Mixer::add_insert`, per insert.
@@ -231,9 +232,6 @@ pub mod steps {
                 None => continue,
             };
             for insert in track.inserts() {
-                if insert.bypassed {
-                    continue;
-                }
                 let instance = match loader.instantiate(insert) {
                     Ok(instance) => instance,
                     Err(e) => {
@@ -247,12 +245,15 @@ pub mod steps {
                 let sender = node
                     .take_param_sender()
                     .expect("a fresh node has its sender");
+                let bypass = node.bypass_handle();
+                bypass.store(insert.bypassed, core::sync::atomic::Ordering::Relaxed);
                 match mixer.add_insert(strip, Box::new(node)) {
                     Ok(_) => live.push(LiveInsert {
                         id: insert.id(),
                         descriptor,
                         params,
                         sender,
+                        bypass,
                     }),
                     Err(e) => failed.push((insert.id(), e.to_string())),
                 }

@@ -2,9 +2,11 @@
 //!
 //! A level change takes two paths at once: into the document through the
 //! undo history, so it is saved and reversible, and onto the live strip's
-//! atomics, so it is heard on the next block without a sync. Changing the
-//! console's shape (a new bus, a new send, a new route) is a structural edit
-//! like any other and marks the rig for a [`play::sync`](crate::play::sync).
+//! atomics, so it is heard on the next block without a sync. Switches
+//! (mute, solo, send on/off) take the same two paths but skip the history:
+//! they are saved with the session, not undone. Changing the console's
+//! shape (a new bus, a new send, a new route) is a structural edit like any
+//! other and marks the rig for a [`play::sync`](crate::play::sync).
 //!
 //! Made of `superb::primitives::session::commands` (the document side) and
 //! `superb::primitives::mixer` (`StripParams`, `SendParams`: the live side).
@@ -41,12 +43,16 @@ pub fn set_pan(rig: &mut Rig, track: TrackId, pan: f32) -> Result<()> {
     Ok(())
 }
 
-/// Mutes or unmutes.
+/// Mutes or unmutes. A switch: saved with the session, heard at the next
+/// block, not an undo step.
 ///
-/// Made of: push `set_track_mute` (its own undo step) → `StripParams::set_mute`
+/// Made of: `Track::muted` through `project::switch` → `StripParams::set_mute`
 /// on the live strip.
 pub fn set_mute(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
-    crate::project::switch(rig, commands::set_track_mute(track, on))?;
+    crate::project::switch(rig, |s| {
+        s.track_mut(track)?.muted = on;
+        Ok(())
+    })?;
     if let Some(strip) = rig.live.strip(track) {
         strip.set_mute(on);
     }
@@ -54,12 +60,15 @@ pub fn set_mute(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
 }
 
 /// Solos or un-solos. While anything is soloed, every other track is
-/// silent; buses keep passing what reaches them.
+/// silent; buses keep passing what reaches them. A switch, like mute.
 ///
-/// Made of: push `set_track_solo` (its own undo step) → `StripParams::set_solo`
+/// Made of: `Track::soloed` through `project::switch` → `StripParams::set_solo`
 /// on the live strip.
 pub fn set_solo(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
-    crate::project::switch(rig, commands::set_track_solo(track, on))?;
+    crate::project::switch(rig, |s| {
+        s.track_mut(track)?.soloed = on;
+        Ok(())
+    })?;
     if let Some(strip) = rig.live.strip(track) {
         strip.set_solo(on);
     }
@@ -129,12 +138,15 @@ pub fn set_send_level_db(rig: &mut Rig, send: SendId, db: f32) -> Result<()> {
     Ok(())
 }
 
-/// Switches a send on or off.
+/// Switches a send on or off. A switch, like mute.
 ///
-/// Made of: push `set_send_enabled` (its own undo step) →
+/// Made of: `TrackSend::enabled` through `project::switch` →
 /// `SendParams::set_enabled` on the live send.
 pub fn set_send_enabled(rig: &mut Rig, send: SendId, on: bool) -> Result<()> {
-    crate::project::switch(rig, commands::set_send_enabled(send, on))?;
+    crate::project::switch(rig, |s| {
+        s.send_mut(send)?.enabled = on;
+        Ok(())
+    })?;
     if let Some(live) = rig.live.send(send) {
         live.set_enabled(on);
     }
@@ -235,9 +247,9 @@ mod tests {
         set_solo(&mut rig, other, false).unwrap();
         assert!(settled(&mut rig).abs() > 0.2);
 
-        // Every one of those edits is on the undo stack: the gain drag as one
-        // step, then pan, mute on, mute off, add track, solo on, solo off.
-        assert_eq!(rig.history.undo_len() - steps_before, 7);
+        // The gain drag (one step), pan and the added track are undo steps;
+        // mute and solo are switches and never enter the history.
+        assert_eq!(rig.history.undo_len() - steps_before, 3);
         while rig.history.undo_len() > steps_before {
             assert!(project::undo(&mut rig).unwrap());
         }
@@ -269,9 +281,12 @@ mod tests {
             (settled(&mut rig) - direct * 1.5).abs() < 1e-3,
             "live send level"
         );
+        let steps = rig.history.undo_len();
         set_send_enabled(&mut rig, send, false).unwrap();
         assert!((settled(&mut rig) - direct).abs() < 1e-3);
         assert!(!rig.session.send(send).unwrap().enabled);
+        assert_eq!(rig.history.undo_len(), steps, "a switch, not an edit");
+        assert!(!project::is_saved(&rig), "but it does count as unsaved");
 
         // Route the track through the bus and turn the bus down.
         route(&mut rig, vox, Some(room)).unwrap();

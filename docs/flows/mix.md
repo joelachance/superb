@@ -15,12 +15,12 @@ structural edit and marks the rig for a sync.
 |---|---|---|
 | `set_gain_db(rig, track, db)` | document + live strip | drag (coalesces) |
 | `set_pan(rig, track, -1.0..=1.0)` | document + live strip | drag |
-| `set_mute(rig, track, on)` / `set_solo(rig, track, on)` | document + live strip | switch |
+| `set_mute(rig, track, on)` / `set_solo(rig, track, on)` | document + live strip | switch (not undoable) |
 | `add_bus(rig, name) -> TrackId` | document; needs sync | one |
 | `route(rig, track, Some(bus) or None)` | document; needs sync; loops refused | one |
 | `add_send(rig, track, bus, level_db, pre_fader) -> SendId` / `remove_send` | document; needs sync | one |
 | `set_send_level_db(rig, send, db)` | document + live send | drag |
-| `set_send_enabled(rig, send, on)` | document + live send | switch |
+| `set_send_enabled(rig, send, on)` | document + live send | switch (not undoable) |
 | `peak(rig, track) -> Option<[f32; 2]>` | live strip meter, read and reset | — |
 | `finish_gesture(rig)` | re-export of `project::finish_gesture` | |
 
@@ -40,7 +40,7 @@ for db in [-1.0, -2.0, -3.0] {
     mix::set_gain_db(&mut rig, vox, db)?;                       // heard immediately
 }
 mix::finish_gesture(&mut rig);                                  // one undo step
-mix::set_mute(&mut rig, vox, true)?;                            // its own undo step
+mix::set_mute(&mut rig, vox, true)?;                            // a switch: saved, not undoable
 if let Some([l, r]) = mix::peak(&rig, room) {
     println!("room {l:.2} {r:.2}");
 }

@@ -181,8 +181,10 @@ previous state in `apply`, not at construction, so redo after other edits
 is still correct. A failed revert clears the whole history because the
 document state is unknown. The clean (saved) state is a depth index that
 becomes unreachable if the saved step is coalesced onto or discarded.
-Flows add one convention on top: continuous edits coalesce until
-`finish_gesture`; switches are sealed immediately (`project::switch`).
+Flows add one convention on top: switches (mute, solo, arm, bypass) are
+not edits. They change the document directly and tell the history its
+saved state is gone (`UndoStack::mark_dirty`), so they are saved but never
+undone.
 
 **Session.** The document is plain data with no `Arc` handles and no audio
 types. IDs come from one per-session counter and are never reused. The

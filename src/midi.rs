@@ -10,23 +10,28 @@
 //! [`play::steps::build_console`](crate::play::steps::build_console) adds.
 
 use crate::primitives::midi::{MidiChannel, MidiMessage, TimestampedMessage};
-use crate::primitives::session::commands;
 use crate::primitives::session::TrackKind;
 use crate::primitives::{Result, SuperbError, TrackId};
 use crate::rig::Rig;
 
 /// Turns live monitoring on or off for a MIDI track. While on, the track
-/// carries an instrument that plays whatever MIDI reaches the engine.
+/// carries an instrument that plays whatever MIDI reaches the engine. A
+/// switch: saved with the session (as the track's arm flag), not an undo
+/// step. It does change the console's shape, so it takes effect at the next
+/// sync.
 ///
-/// Made of: push `set_track_armed` (its own undo step); marks the rig for
-/// a sync (the instrument is a node in the console).
+/// Made of: `Track::armed` through `project::switch`; marks the rig for a
+/// sync (the instrument is a node in the console).
 pub fn monitor(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
     if rig.session.track(track)?.kind != TrackKind::Midi {
         return Err(SuperbError::InvalidArgument {
             what: "only MIDI tracks monitor live MIDI",
         });
     }
-    crate::project::switch(rig, commands::set_track_armed(track, on))?;
+    crate::project::switch(rig, |s| {
+        s.track_mut(track)?.armed = on;
+        Ok(())
+    })?;
     rig.needs_sync = true;
     Ok(())
 }
@@ -119,12 +124,12 @@ mod tests {
         let released = play::advance(&mut rig, 4).unwrap();
         assert!(released.channel(0)[128..].iter().all(|&s| s == 0.0));
         // Turning monitoring off removes the instrument at the next sync.
+        // It is a switch: nothing lands in the undo history.
+        let steps = rig.history.undo_len();
         monitor(&mut rig, keys, false).unwrap();
+        assert_eq!(rig.history.undo_len(), steps);
         play_note(&mut rig, 0, 69, 100).unwrap();
         assert!(play::advance(&mut rig, 4).unwrap().is_silent());
-        // Undo brings monitoring back (it is part of the song).
-        assert!(project::undo(&mut rig).unwrap());
-        assert!(is_monitoring(&rig, keys));
     }
 
     #[test]

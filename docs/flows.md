@@ -71,20 +71,20 @@ handle in `rig.live` at once, and they are heard on the next block.
 After a sync, `rig.live` points at the new console. Handles from before are
 stale; do not keep them across a sync.
 
-## Undo: drags and switches
+## Edits and switches
 
-Every flow edit is a command on `rig.history`, so everything is reversible.
-Two behaviours:
+Every *edit* to the session is a command on `rig.history`, so it can be
+undone. Structural edits (add, remove, move) are one step each; a
+continuous edit (fader, pan, send level, plugin parameter, clip drag)
+coalesces, so a drag is one step and not a hundred (see "Coalescing"
+below). `record::stop` groups the clips it places into one step called
+"Record take".
 
-* **Drags** (fader, pan, send level, plugin parameter, clip move) coalesce:
-  consecutive edits of the same thing merge into one undo step until
-  `finish_gesture` is called. Call it on "mouse up".
-* **Switches** (mute, solo, arm, bypass, monitoring, send enable) are
-  sealed at once, so two flips are two steps. Flows route them through
-  `project::switch`.
-
-Structural edits (add, remove, move) are one step each. `record::stop`
-groups the clips it places into a single step called "Record take".
+*Switches* (mute, solo, arm, monitoring, bypass, send on/off) are not
+edits. They are saved with the session, and they are heard at the next
+block, but they never enter the undo history: nobody expects Undo to
+un-mute a track. Flows flip them through `project::switch`, which also
+tells the history that the saved state is gone, so `is_saved` turns false.
 
 ## Commands reach the engine at the next block
 
@@ -108,6 +108,6 @@ take can come from a file or a generator. With the `devices` feature,
 
 A verb earns its place by replacing at least three primitive calls or by
 hiding an ordering hazard. Put the shared parts in `steps`, end every verb
-doc with **Made of:**, set `needs_sync` for structural edits, use
-`project::switch` for switches, add tests that run without hardware and an
+doc with **Made of:**, set `needs_sync` for structural edits, flip switches
+through `project::switch`, add tests that run without hardware and an
 example under `examples/flows/`. See [CONTRIBUTING.md](../CONTRIBUTING.md).

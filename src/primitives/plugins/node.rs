@@ -5,6 +5,9 @@ use crate::primitives::graph::{Node, NodeChannels, ProcessContext, ProcessStatus
 use crate::primitives::realtime::spsc::{self, Consumer, Producer};
 use crate::primitives::SampleRate;
 
+use core::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 use crate::primitives::plugins::{ParamChange, PluginInstance};
 
 /// Wraps a [`PluginInstance`] so it can be placed in an
@@ -21,6 +24,7 @@ pub struct PluginNode {
     channels: NodeChannels,
     params_rx: Consumer<ParamChange>,
     params_tx: Option<Producer<ParamChange>>,
+    bypass: Arc<AtomicBool>,
     prepared: bool,
 }
 
@@ -43,8 +47,23 @@ impl PluginNode {
             },
             params_rx: rx,
             params_tx: Some(tx),
+            bypass: Arc::new(AtomicBool::new(false)),
             prepared: false,
         }
+    }
+
+    /// The bypass switch, shared with the control thread. While set, the
+    /// node copies its input to its output and the plugin is not run (its
+    /// state freezes; parameter changes still queue up and apply when the
+    /// bypass lifts). Reported latency does not change, so the signal
+    /// arrives `latency_frames` early while bypassed.
+    pub fn bypass_handle(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.bypass)
+    }
+
+    /// `true` while the bypass switch is set.
+    pub fn is_bypassed(&self) -> bool {
+        self.bypass.load(Ordering::Relaxed)
     }
 
     /// The sending half of the parameter queue (once). Pushing a
@@ -108,6 +127,15 @@ impl Node for PluginNode {
             // Unknown IDs / full plugin queues are dropped: nothing can be
             // reported from the audio thread.
             let _ = self.instance.set_param(change.id, change.value);
+        }
+        if self.bypass.load(Ordering::Relaxed) {
+            if ctx.input_is_silent {
+                return ProcessStatus::Silent;
+            }
+            return match output.copy_block_from(0, input, ctx.frames) {
+                Ok(()) => ProcessStatus::Normal,
+                Err(_) => ProcessStatus::Silent,
+            };
         }
         self.instance.process(ctx, input, output)
     }
@@ -299,6 +327,55 @@ pub(crate) mod tests {
         g.reset();
         let plugin = g.remove_node(fx).unwrap();
         assert_eq!(plugin.name(), "Mock Gain");
+    }
+
+    #[test]
+    fn bypass_passes_input_through_without_running_the_plugin() {
+        let mut node = PluginNode::new(Box::new(MockGain::new(0)));
+        let mut tx = node.take_param_sender().unwrap();
+        let bypass = node.bypass_handle();
+        node.prepare(SampleRate::HZ_48K, 8);
+        let mut input = PlanarBuffer::new(2, 8);
+        input.fill(1.0);
+        let mut output = PlanarBuffer::new(2, 8);
+        let midi = no_midi();
+        let ctx = ProcessContext {
+            sample_rate: SampleRate::HZ_48K,
+            frames: 8,
+            time: BlockTime::free_running(),
+            midi: &midi,
+            input_is_silent: false,
+        };
+        tx.push(ParamChange { id: 1, value: 0.5 }).unwrap();
+        bypass.store(true, Ordering::Relaxed);
+        assert!(node.is_bypassed());
+        assert_eq!(
+            node.process(&ctx, &input, &mut output),
+            ProcessStatus::Normal
+        );
+        assert_eq!(
+            output.channel(0),
+            &[1.0; 8],
+            "input copied, gain not applied"
+        );
+        // The queued change was handed to the plugin and takes effect when
+        // it next runs.
+        bypass.store(false, Ordering::Relaxed);
+        assert_eq!(
+            node.process(&ctx, &input, &mut output),
+            ProcessStatus::Normal
+        );
+        assert_eq!(output.channel(0), &[0.5; 8]);
+        // Silent input stays silent either way.
+        let quiet = ProcessContext {
+            input_is_silent: true,
+            ..ctx
+        };
+        bypass.store(true, Ordering::Relaxed);
+        assert_eq!(
+            node.process(&quiet, &input, &mut output),
+            ProcessStatus::Silent
+        );
     }
 
     #[test]

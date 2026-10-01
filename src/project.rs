@@ -50,6 +50,8 @@ pub fn save(rig: &mut Rig, path: impl AsRef<Path>) -> Result<()> {
 }
 
 /// `true` if nothing changed since the last [`save`] (or since opening).
+/// Switches flipped since (mute, arm, bypass...) count as changes even
+/// though they are not undo steps.
 pub fn is_saved(rig: &Rig) -> bool {
     rig.history.is_clean()
 }
@@ -225,12 +227,13 @@ pub(crate) fn structural(rig: &mut Rig, command: impl Command<Session>) -> Resul
     Ok(())
 }
 
-/// Pushes a switch (mute, arm, bypass...). Unlike a fader move, flipping a
-/// switch twice must stay two undo steps, so the step is sealed at once
-/// instead of merging with the next flip.
-pub(crate) fn switch(rig: &mut Rig, command: impl Command<Session>) -> Result<()> {
-    edit(rig, command)?;
-    rig.history.seal();
+/// Flips a switch (mute, solo, arm, monitor, bypass, send on/off) on the
+/// document. Switches are saved with the session but are not edits: they
+/// never enter the undo history, so the history is told its saved state is
+/// gone and [`is_saved`] turns false.
+pub(crate) fn switch(rig: &mut Rig, flip: impl FnOnce(&mut Session) -> Result<()>) -> Result<()> {
+    flip(&mut rig.session)?;
+    rig.history.mark_dirty();
     Ok(())
 }
 

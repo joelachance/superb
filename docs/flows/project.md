@@ -27,7 +27,7 @@ sync so the console follows.
 | `import_audio(rig, track, path, at)` (feature `files`) | decode, resample to the song's rate, cache, place a clip of the full length | one |
 
 The crate-private helpers `edit`, `structural` and `switch` are how the
-other flows push their commands; see [flows.md](../flows.md).
+other flows change the session; see [flows.md](../flows.md).
 
 ## Usage
 

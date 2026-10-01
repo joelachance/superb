@@ -16,7 +16,7 @@ running instance through its wait-free queue.
 | `scan()` (feature `clap`) | every CLAP plugin in the standard folders and `CLAP_PATH`; failed bundles listed |
 | `insert(rig, track, &PluginDescriptor) -> InsertId` | append to the track's chain; instantiated at the next sync |
 | `remove(rig, insert)` | |
-| `set_bypassed(rig, insert, on)` | switch; a bypassed insert is left out of the console |
+| `set_bypassed(rig, insert, on)` | switch (saved, not undoable); the node passes its input through from the next block, no sync |
 | `set_param(rig, insert, param_id, value)` | document (coalescing per parameter) + running instance |
 | `params(rig, insert) -> &[ParamInfo]` | the running instance's parameters; empty before the first sync |
 | `loaded(rig, insert) -> Option<&PluginDescriptor>` | what the running instance says about itself |
