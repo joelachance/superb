@@ -1,4 +1,4 @@
-//! # superb-undo
+//! # primitives::undo
 //!
 //! A coalescing undo/redo command stack for the Superb DAW SDK.
 //!

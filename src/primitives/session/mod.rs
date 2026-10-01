@@ -1,8 +1,8 @@
-//! # superb-session
+//! # primitives::session
 //!
 //! The document model of the Superb DAW SDK: what a session *is*, as
-//! opposed to how it sounds (`superb-graph`/`superb-mixer`) or how it is
-//! played (`superb-transport`/`superb-io`).
+//! opposed to how it sounds (`primitives::graph` / `primitives::mixer`) or how it is
+//! played (`primitives::transport` / `primitives::io`).
 //!
 //! * [`Session`] — name, sample rate, the [`TempoMap`](crate::primitives::transport::TempoMap),
 //!   an optional loop range, ordered [`Track`]s holding [`Clip`]s,

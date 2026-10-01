@@ -1,4 +1,4 @@
-//! # superb-rt
+//! # primitives::realtime
 //!
 //! Real-time safety primitives for the Superb DAW SDK.
 //!

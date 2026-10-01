@@ -42,7 +42,7 @@ pub enum ProcessStatus {
 /// Anything that renders whole blocks: an [`AudioGraph`](crate::primitives::graph::AudioGraph),
 /// a mixer wrapping one, or a custom engine.
 ///
-/// The device and offline layers in `superb-io` are generic over this trait.
+/// The device and offline layers in `primitives::io` are generic over this trait.
 pub trait BlockProcessor: Send {
     /// Compiles/allocates for the given configuration. Off the audio thread.
     fn prepare(

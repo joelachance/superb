@@ -68,10 +68,46 @@ before draining a take). Rules:
   history dirty, and never enters the undo history.
 * No behaviour on the `Rig` itself beyond constructors; it is a record.
 
+## Naming
+
 Names follow [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md): prefer the word a
 musician would use (track, clip, bus, send, take, transport) over engine
 jargon, and when a jargon term is unavoidable, explain it once in the
-module docs.
+module docs. Before adding a name, check it against these rules; each one
+exists because its absence cost a rename.
+
+* **One word per thing, across both tiers.** The document is the
+  *session* in the type, the module, the flow and the prose; never song or
+  project. Rebuilding the console is *rebuild*. A pass of recording is a
+  *take*. If two words are in use for one thing, pick one and rename the
+  other.
+* **A word with a DAW meaning keeps it.** *Sync* is clock synchronisation,
+  *advance* moves the playhead, *gain* is a multiplier, *bounce* renders
+  to a file. Do not borrow one for something else; TERMINOLOGY lists them.
+* **A flow sits over one primitive or over a task, and is named for it.**
+  `session`, `midi` and `plugins` share their primitive's name; `play`,
+  `mix`, `record`, `export` and `devices` are tasks. No invented areas.
+* **Verbs are imperative and say what happens.** `start`, `stop`,
+  `rebuild`, `drive`, `bounce`. One verb per action: no `begin` next to
+  `start`. A variant gets a suffix on the same verb: `start_from`,
+  `bounce_at_rate`, `bounce_session`.
+* **Queries read as what they return.** `is_x` for a bool, a noun for data
+  (`info`, `failures`, `params`, `position`). Never a past participle for
+  a getter: `loaded` reads as a question and returned a descriptor.
+* **Prefer the primitive's enum to a bool parameter.** `SendTap::PreFader`,
+  not `pre_fader: true`.
+* **Types and fields are named for their role, not their mechanism.**
+  `EngineHandle` and `EngineLoop` say which side you hold; `Wiring` is the
+  map from session to console; `param_queue` holds parameter changes. A
+  type called `Player` must play.
+* **One home per behaviour.** A device listing lives in `devices`, an
+  offline render in `export`. When two functions do the same thing,
+  delete one rather than alias it.
+* **No silent obligations.** If a flow only works when the caller also
+  remembers to do something later (end a drag, empty a queue), either the
+  flow does it itself (a time window, a thread) or the obligation is a
+  documented verb with a reason to call it. A forgotten `finish_gesture`
+  merged a whole session of fader moves into one undo step.
 
 ## Real-time rules
 

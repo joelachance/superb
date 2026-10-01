@@ -1,4 +1,4 @@
-//! # superb-graph
+//! # primitives::graph
 //!
 //! The audio process graph of the Superb DAW SDK.
 //!
@@ -7,7 +7,7 @@
 //! * [`AudioGraph`] — owns nodes and edges, compiles a topological schedule,
 //!   allocates all buffers up front in [`AudioGraph::prepare`], then runs
 //!   [`AudioGraph::process`] with **no heap activity** (verified by the
-//!   `no_alloc` integration test using `superb-rt`'s counting allocator).
+//!   `tests/graph_no_alloc.rs` integration test using the counting allocator in `primitives::realtime`).
 //! * [`ProcessContext`] / [`BlockTime`] — what a node sees each block:
 //!   sample rate, frame count, timeline position from the transport, tempo,
 //!   and the block's MIDI events.

@@ -82,12 +82,12 @@ unless hardware is the point:
 ```sh
 cargo test                                     # the whole suite, no audio hardware needed
 cargo run --example new_session                # session: tracks, clips, undo, save and open
-cargo run --example play_session                  # play: transport, loop, offline blocks
+cargo run --example play_session               # play: transport, loop, offline blocks
 cargo run --example mix_session                # mix: faders, bus, sends, meters
 cargo run --example midi_keys                  # midi: notes into a monitoring track
 cargo run --example record_take                # record: a take from a synthetic microphone
 cargo run --example insert_plugin              # plugins: scan, insert, set a parameter
-cargo run --example export_session                # export: bounce to WAV
+cargo run --example export_session             # export: bounce to WAV
 cargo run --example list_devices --features devices
 ```
 

@@ -7,7 +7,7 @@
 //!   arithmetic on the audio thread is exact and free of rounding drift.
 //! * **Musical time** — [`BeatPosition`] and [`BeatDuration`] in quarter
 //!   notes. Conversion between the two domains requires a tempo map, which
-//!   lives in `superb-transport`.
+//!   lives in `primitives::transport`.
 
 use core::fmt;
 use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};

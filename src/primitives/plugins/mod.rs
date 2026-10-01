@@ -1,4 +1,4 @@
-//! # superb-plugins
+//! # primitives::plugins
 //!
 //! Plugin hosting for the Superb DAW SDK.
 //!

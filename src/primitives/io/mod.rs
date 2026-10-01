@@ -1,4 +1,4 @@
-//! # superb-io
+//! # primitives::io
 //!
 //! Where audio leaves (and later enters) the Superb DAW SDK.
 //!
@@ -62,14 +62,14 @@ pub mod wav;
 
 pub use engine::{Engine, EngineStats, MidiTiming};
 
-/// Whether this build of `superb-io` includes the `files` module.
+/// Whether this build includes the `files` module.
 ///
 /// The `files` feature pulls in `symphonia` (MPL-2.0) and `rubato`
 /// (MIT OR Apache-2.0). symphonia's file-level copyleft is contained by
 /// importing it from exactly one source file, `src/files/decode.rs`; no
-/// other file in the workspace names the crate, and
+/// other file in this crate names it, and
 /// `mpl_dependency_is_confined_to_decode_rs` below checks that on every default
-/// test run. Enable with `cargo test -p superb-io --features files`.
+/// test run. Enable with `cargo test --features files`.
 pub const FILES_FEATURE: bool = cfg!(feature = "files");
 
 #[cfg(test)]
@@ -90,7 +90,7 @@ mod licence_boundary {
         }
     }
 
-    /// MPL-2.0 boundary: only `crates/superb-io/src/files/decode.rs` may
+    /// MPL-2.0 boundary: only `src/primitives/io/files/decode.rs` may
     /// mention symphonia. Runs on the default feature set so the check never
     /// depends on the optional dependency being built.
     #[test]

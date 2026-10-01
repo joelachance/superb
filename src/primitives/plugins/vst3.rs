@@ -18,7 +18,7 @@ pub const AVAILABLE: bool = false;
 /// The error every VST3 entry point returns.
 pub fn unsupported() -> SuperbError {
     SuperbError::Message(
-        "VST3 hosting is not implemented; only CLAP plugins can be loaded (see docs/superb-plugins.md)".into(),
+        "VST3 hosting is not implemented; only CLAP plugins can be loaded (see docs/primitives/plugins.md)".into(),
     )
 }
 

@@ -6,7 +6,7 @@
 //! the symphonia
 //! crate (MPL-2.0, file-level copyleft) is imported by exactly one file,
 //! `src/files/decode.rs`, which is the only file subject to that licence's
-//! per-file obligations. A workspace-wide test in `lib.rs` enforces this.
+//! per-file obligations. A crate-wide test enforces this.
 //!
 //! * [`decode`] / [`decode_from`] / [`decode_bytes`] — any container/codec
 //!   symphonia was built with (WAV + FLAC by default) into an [`AudioFile`].

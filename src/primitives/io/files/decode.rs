@@ -4,7 +4,7 @@
 //! only Superb source file that may `use symphonia`; everything it exports
 //! is expressed in Superb types so callers (and the rest of this crate)
 //! never touch an MPL-licensed type. Keep it that way — `lib.rs` has a test
-//! that scans the workspace for stray imports.
+//! that scans the crate for stray imports.
 
 use std::fs::File;
 use std::io::{Cursor, Read};

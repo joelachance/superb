@@ -115,7 +115,7 @@ Data crosses the thread boundary in exactly three ways:
    the position. `play::drive` ticks the loop by hand; `play::start_output`
    moves it into a device callback.
 6. **`primitives::io::Engine`** owns a `Transport` and a processor. Each
-   block it drives the playhead, splits the block at loop wraps, delivers
+   block it advances the playhead, splits the block at loop wraps, delivers
    queued MIDI at sample-accurate frames, runs the processor and copies the
    result out. `offline::render` drives a private engine for `export`.
 

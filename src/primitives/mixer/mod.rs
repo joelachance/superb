@@ -1,4 +1,4 @@
-//! # superb-mixer
+//! # primitives::mixer
 //!
 //! A mixing console built on [`AudioGraph`](crate::primitives::graph::AudioGraph).
 //!

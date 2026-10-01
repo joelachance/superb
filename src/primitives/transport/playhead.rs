@@ -163,7 +163,7 @@ pub struct TransportSnapshot {
 /// The transport owns a [`TempoMap`] so that beat conversions and the sample
 /// position stay consistent. It is a plain single-owner value: in a live
 /// engine it lives on the audio thread and control messages reach it via a
-/// queue (see `superb-rt`).
+/// queue (see `primitives::realtime`).
 #[derive(Clone, Debug)]
 pub struct Transport {
     state: TransportState,

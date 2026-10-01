@@ -35,6 +35,29 @@ a musician would use.
 | Hardware, audio interface | `devices` | Which speakers, mics and MIDI ports exist |
 | The rig | `Rig` | Everything a session in progress consists of: document, history, audio, engine |
 
+## One word per thing
+
+These pairs were once both in use. The left column is the word; the right
+column is what not to say in code, docs or UI text.
+
+| Say | Not |
+|---|---|
+| session | song, project, document (as a name) |
+| rebuild (the console) | sync, refresh, update |
+| drive (the engine, offline) | advance, tick, pump |
+| take | recording (as a noun), capture (as a noun) |
+| clip | item, region, event |
+| strip | channel (a strip's channel count is something else) |
+| insert | effect slot, plugin slot |
+| switch | toggle (for mute, solo, arm, monitoring, bypass, send on/off) |
+| edit | change, gesture (for anything the undo history records) |
+| bounce | export (as a verb), render to file |
+| gain (dB) | volume, level (for a strip's fader; sends do say `level_db`, see below) |
+
+Open question kept on purpose: strips say `gain_db` and sends say
+`level_db`, because a send level is relative to the strip it taps. If that
+proves confusing in a UI, rename the send side, not the strip side.
+
 ## Words that confuse musicians
 
 - **Buffer** — A small tray of samples (e.g. 128–1024 frames) the audio interface asks for on a deadline. *Not* mainly "we can't fit the session in RAM." Machines often hold the whole project in memory; buffering is about *timing* and *CPU batches*.

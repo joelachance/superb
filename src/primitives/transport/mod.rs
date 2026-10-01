@@ -1,4 +1,4 @@
-//! # superb-transport
+//! # primitives::transport
 //!
 //! The playhead and musical clock of the Superb DAW SDK.
 //!

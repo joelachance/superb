@@ -1,4 +1,4 @@
-//! # superb-buffers
+//! # primitives::buffers
 //!
 //! Audio block buffers for the Superb DAW SDK.
 //!

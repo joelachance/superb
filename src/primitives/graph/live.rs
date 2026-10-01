@@ -5,7 +5,7 @@
 //!
 //! [`live_pair`] returns a [`GraphEditor`] (control thread) and a
 //! [`LiveGraph`] (audio thread) joined by two wait-free SPSC queues from
-//! `superb-rt`:
+//! `primitives::realtime`:
 //!
 //! * **swap queue** (editor → live): carries [`GraphCommand::Swap`] with a
 //!   fully prepared `Box<AudioGraph>`.
@@ -271,7 +271,7 @@ impl core::fmt::Debug for GraphEditor {
 
 /// Audio-thread half: applies pending swaps, then processes the active graph.
 ///
-/// Implements [`BlockProcessor`], so it can drive `superb-io`'s `Engine`
+/// Implements [`BlockProcessor`], so it can drive the `Engine` in `primitives::io`
 /// directly. Starts with an empty, unprepared graph: `process` returns
 /// [`SuperbError::NotPrepared`] until either [`prepare`](LiveGraph::prepare)
 /// is called or the first published graph arrives.

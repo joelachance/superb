@@ -1,4 +1,4 @@
-//! # superb-midi
+//! # primitives::midi
 //!
 //! MIDI 1.0 messages and real-time-safe event plumbing for the Superb DAW
 //! SDK.
@@ -20,7 +20,7 @@
 //!   input ports and bridges them into an SPSC queue via the `midir` crate.
 //!
 //! SysEx, MIDI Time Code quarter frames and running status are not
-//! supported; see [`MidiMessage::from_bytes`] and `docs/superb-midi.md` for
+//! supported; see [`MidiMessage::from_bytes`] and `docs/primitives/midi.md` for
 //! details.
 //!
 //! ```

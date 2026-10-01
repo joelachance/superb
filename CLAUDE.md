@@ -39,5 +39,10 @@ cargo doc --no-deps
 - Structural edits set `rig.needs_rebuild`; switches (mute, solo, arm,
   bypass) go through `session::switch` and never enter the undo history;
   level edits reach the document and the live handle.
+- Names follow the rules in CONTRIBUTING.md "Naming" and the one-word
+  table in docs/TERMINOLOGY.md: one word per thing (session, rebuild,
+  take), DAW words keep their DAW meaning (sync, advance), verbs are
+  imperative with suffixed variants, queries read as what they return,
+  enums over bool parameters, no duplicate homes, no silent obligations.
 - Every public item is documented; update the doc note and the example
   when an API changes.

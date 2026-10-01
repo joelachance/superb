@@ -1,4 +1,4 @@
-//! # superb-core
+//! # primitives
 //!
 //! Foundation types shared by every Superb SDK crate. This crate has **no
 //! dependencies** and performs **no I/O**; everything here is `Copy`-friendly
@@ -21,7 +21,7 @@
 //! assert_eq!(half_second.to_seconds(rate), 0.5);
 //!
 //! // Beats are independent of sample rate; the tempo map in
-//! // `superb-transport` converts between the two domains.
+//! // `primitives::transport` converts between the two domains.
 //! let two_bars_of_4_4 = BeatPosition::new(8.0);
 //! assert_eq!(two_bars_of_4_4.beats(), 8.0);
 //! ```

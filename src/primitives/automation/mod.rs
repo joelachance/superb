@@ -1,4 +1,4 @@
-//! # superb-automation
+//! # primitives::automation
 //!
 //! Parameter envelopes and DAW-style automation modes for the Superb SDK.
 //!
