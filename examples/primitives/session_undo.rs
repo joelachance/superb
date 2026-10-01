@@ -47,7 +47,7 @@ fn main() -> Result<()> {
 
     println!("edits:");
     // push applies the command and records it for undo.
-    history.push(&mut session, commands::set_session_name("demo song"))?;
+    history.push(&mut session, commands::set_session_name("demo session"))?;
     history.push(&mut session, SetTempo::new(BeatPosition::ZERO, 96.0))?;
 
     // One undo step for the whole "add drums with a loop" operation.

@@ -1,13 +1,13 @@
 # primitives::session
 
-The document model: what a project *is*.
+The document model: what a session *is*.
 
 ## Purpose
 
 `primitives::session` depends on the `primitives` root,
 `primitives::transport` (for `TempoMap` and `LoopRange`), `primitives::undo`,
 and `serde` + `serde_json` for snapshots. It holds the editable description of
-a project — tracks, clips, markers, tempo map, loop range — and nothing about
+a session — tracks, clips, markers, tempo map, loop range — and nothing about
 rendering. Turning a `Session` into a mixer is the job of `play::sync` (see
 `docs/flows/play.md`); the session is deliberately free of `Arc<AtomicF32>`
 handles and audio-thread concerns, so it can be cloned, diffed, serialised and

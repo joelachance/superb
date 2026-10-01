@@ -1,4 +1,4 @@
-//! Getting the song out: render a range or the whole song to a file.
+//! Getting the session out: render a range or the whole session to a file.
 //!
 //! Export builds its own copy of the console (inserts included) and drives
 //! it offline, as fast as the machine allows. The running engine is not
@@ -18,10 +18,10 @@ use crate::primitives::transport::Transport;
 use crate::primitives::{Result, SuperbError, TimePosition};
 use crate::rig::Rig;
 
-/// Renders `frames` frames of the song starting at `start` into memory.
+/// Renders `frames` frames of the session starting at `start` into memory.
 ///
 /// Made of: [`play::steps::build_console`] → [`play::steps::attach_inserts`]
-/// → a `Transport` on the song's tempo map, sought to `start` and playing →
+/// → a `Transport` on the session's tempo map, sought to `start` and playing →
 /// `Engine::new` → `offline::render`.
 pub fn render(rig: &mut Rig, start: TimePosition, frames: usize) -> Result<PlanarBuffer> {
     let (mut mixer, player) = play::steps::build_console(&rig.session, &rig.cache, rig.channels)?;
@@ -44,7 +44,7 @@ pub fn render(rig: &mut Rig, start: TimePosition, frames: usize) -> Result<Plana
     )
 }
 
-/// Renders a range and writes it as a WAV file at the song's sample rate.
+/// Renders a range and writes it as a WAV file at the session's sample rate.
 /// Returns the audio as well.
 ///
 /// Made of: [`render`] → `wav::write`.
@@ -60,11 +60,11 @@ pub fn bounce(
     Ok(audio)
 }
 
-/// Bounces the whole song, from the start to the end of the last clip.
-/// Fails if the song has no clips.
+/// Bounces the whole session, from the start to the end of the last clip.
+/// Fails if the session has no clips.
 ///
 /// Made of: `Session::end_position` → [`bounce`].
-pub fn bounce_song(
+pub fn bounce_session(
     rig: &mut Rig,
     path: impl AsRef<Path>,
     format: WavFormat,
@@ -72,7 +72,7 @@ pub fn bounce_song(
     let end = rig.session.end_position().samples();
     if end <= 0 {
         return Err(SuperbError::Message(
-            "the song has no clips to bounce".into(),
+            "the session has no clips to bounce".into(),
         ));
     }
     bounce(rig, path, TimePosition::ZERO, end as usize, format)
@@ -102,17 +102,17 @@ mod tests {
     use super::*;
     use crate::primitives::session::TrackKind;
     use crate::primitives::{SampleRate, TimeDuration};
-    use crate::project;
+    use crate::session;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
     fn tone_rig() -> Rig {
-        let mut rig = project::create("bounce", R, 256).unwrap();
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let mut rig = session::create("bounce", R, 256).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 1_000);
         tone.fill(0.5);
         rig.cache.insert("tone.wav", tone);
-        project::add_audio_clip(
+        session::add_audio_clip(
             &mut rig,
             vox,
             "tone.wav",
@@ -136,17 +136,17 @@ mod tests {
 
         let dir = std::env::temp_dir().join(format!("superb-export-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("song.wav");
-        let bounced = bounce_song(&mut rig, &path, WavFormat::Float32).unwrap();
+        let path = dir.join("session.wav");
+        let bounced = bounce_session(&mut rig, &path, WavFormat::Float32).unwrap();
         assert_eq!(bounced.frames(), 1_500, "to the end of the last clip");
         let (read, rate) = wav::read(&path).unwrap();
         assert_eq!(rate, R);
         assert_eq!(read.channel(0), bounced.channel(0));
         let _ = std::fs::remove_dir_all(&dir);
 
-        let empty = project::create("empty", R, 64).unwrap();
+        let empty = session::create("empty", R, 64).unwrap();
         let mut empty = empty;
-        assert!(bounce_song(&mut empty, "unused.wav", WavFormat::Pcm16).is_err());
+        assert!(bounce_session(&mut empty, "unused.wav", WavFormat::Pcm16).is_err());
     }
 
     #[cfg(feature = "files")]

@@ -1,4 +1,4 @@
-//! The song as a document: create it, open and save it, and edit it with
+//! The session as a document: create it, open and save it, and edit it with
 //! undo.
 //!
 //! Every edit here goes through the undo history, so [`undo`] and [`redo`]
@@ -25,14 +25,14 @@ use crate::primitives::{
 };
 use crate::rig::Rig;
 
-/// Starts a new, empty song at 120 bpm in 4/4.
+/// Starts a new, empty session at 120 bpm in 4/4.
 ///
 /// Made of: `Session::new` → `Rig::new`.
 pub fn create(name: &str, sample_rate: SampleRate, block_size: usize) -> Result<Rig> {
     Rig::new(Session::new(name, sample_rate), block_size)
 }
 
-/// Opens a song saved with [`save`]. The undo history starts empty and
+/// Opens a session saved with [`save`]. The undo history starts empty and
 /// clean.
 ///
 /// Made of: `Session::load` → `Rig::new`.
@@ -40,7 +40,7 @@ pub fn open(path: impl AsRef<Path>, block_size: usize) -> Result<Rig> {
     Rig::new(Session::load(path)?, block_size)
 }
 
-/// Writes the song as JSON and remembers this state as saved.
+/// Writes the session as JSON and remembers this state as saved.
 ///
 /// Made of: `Session::save` → `UndoStack::mark_clean`.
 pub fn save(rig: &mut Rig, path: impl AsRef<Path>) -> Result<()> {
@@ -152,14 +152,14 @@ pub fn add_marker(rig: &mut Rig, name: &str, at: TimePosition) -> Result<MarkerI
     Ok(id)
 }
 
-/// Sets the song's tempo at the start. Consecutive changes are one undo step.
+/// Sets the session's tempo at the start. Consecutive changes are one undo step.
 ///
 /// Made of: push `SetTempo` at beat 0.
 pub fn set_tempo(rig: &mut Rig, bpm: f64) -> Result<()> {
     edit(rig, SetTempo::new(BeatPosition::ZERO, bpm))
 }
 
-/// Sets or clears the loop range in the song and on the running engine.
+/// Sets or clears the loop range in the session and on the running engine.
 /// Enable looping with [`play::set_loop_enabled`](crate::play::set_loop_enabled).
 ///
 /// Made of: push `SetLoopRange` → `LiveEngine::send(SetLoop)`.
@@ -191,7 +191,7 @@ pub fn redo(rig: &mut Rig) -> Result<bool> {
     Ok(done)
 }
 
-/// Decodes an audio file, converts it to the song's sample rate, caches it
+/// Decodes an audio file, converts it to the session's sample rate, caches it
 /// and places a clip of its full length at `at`.
 ///
 /// Made of: `AudioCache::load` → [`add_audio_clip`].
@@ -281,7 +281,7 @@ mod tests {
         remove_track(&mut rig, vox).unwrap();
         assert!(rig.session.track(vox).is_err());
         while undo(&mut rig).unwrap() {}
-        assert!(rig.session.track(vox).is_err(), "back to the empty song");
+        assert!(rig.session.track(vox).is_err(), "back to the empty session");
         assert!(!undo(&mut rig).unwrap());
         assert!(is_saved(&rig));
     }
@@ -376,7 +376,7 @@ mod tests {
     fn save_and_open_round_trip() {
         let dir = std::env::temp_dir().join(format!("superb-project-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("song.superb.json");
+        let path = dir.join("session.superb.json");
         let mut rig = create("saved", R, 128).unwrap();
         let t = add_track(&mut rig, "t", TrackKind::Audio).unwrap();
         add_marker(&mut rig, "m", TimePosition::from_samples(7)).unwrap();

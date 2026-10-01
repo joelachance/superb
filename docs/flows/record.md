@@ -33,7 +33,7 @@ from any source.
 | `finish_take(planes) -> PlanarBuffer` | |
 | `take_name(rig)` | the next unused `take N` cache key |
 | `store_take(&mut cache, name, audio)` | |
-| `place_clip(rig, track, take, start, length)` | `project::add_audio_clip` |
+| `place_clip(rig, track, take, start, length)` | `session::add_audio_clip` |
 
 `Recording` is the take in progress: its `Capture` (`Manual { blocks,
 planes }` or `Threaded(Collector)`), punch-in position, armed tracks,
@@ -46,7 +46,7 @@ Offline, from a producer you fill yourself:
 
 ```rust
 use superb::primitives::io::capture::capture_queue;
-use superb::{play, project, record};
+use superb::{play, record, session};
 
 record::arm(&mut rig, vox, true)?;
 play::start(&mut rig)?;

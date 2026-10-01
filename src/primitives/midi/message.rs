@@ -6,7 +6,7 @@ use crate::primitives::midi::channel::MidiChannel;
 
 /// Highest value representable by a 7-bit MIDI data byte.
 const MAX_7BIT: u16 = 127;
-/// Highest value representable by a 14-bit MIDI value (pitch bend, song position).
+/// Highest value representable by a 14-bit MIDI value (pitch bend, session position).
 const MAX_14BIT: u16 = 16_383;
 
 /// A single decoded MIDI 1.0 channel-voice or system message.
@@ -83,10 +83,10 @@ pub enum MidiMessage {
         /// (`8192`) is the resting position.
         value: u16,
     },
-    /// Song position pointer, in MIDI beats (sixteenth notes) from the start
-    /// of the song.
+    /// Session position pointer, in MIDI beats (sixteenth notes) from the start
+    /// of the session.
     SongPosition(u16),
-    /// Selects a song/sequence number for playback.
+    /// Selects a session/sequence number for playback.
     SongSelect(u8),
     /// Requests that an analog synth retune its oscillators.
     TuneRequest,
@@ -288,9 +288,9 @@ impl MidiMessage {
                 out[2] = ((pos >> 7) & 0x7F) as u8;
                 3
             }
-            MidiMessage::SongSelect(song) => {
+            MidiMessage::SongSelect(session) => {
                 out[0] = self.status_byte();
-                out[1] = song;
+                out[1] = session;
                 2
             }
             MidiMessage::TuneRequest

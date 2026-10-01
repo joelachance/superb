@@ -1,6 +1,6 @@
 # export
 
-Getting the song out: render a range or the whole song to a file.
+Getting the session out: render a range or the whole session to a file.
 
 ## Purpose
 
@@ -13,8 +13,8 @@ you can bounce while listening.
 | verb | does |
 |---|---|
 | `render(rig, start, frames) -> PlanarBuffer` | into memory |
-| `bounce(rig, path, start, frames, WavFormat) -> PlanarBuffer` | render and write WAV at the song's rate |
-| `bounce_song(rig, path, WavFormat)` | from zero to the end of the last clip; fails on an empty song |
+| `bounce(rig, path, start, frames, WavFormat) -> PlanarBuffer` | render and write WAV at the session's rate |
+| `bounce_session(rig, path, WavFormat)` | from zero to the end of the last clip; fails on an empty session |
 | `bounce_at_rate(rig, path, start, frames, rate, WavFormat)` (feature `files`) | render, resample, write |
 
 ## Usage
@@ -23,7 +23,7 @@ you can bounce while listening.
 use superb::export;
 use superb::primitives::io::wav::WavFormat;
 
-let audio = export::bounce_song(&mut rig, "song.wav", WavFormat::Pcm16)?;
+let audio = export::bounce_session(&mut rig, "session.wav", WavFormat::Pcm16)?;
 println!("{} frames, peak {:.2}", audio.frames(), audio.peak());
 ```
 

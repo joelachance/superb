@@ -1,28 +1,28 @@
-//! `export`: bounce the song to a WAV file.
+//! `export`: bounce the session to a WAV file.
 //!
 //! What you'll learn:
 //! - Export renders offline through its own copy of the console, inserts
 //!   included, without touching the live engine
-//! - `bounce_song` covers start to the end of the last clip; `bounce` takes
+//! - `bounce_session` covers start to the end of the last clip; `bounce` takes
 //!   a range; `render` gives you the audio without a file
 //! - With feature `files`, `bounce_at_rate` converts to another sample rate
 //!
 //! ```text
-//! cargo run --example export_song
-//! cargo run --example export_song --features files
+//! cargo run --example export_session
+//! cargo run --example export_session --features files
 //! ```
 
 use superb::prelude::*;
 use superb::primitives::io::wav::{self, WavFormat};
-use superb::{export, mix, play, project};
+use superb::{export, mix, play, session};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut rig = project::create("bounce", rate, 256)?;
-    let lead = project::add_track(&mut rig, "lead", TrackKind::Audio)?;
-    let pad = project::add_track(&mut rig, "pad", TrackKind::Audio)?;
+    let mut rig = session::create("bounce", rate, 256)?;
+    let lead = session::add_track(&mut rig, "lead", TrackKind::Audio)?;
+    let pad = session::add_track(&mut rig, "pad", TrackKind::Audio)?;
 
-    // Two one-second tones, the second starting at 0.5 s: the song ends at 1.5 s.
+    // Two one-second tones, the second starting at 0.5 s: the session ends at 1.5 s.
     let mut a = PlanarBuffer::new(2, rate.hz() as usize);
     let mut b = PlanarBuffer::new(2, rate.hz() as usize);
     for i in 0..a.frames() {
@@ -37,8 +37,8 @@ fn main() -> Result<()> {
     rig.cache.insert("a.wav", a);
     rig.cache.insert("b.wav", b);
     let one = TimeDuration::from_seconds(1.0, rate);
-    project::add_audio_clip(&mut rig, lead, "a.wav", TimePosition::ZERO, one)?;
-    project::add_audio_clip(
+    session::add_audio_clip(&mut rig, lead, "a.wav", TimePosition::ZERO, one)?;
+    session::add_audio_clip(
         &mut rig,
         pad,
         "b.wav",
@@ -50,8 +50,8 @@ fn main() -> Result<()> {
 
     // The live engine is untouched by an export: leave it stopped at zero.
     let dir = std::env::temp_dir();
-    let path = dir.join("export_song.wav");
-    let audio = export::bounce_song(&mut rig, &path, WavFormat::Pcm16)?;
+    let path = dir.join("export_session.wav");
+    let audio = export::bounce_session(&mut rig, &path, WavFormat::Pcm16)?;
     println!(
         "bounced {:.2} s ({} frames) to {}; peak {:.3}",
         audio.frames() as f64 / rate.hz() as f64,

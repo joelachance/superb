@@ -15,16 +15,16 @@
 
 use superb::prelude::*;
 use superb::primitives::io::capture::capture_queue;
-use superb::{play, project, record};
+use superb::{play, record, session};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let block = 256;
-    let mut rig = project::create("record", rate, block)?;
-    let vox = project::add_track(&mut rig, "vox", TrackKind::Audio)?;
-    let _bed = project::add_track(&mut rig, "bed", TrackKind::Audio)?;
+    let mut rig = session::create("record", rate, block)?;
+    let vox = session::add_track(&mut rig, "vox", TrackKind::Audio)?;
+    let _bed = session::add_track(&mut rig, "bed", TrackKind::Audio)?;
 
-    // Arm the vocal. Arming is a switch in the song: undoable, saved.
+    // Arm the vocal. Arming is a switch in the session: undoable, saved.
     record::arm(&mut rig, vox, true)?;
     println!("armed: {:?}", record::armed_tracks(&rig));
 
@@ -92,7 +92,7 @@ fn main() -> Result<()> {
     println!("playback of the take, peak {:.3}", heard.peak());
 
     // Undo removes the clip (the audio stays in the cache).
-    project::undo(&mut rig)?;
+    session::undo(&mut rig)?;
     println!(
         "after undo: {} clips, cache holds {} take(s)",
         rig.session.clip_count(),

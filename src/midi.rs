@@ -20,7 +20,7 @@ use crate::rig::Rig;
 /// step. It does change the console's shape, so it takes effect at the next
 /// sync.
 ///
-/// Made of: `Track::armed` through `project::switch`; marks the rig for a
+/// Made of: `Track::armed` through `session::switch`; marks the rig for a
 /// sync (the instrument is a node in the console).
 pub fn monitor(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
     if rig.session.track(track)?.kind != TrackKind::Midi {
@@ -28,7 +28,7 @@ pub fn monitor(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
             what: "only MIDI tracks monitor live MIDI",
         });
     }
-    crate::project::switch(rig, |s| {
+    crate::session::switch(rig, |s| {
         s.track_mut(track)?.armed = on;
         Ok(())
     })?;
@@ -103,14 +103,14 @@ mod tests {
     use super::*;
     use crate::play;
     use crate::primitives::SampleRate;
-    use crate::project;
+    use crate::session;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
     #[test]
     fn a_monitoring_track_sounds_when_a_note_arrives() {
-        let mut rig = project::create("keys", R, 64).unwrap();
-        let keys = project::add_track(&mut rig, "keys", TrackKind::Midi).unwrap();
+        let mut rig = session::create("keys", R, 64).unwrap();
+        let keys = session::add_track(&mut rig, "keys", TrackKind::Midi).unwrap();
         assert!(!is_monitoring(&rig, keys));
         monitor(&mut rig, keys, true).unwrap();
         assert!(is_monitoring(&rig, keys));
@@ -134,8 +134,8 @@ mod tests {
 
     #[test]
     fn only_midi_tracks_monitor_and_bad_notes_are_refused() {
-        let mut rig = project::create("keys", R, 64).unwrap();
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let mut rig = session::create("keys", R, 64).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
         assert!(matches!(
             monitor(&mut rig, vox, true),
             Err(SuperbError::InvalidArgument { .. })

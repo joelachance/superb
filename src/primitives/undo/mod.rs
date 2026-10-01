@@ -13,7 +13,7 @@
 //!   expressed with getter/setter closures.
 //!
 //! The stack knows nothing about audio; it is meant to sit in front of the
-//! session document (`superb-session`) on the UI thread. Nothing here is
+//! session document (`primitives::session`) on the UI thread. Nothing here is
 //! real-time safe and nothing needs to be.
 //!
 //! ```

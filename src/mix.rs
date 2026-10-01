@@ -45,10 +45,10 @@ pub fn set_pan(rig: &mut Rig, track: TrackId, pan: f32) -> Result<()> {
 /// Mutes or unmutes. A switch: saved with the session, heard at the next
 /// block, not an undo step.
 ///
-/// Made of: `Track::muted` through `project::switch` → `StripParams::set_mute`
+/// Made of: `Track::muted` through `session::switch` → `StripParams::set_mute`
 /// on the live strip.
 pub fn set_mute(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
-    crate::project::switch(rig, |s| {
+    crate::session::switch(rig, |s| {
         s.track_mut(track)?.muted = on;
         Ok(())
     })?;
@@ -61,10 +61,10 @@ pub fn set_mute(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
 /// Solos or un-solos. While anything is soloed, every other track is
 /// silent; buses keep passing what reaches them. A switch, like mute.
 ///
-/// Made of: `Track::soloed` through `project::switch` → `StripParams::set_solo`
+/// Made of: `Track::soloed` through `session::switch` → `StripParams::set_solo`
 /// on the live strip.
 pub fn set_solo(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
-    crate::project::switch(rig, |s| {
+    crate::session::switch(rig, |s| {
         s.track_mut(track)?.soloed = on;
         Ok(())
     })?;
@@ -77,9 +77,9 @@ pub fn set_solo(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
 /// Adds a bus. Route tracks into it with [`route`] and feed it with
 /// [`add_send`].
 ///
-/// Made of: [`project::add_track`](crate::project::add_track) with `TrackKind::Bus`.
+/// Made of: [`session::add_track`](crate::session::add_track) with `TrackKind::Bus`.
 pub fn add_bus(rig: &mut Rig, name: &str) -> Result<TrackId> {
-    crate::project::add_track(rig, name, TrackKind::Bus)
+    crate::session::add_track(rig, name, TrackKind::Bus)
 }
 
 /// Sends a track's (or bus's) output into `bus`, or back to the master
@@ -139,10 +139,10 @@ pub fn set_send_level_db(rig: &mut Rig, send: SendId, db: f32) -> Result<()> {
 
 /// Switches a send on or off. A switch, like mute.
 ///
-/// Made of: `TrackSend::enabled` through `project::switch` →
+/// Made of: `TrackSend::enabled` through `session::switch` →
 /// `SendParams::set_enabled` on the live send.
 pub fn set_send_enabled(rig: &mut Rig, send: SendId, on: bool) -> Result<()> {
-    crate::project::switch(rig, |s| {
+    crate::session::switch(rig, |s| {
         s.send_mut(send)?.enabled = on;
         Ok(())
     })?;
@@ -167,18 +167,18 @@ mod tests {
     use crate::play;
     use crate::primitives::buffers::PlanarBuffer;
     use crate::primitives::{SampleRate, TimeDuration, TimePosition};
-    use crate::project;
+    use crate::session;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
     /// One audio track with a cached 0.5 tone covering 0..4_000 frames.
     fn tone_rig() -> (Rig, TrackId) {
-        let mut rig = project::create("mix", R, 64).unwrap();
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let mut rig = session::create("mix", R, 64).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);
         rig.cache.insert("tone.wav", tone);
-        project::add_audio_clip(
+        session::add_audio_clip(
             &mut rig,
             vox,
             "tone.wav",
@@ -235,7 +235,7 @@ mod tests {
         assert!(rig.session.track(vox).unwrap().muted);
         set_mute(&mut rig, vox, false).unwrap();
 
-        let other = project::add_track(&mut rig, "other", TrackKind::Audio).unwrap();
+        let other = session::add_track(&mut rig, "other", TrackKind::Audio).unwrap();
         play::sync(&mut rig).unwrap();
         balance_all(&rig);
         set_solo(&mut rig, other, true).unwrap();
@@ -250,7 +250,7 @@ mod tests {
         // mute and solo are switches and never enter the history.
         assert_eq!(rig.history.undo_len() - steps_before, 3);
         while rig.history.undo_len() > steps_before {
-            assert!(project::undo(&mut rig).unwrap());
+            assert!(session::undo(&mut rig).unwrap());
         }
         assert_eq!(rig.session.track(vox).unwrap().gain_db, 0.0);
         assert_eq!(rig.session.track(vox).unwrap().pan, 0.0);
@@ -285,7 +285,7 @@ mod tests {
         assert!((settled(&mut rig) - direct).abs() < 1e-3);
         assert!(!rig.session.send(send).unwrap().enabled);
         assert_eq!(rig.history.undo_len(), steps, "a switch, not an edit");
-        assert!(!project::is_saved(&rig), "but it does count as unsaved");
+        assert!(!session::is_saved(&rig), "but it does count as unsaved");
 
         // Route the track through the bus and turn the bus down.
         route(&mut rig, vox, Some(room)).unwrap();

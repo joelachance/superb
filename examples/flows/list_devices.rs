@@ -12,7 +12,7 @@
 //! ```
 
 use superb::prelude::*;
-use superb::{devices, project};
+use superb::{devices, session};
 
 /// `max_channels` is 0 when the host does not say.
 fn channels(max: usize) -> String {
@@ -24,7 +24,7 @@ fn channels(max: usize) -> String {
 }
 
 fn main() -> Result<()> {
-    let rig = project::create("devices", SampleRate::HZ_48K, 256)?;
+    let rig = session::create("devices", SampleRate::HZ_48K, 256)?;
 
     println!("outputs:");
     for d in devices::outputs()? {

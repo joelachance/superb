@@ -152,14 +152,14 @@ impl core::fmt::Debug for Collector {
 /// Arms or disarms an audio track. Armed tracks receive a clip when a take
 /// is stopped. A switch: saved with the session, not an undo step.
 ///
-/// Made of: `Track::armed` through `project::switch`.
+/// Made of: `Track::armed` through `session::switch`.
 pub fn arm(rig: &mut Rig, track: TrackId, on: bool) -> Result<()> {
     if rig.session.track(track)?.kind != TrackKind::Audio {
         return Err(SuperbError::InvalidArgument {
             what: "only audio tracks are armed for recording",
         });
     }
-    crate::project::switch(rig, |s| {
+    crate::session::switch(rig, |s| {
         s.track_mut(track)?.armed = on;
         Ok(())
     })
@@ -433,7 +433,7 @@ pub mod steps {
 
     /// Places a clip of the cached take on `track`.
     ///
-    /// Made of: [`project::add_audio_clip`](crate::project::add_audio_clip).
+    /// Made of: [`session::add_audio_clip`](crate::session::add_audio_clip).
     pub fn place_clip(
         rig: &mut Rig,
         track: TrackId,
@@ -441,7 +441,7 @@ pub mod steps {
         start: TimePosition,
         length: TimeDuration,
     ) -> Result<ClipId> {
-        crate::project::add_audio_clip(rig, track, take, start, length)
+        crate::session::add_audio_clip(rig, track, take, start, length)
     }
 }
 
@@ -450,7 +450,7 @@ mod tests {
     use super::*;
     use crate::primitives::io::capture::capture_queue;
     use crate::primitives::SampleRate;
-    use crate::project;
+    use crate::session;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
@@ -469,10 +469,10 @@ mod tests {
 
     #[test]
     fn a_take_becomes_a_clip_on_every_armed_track() {
-        let mut rig = project::create("rec", R, 64).unwrap();
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
-        let gtr = project::add_track(&mut rig, "gtr", TrackKind::Audio).unwrap();
-        let _idle = project::add_track(&mut rig, "idle", TrackKind::Audio).unwrap();
+        let mut rig = session::create("rec", R, 64).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let gtr = session::add_track(&mut rig, "gtr", TrackKind::Audio).unwrap();
+        let _idle = session::add_track(&mut rig, "idle", TrackKind::Audio).unwrap();
         arm(&mut rig, vox, true).unwrap();
         arm(&mut rig, gtr, true).unwrap();
         assert_eq!(armed_tracks(&rig), [vox, gtr]);
@@ -522,16 +522,16 @@ mod tests {
         assert_eq!(rig.live.strips.len(), 3, "one handle per track");
 
         // One undo removes both clips.
-        assert!(project::undo(&mut rig).unwrap());
+        assert!(session::undo(&mut rig).unwrap());
         assert!(rig.session.clip(clips[0]).is_err() && rig.session.clip(clips[1]).is_err());
-        assert!(project::redo(&mut rig).unwrap());
+        assert!(session::redo(&mut rig).unwrap());
         assert!(rig.session.clip(clips[0]).is_ok());
     }
 
     #[test]
     fn takes_get_distinct_names_and_empty_takes_leave_no_clip() {
-        let mut rig = project::create("rec", R, 64).unwrap();
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let mut rig = session::create("rec", R, 64).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
         arm(&mut rig, vox, true).unwrap();
         for i in 1..=2 {
             let (mut mic, blocks) = capture_queue(2, 64, 4).unwrap();
@@ -562,8 +562,8 @@ mod tests {
 
     #[test]
     fn errors_are_explicit() {
-        let mut rig = project::create("rec", R, 64).unwrap();
-        let keys = project::add_track(&mut rig, "keys", TrackKind::Midi).unwrap();
+        let mut rig = session::create("rec", R, 64).unwrap();
+        let keys = session::add_track(&mut rig, "keys", TrackKind::Midi).unwrap();
         assert!(
             arm(&mut rig, keys, true).is_err(),
             "MIDI tracks monitor, they do not record audio"
@@ -574,7 +574,7 @@ mod tests {
         );
         let (_mic, blocks) = capture_queue(1, 64, 2).unwrap();
         assert!(start_from(&mut rig, blocks, 1).is_err(), "no armed track");
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
         arm(&mut rig, vox, true).unwrap();
         let (_a, blocks) = capture_queue(1, 64, 2).unwrap();
         start_from(&mut rig, blocks, 1).unwrap();
@@ -588,8 +588,8 @@ mod tests {
 
     #[test]
     fn a_collector_thread_gathers_the_take_by_itself() {
-        let mut rig = project::create("rec", R, 64).unwrap();
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let mut rig = session::create("rec", R, 64).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
         arm(&mut rig, vox, true).unwrap();
         // A queue of 64 blocks fed with 200, paced like a device, and no
         // `collect` calls: the thread keeps up on its own. (A failed push
@@ -653,8 +653,8 @@ mod tests {
 
     #[test]
     fn collecting_as_you_go_outlasts_the_queue() {
-        let mut rig = project::create("rec", R, 64).unwrap();
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let mut rig = session::create("rec", R, 64).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
         arm(&mut rig, vox, true).unwrap();
         // A queue of only two blocks; the take is ten blocks long.
         let (mut mic, blocks) = capture_queue(1, 64, 2).unwrap();

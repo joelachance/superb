@@ -1,27 +1,27 @@
-//! `play`: hear the song, move the playhead, loop a section.
+//! `play`: hear the session, move the playhead, loop a section.
 //!
 //! What you'll learn:
-//! - `play::start` syncs the console from the song and starts the transport
+//! - `play::start` syncs the console from the session and starts the transport
 //! - Without an audio device, `play::advance` renders blocks and hands you
 //!   the audio (tests and headless tools work this way)
 //! - The playhead is read from atomics: `position`, `state`, `is_rolling`
-//! - A loop range lives in the song (`project::set_loop`); `set_loop_enabled`
+//! - A loop range lives in the session (`session::set_loop`); `set_loop_enabled`
 //!   turns it on and off while rolling
 //! - With feature `devices`, `play::start_output` moves the engine onto a
 //!   real output stream and the device drives it from then on
 //!
 //! ```text
-//! cargo run --example play_song
-//! cargo run --example play_song --features devices   # also plays on speakers
+//! cargo run --example play_session
+//! cargo run --example play_session --features devices   # also plays on speakers
 //! ```
 
 use superb::prelude::*;
-use superb::{play, project};
+use superb::{play, session};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut rig = project::create("play", rate, 256)?;
-    let vox = project::add_track(&mut rig, "vox", TrackKind::Audio)?;
+    let mut rig = session::create("play", rate, 256)?;
+    let vox = session::add_track(&mut rig, "vox", TrackKind::Audio)?;
 
     // Half a second of a plucked-sounding tone: a sine with a decay.
     let frames = rate.hz() as usize / 2;
@@ -35,7 +35,7 @@ fn main() -> Result<()> {
     rig.cache.insert("pluck.wav", pluck);
     // Three plucks, one per half second.
     for n in 0..3 {
-        project::add_audio_clip(
+        session::add_audio_clip(
             &mut rig,
             vox,
             "pluck.wav",
@@ -69,13 +69,13 @@ fn main() -> Result<()> {
     play::advance(&mut rig, 1)?;
     println!("after seek: {:.3} s", play::position(&rig).to_seconds(rate));
 
-    // Loop the middle pluck. The range is part of the song (undoable,
+    // Loop the middle pluck. The range is part of the session (undoable,
     // saved); enabling is a transport switch.
     let range = LoopRange::new(
         TimePosition::from_seconds(0.5, rate),
         TimePosition::from_seconds(1.0, rate),
     )?;
-    project::set_loop(&mut rig, Some(range))?;
+    session::set_loop(&mut rig, Some(range))?;
     play::set_loop_enabled(&mut rig, true)?;
     play::seek(&mut rig, range.start())?;
     // 0.75 s of playback inside a 0.5 s loop: the playhead wraps once.

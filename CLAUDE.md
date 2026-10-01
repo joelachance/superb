@@ -10,7 +10,7 @@ for the engine, `docs/flows.md` for the flow tier, and
 ## Layout
 
 - `src/primitives/` is the engine; modules never import a flow or the `Rig`.
-- `src/<flow>.rs` (`project`, `play`, `mix`, `midi`, `record`, `plugins`,
+- `src/<flow>.rs` (`session`, `play`, `mix`, `midi`, `record`, `plugins`,
   `export`, `devices`) are free functions over `src/rig.rs`. Verbs take
   `&mut Rig`; steps take primitives; every verb doc ends with "Made of:".
 - `examples/flows/`, `examples/primitives/`, registered in `Cargo.toml`.
@@ -37,7 +37,7 @@ cargo doc --no-deps
 - No unsafe outside `primitives::realtime::{alloc, spsc}` and
   `primitives::plugins::clap`.
 - Structural edits set `rig.needs_sync`; switches (mute, solo, arm,
-  bypass) go through `project::switch` and never enter the undo history;
+  bypass) go through `session::switch` and never enter the undo history;
   level edits reach the document and the live handle.
 - Every public item is documented; update the doc note and the example
   when an API changes.

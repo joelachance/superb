@@ -91,12 +91,12 @@ name = "realtime_queue"
 path = "examples/primitives/realtime_queue.rs"
 
 [[example]]
-name = "new_song"
-path = "examples/flows/new_song.rs"
+name = "new_session"
+path = "examples/flows/new_session.rs"
 
 [[example]]
-name = "play_song"
-path = "examples/flows/play_song.rs"
+name = "play_session"
+path = "examples/flows/play_session.rs"
 
 [[example]]
 name = "mix_session"
@@ -116,8 +116,8 @@ path = "examples/flows/insert_plugin.rs"
 required-features = ["clap"]
 
 [[example]]
-name = "export_song"
-path = "examples/flows/export_song.rs"
+name = "export_session"
+path = "examples/flows/export_session.rs"
 
 [[example]]
 name = "list_devices"

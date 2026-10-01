@@ -68,11 +68,11 @@ pub fn midi_inputs() -> Result<Vec<crate::primitives::midi::input::MidiPortInfo>
 mod tests {
     use super::*;
     use crate::primitives::SampleRate;
-    use crate::project;
+    use crate::session;
 
     #[test]
     fn configs_follow_the_rig() {
-        let rig = project::create("dev", SampleRate::CD, 128).unwrap();
+        let rig = session::create("dev", SampleRate::CD, 128).unwrap();
         let out = output_config(&rig, Some("Speakers"));
         assert_eq!(out.device_name.as_deref(), Some("Speakers"));
         assert_eq!(out.sample_rate, SampleRate::CD);

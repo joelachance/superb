@@ -64,7 +64,7 @@ before draining a take). Rules:
   and coalesces by time (`Rig::COALESCE_WINDOW`), so a drag is one step
   without the UI having to say when it ended. A switch (mute, solo, arm,
   monitoring, bypass, send on/off) is not an edit: it goes through
-  `project::switch`, which changes the document directly and marks the
+  `session::switch`, which changes the document directly and marks the
   history dirty, and never enters the undo history.
 * No behaviour on the `Rig` itself beyond constructors; it is a record.
 

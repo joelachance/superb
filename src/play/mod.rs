@@ -1,4 +1,4 @@
-//! Playing the song: build the console from the document, hand it to the
+//! Playing the session: build the console from the document, hand it to the
 //! running engine, and drive the transport.
 //!
 //! The engine never sees the document. [`sync`] turns the session into a
@@ -27,7 +27,7 @@ use crate::primitives::transport::TransportState;
 use crate::primitives::{Result, SuperbError, TimePosition};
 use crate::rig::{LiveHandles, Rig};
 
-/// Rebuilds the console from the song and swaps it into the engine.
+/// Rebuilds the console from the session and swaps it into the engine.
 ///
 /// Made of: `LiveEngine::reclaim` (frees graphs the engine has retired, on
 /// this thread) → [`steps::build_console`] → [`steps::attach_inserts`] →
@@ -60,7 +60,7 @@ pub fn sync(rig: &mut Rig) -> Result<()> {
     Ok(())
 }
 
-/// Starts the transport from where it is. Syncs first if the song changed.
+/// Starts the transport from where it is. Syncs first if the session changed.
 ///
 /// Made of: [`sync`] when needed → `LiveEngine::send(Play)`.
 pub fn start(rig: &mut Rig) -> Result<()> {
@@ -84,15 +84,15 @@ pub fn seek(rig: &mut Rig, to: TimePosition) -> Result<()> {
     rig.engine.send(EngineCommand::Seek(to))
 }
 
-/// Moves the playhead to the start of the song.
+/// Moves the playhead to the start of the session.
 ///
 /// Made of: [`seek`] to zero.
 pub fn rewind(rig: &mut Rig) -> Result<()> {
     seek(rig, TimePosition::ZERO)
 }
 
-/// Turns looping over the song's loop range on or off (set the range with
-/// [`project::set_loop`](crate::project::set_loop)).
+/// Turns looping over the session's loop range on or off (set the range with
+/// [`session::set_loop`](crate::session::set_loop)).
 ///
 /// Made of: `LiveEngine::send(SetLoopEnabled)`.
 pub fn set_loop_enabled(rig: &mut Rig, on: bool) -> Result<()> {
@@ -182,7 +182,7 @@ pub mod steps {
 
     use super::AudioCache;
 
-    /// Builds a fresh console for the song: a strip per track and bus,
+    /// Builds a fresh console for the session: a strip per track and bus,
     /// routing and sends, a player per audible clip, and a live instrument
     /// on every armed MIDI track so it sounds when you play.
     ///
@@ -211,7 +211,7 @@ pub mod steps {
         Ok((mixer, player))
     }
 
-    /// Loads every insert in the song and splices it into its strip's chain,
+    /// Loads every insert in the session and splices it into its strip's chain,
     /// with the node's bypass switch set to match the document. Failures
     /// are collected, not fatal.
     ///
@@ -305,18 +305,18 @@ mod tests {
     use crate::primitives::session::TrackKind;
     use crate::primitives::transport::LoopRange;
     use crate::primitives::{SampleRate, TimeDuration};
-    use crate::project;
+    use crate::session;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
-    /// A song with one audio track playing a cached 0.5 tone from 0..400 frames.
+    /// A session with one audio track playing a cached 0.5 tone from 0..400 frames.
     fn tone_rig() -> (Rig, crate::primitives::TrackId) {
-        let mut rig = project::create("tone", R, 64).unwrap();
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let mut rig = session::create("tone", R, 64).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
         rig.cache.insert("tone.wav", tone);
-        project::add_audio_clip(
+        session::add_audio_clip(
             &mut rig,
             vox,
             "tone.wav",
@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(position(&rig), TimePosition::ZERO);
 
         let range = LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(100)).unwrap();
-        project::set_loop(&mut rig, Some(range)).unwrap();
+        session::set_loop(&mut rig, Some(range)).unwrap();
         set_loop_enabled(&mut rig, true).unwrap();
         start(&mut rig).unwrap();
         advance(&mut rig, 3).unwrap(); // 192 frames through a 100-frame loop
@@ -396,7 +396,7 @@ mod tests {
         let after = advance(&mut rig, 3).unwrap();
         assert!(after.channel(0)[150..].iter().all(|&s| s.abs() < 1e-6));
         // Removing the track marks a sync; `advance` runs it.
-        project::remove_track(&mut rig, vox).unwrap();
+        session::remove_track(&mut rig, vox).unwrap();
         assert!(rig.needs_sync);
         rewind(&mut rig).unwrap();
         let gone = advance(&mut rig, 2).unwrap();
@@ -407,8 +407,8 @@ mod tests {
 
     #[test]
     fn armed_midi_tracks_get_a_live_instrument() {
-        let mut rig = project::create("keys", R, 64).unwrap();
-        let keys = project::add_track(&mut rig, "keys", TrackKind::Midi).unwrap();
+        let mut rig = session::create("keys", R, 64).unwrap();
+        let keys = session::add_track(&mut rig, "keys", TrackKind::Midi).unwrap();
         start(&mut rig).unwrap();
         let (mixer, player) = steps::build_console(&rig.session, &rig.cache, 2).unwrap();
         assert_eq!(

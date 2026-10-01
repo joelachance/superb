@@ -23,10 +23,10 @@ port.
 ## Usage
 
 ```rust
-use superb::{midi, play, project};
+use superb::{midi, play, session};
 use superb::prelude::*;
 
-let keys = project::add_track(&mut rig, "keys", TrackKind::Midi)?;
+let keys = session::add_track(&mut rig, "keys", TrackKind::Midi)?;
 midi::monitor(&mut rig, keys, true)?;
 play::start(&mut rig)?;
 midi::play_note(&mut rig, 0, 60, 100)?;
@@ -36,7 +36,7 @@ midi::release_note(&mut rig, 0, 60)?;
 
 ## Made of
 
-`monitor`: `Track::armed` through `project::switch` (a MIDI track's
+`monitor`: `Track::armed` through `session::switch` (a MIDI track's
 "armed" flag means monitoring), `needs_sync`. `play_note` / `release_note`:
 `MidiMessage::note_on` / `note_off` → `send`. `send`:
 `LiveEngine::push_midi` with a zero timestamp. `connect_input`:

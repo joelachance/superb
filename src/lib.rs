@@ -6,13 +6,13 @@
 //! The crate has two tiers, so you always know what a call will do:
 //!
 //! * **Flows** are top-level modules named after everyday tasks:
-//!   [`project`], [`play`], [`mix`], [`midi`], [`record`], [`plugins`],
+//!   [`session`], [`play`], [`mix`], [`midi`], [`record`], [`plugins`],
 //!   [`export`] and [`devices`]. Each is a set of free functions over a
-//!   [`Rig`] (the state of a song in progress), and every function's docs
+//!   [`Rig`] (the state of a session in progress), and every function's docs
 //!   end with a "Made of:" list of the primitive calls it performs, so you
 //!   can call those yourself when the flow is not quite what you want.
 //! * **[`primitives`]** are the engine: sample-accurate time, buffers, the
-//!   real-time graph, the mixer, MIDI, automation, the project document
+//!   real-time graph, the mixer, MIDI, automation, the session document
 //!   with undo, plugin hosting and device / file I/O. They know nothing
 //!   about flows.
 //!
@@ -22,20 +22,20 @@
 //! resampling and bounce helpers). Hardware and codecs are off by default
 //! so the crate builds and tests without audio hardware.
 //!
-//! A song from nothing to sound, without an audio device:
+//! A session from nothing to sound, without an audio device:
 //!
 //! ```
 //! use superb::prelude::*;
-//! use superb::{mix, play, project};
+//! use superb::{mix, play, session};
 //!
-//! let mut rig = project::create("demo", SampleRate::HZ_48K, 256)?;
-//! let lead = project::add_track(&mut rig, "lead", TrackKind::Audio)?;
+//! let mut rig = session::create("demo", SampleRate::HZ_48K, 256)?;
+//! let lead = session::add_track(&mut rig, "lead", TrackKind::Audio)?;
 //!
 //! // Clips point at audio in the cache: a decoded file, or a buffer you made.
 //! let mut tone = PlanarBuffer::new(2, 4_800);
 //! tone.fill(0.25);
 //! rig.cache.insert("tone.wav", tone);
-//! project::add_audio_clip(&mut rig, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(4_800))?;
+//! session::add_audio_clip(&mut rig, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(4_800))?;
 //! mix::set_gain_db(&mut rig, lead, -6.0)?;
 //!
 //! play::start(&mut rig)?;                    // builds the console, starts the transport
@@ -74,9 +74,9 @@ pub mod mix;
 pub mod play;
 pub mod plugins;
 pub mod primitives;
-pub mod project;
 pub mod record;
 pub mod rig;
+pub mod session;
 
 pub use rig::Rig;
 

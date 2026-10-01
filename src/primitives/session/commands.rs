@@ -1546,7 +1546,7 @@ mod tests {
     #[test]
     fn property_edits_validate_and_coalesce() {
         let (mut s, mut h, a, clip) = base();
-        h.push(&mut s, set_session_name("song")).unwrap();
+        h.push(&mut s, set_session_name("session")).unwrap();
         h.push(&mut s, set_track_name(a, "vox")).unwrap();
         h.push(&mut s, set_track_gain_db(a, -3.0)).unwrap();
         h.push(&mut s, set_track_gain_db(a, -6.0)).unwrap();
@@ -1576,7 +1576,7 @@ mod tests {
         );
         let i = s.clip(clip).unwrap();
         assert_eq!((i.name.as_str(), i.gain_db, i.muted), ("take", -2.0, true));
-        assert_eq!(s.name(), "song");
+        assert_eq!(s.name(), "session");
         while h.undo(&mut s).unwrap() {}
         let t = s.track(a).unwrap();
         assert_eq!(

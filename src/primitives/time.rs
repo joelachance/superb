@@ -217,10 +217,10 @@ impl BeatDuration {
     }
 }
 
-/// An absolute musical position in quarter notes from the start of the song.
+/// An absolute musical position in quarter notes from the start of the session.
 ///
 /// Stored as `f64` (as most engines do in practice); sub-sample accuracy is
-/// preserved for any realistic song length.
+/// preserved for any realistic session length.
 #[derive(Clone, Copy, Debug, Default, PartialEq, PartialOrd)]
 pub struct BeatPosition(f64);
 
@@ -233,7 +233,7 @@ impl BeatPosition {
         Self(beats)
     }
 
-    /// Quarter-note count from the song start.
+    /// Quarter-note count from the session start.
     pub const fn beats(self) -> f64 {
         self.0
     }

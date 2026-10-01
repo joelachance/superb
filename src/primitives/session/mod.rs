@@ -1,6 +1,6 @@
 //! # superb-session
 //!
-//! The document model of the Superb DAW SDK: what a project *is*, as
+//! The document model of the Superb DAW SDK: what a session *is*, as
 //! opposed to how it sounds (`superb-graph`/`superb-mixer`) or how it is
 //! played (`superb-transport`/`superb-io`).
 //!

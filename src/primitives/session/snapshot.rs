@@ -190,7 +190,7 @@ pub struct MarkerSnapshot {
 pub struct SessionSnapshot {
     /// [`FORMAT_VERSION`] of the writer.
     pub format_version: u32,
-    /// Project name.
+    /// Session name.
     pub name: String,
     /// Sample rate in Hz.
     pub sample_rate_hz: u32,
@@ -688,7 +688,7 @@ mod tests {
         let s = rich_session();
         let dir = std::env::temp_dir().join(format!("superb-session-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("song.superb.json");
+        let path = dir.join("session.superb.json");
         s.save(&path).unwrap();
         let loaded = Session::load(&path).unwrap();
         assert_eq!(loaded.snapshot(), s.snapshot());

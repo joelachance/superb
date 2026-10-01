@@ -5,7 +5,7 @@ One crate, `superb`, dual-licensed Apache-2.0 OR MIT.
 
 Superb is the engine side of a DAW: sample-accurate time, audio buffers, a
 real-time-safe processing graph, a mixer with tracks, buses, sends and
-insert chains, MIDI, automation, a project document with undo, CLAP plugin
+insert chains, MIDI, automation, a session document with undo, CLAP plugin
 hosting, recording, offline export, and audio device and file I/O. It has
 no user interface; you bring your own.
 
@@ -14,8 +14,8 @@ no user interface; you bring your own.
 The crate is organised so you always know what a call will do.
 
 **Flows** are top-level modules named after everyday tasks. Each one is a
-set of free functions that take a `Rig` (the state of a song in progress)
-and do the whole job: `project`, `play`, `mix`, `midi`, `record`,
+set of free functions that take a `Rig` (the state of a session in progress)
+and do the whole job: `session`, `play`, `mix`, `midi`, `record`,
 `plugins`, `export`, `devices`. Every flow function documents the
 primitive calls it is *made of*, so when one does not do exactly what you
 want, you call those primitives yourself. Nothing is hidden behind an
@@ -35,19 +35,19 @@ They know nothing about flows or the `Rig`.
 | `primitives::mixer` | mixer | tracks, buses, sends, insert chains, pan laws, mute/solo, peak meters | [mixer.md](docs/primitives/mixer.md) |
 | `primitives::automation` | automation | envelopes, read/touch/latch/write modes, sample-accurate apply | [automation.md](docs/primitives/automation.md) |
 | `primitives::undo` | undo history | coalescing undo/redo stack with groups and clean-state tracking | [undo.md](docs/primitives/undo.md) |
-| `primitives::session` | project / song | tracks, clips, markers, routing, inserts, tempo map, JSON save/load, undoable commands | [session.md](docs/primitives/session.md) |
+| `primitives::session` | the session (the document) | tracks, clips, markers, routing, inserts, tempo map, JSON save/load, undoable commands | [session.md](docs/primitives/session.md) |
 | `primitives::plugins` | plugin host | plugin instance model, `PluginNode`, CLAP host (VST3 is a stub) | [plugins.md](docs/primitives/plugins.md) |
 | `primitives::io` | engine, devices, files | block loop, live engine with control handle, offline render, capture queue, WAV, decode/resample (feature `files`), device streams (feature `devices`) | [io.md](docs/primitives/io.md) |
 
 | flow | what it does | doc |
 |---|---|---|
-| `project` | create, open and save a song; add tracks, clips, markers; tempo and loop; undo and redo | [project.md](docs/flows/project.md) |
-| `play` | build the console from the song and hear it: start, stop, seek, loop, render offline or on a device | [play.md](docs/flows/play.md) |
+| `session` | create, open and save a session; add tracks, clips, markers; tempo and loop; undo and redo | [session.md](docs/flows/session.md) |
+| `play` | build the console from the session and hear it: start, stop, seek, loop, render offline or on a device | [play.md](docs/flows/play.md) |
 | `mix` | faders, pan, mute, solo, buses, sends, routing, meters | [mix.md](docs/flows/mix.md) |
 | `midi` | monitor a MIDI track live, send notes, connect a keyboard | [midi.md](docs/flows/midi.md) |
 | `record` | arm tracks, capture a take, turn it into clips | [record.md](docs/flows/record.md) |
 | `plugins` | find plugins, insert one on a track, set parameters, bypass | [plugins.md](docs/flows/plugins.md) |
-| `export` | render a range or the whole song to WAV, optionally resampled | [export.md](docs/flows/export.md) |
+| `export` | render a range or the whole session to WAV, optionally resampled | [export.md](docs/flows/export.md) |
 | `devices` | list audio and MIDI hardware; configurations that match the rig | [devices.md](docs/flows/devices.md) |
 
 [docs/flows.md](docs/flows.md) explains how the flows fit together (the
@@ -59,16 +59,16 @@ new to you, start with [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md).
 
 ```rust
 use superb::prelude::*;
-use superb::{mix, play, project};
+use superb::{mix, play, session};
 
-let mut rig = project::create("demo", SampleRate::HZ_48K, 256)?;
-let lead = project::add_track(&mut rig, "lead", TrackKind::Audio)?;
+let mut rig = session::create("demo", SampleRate::HZ_48K, 256)?;
+let lead = session::add_track(&mut rig, "lead", TrackKind::Audio)?;
 
 // Audio comes from the cache: a decoded file, or a buffer you made.
 let mut tone = PlanarBuffer::new(2, 48_000);
 tone.fill(0.25);
 rig.cache.insert("tone.wav", tone);
-project::add_audio_clip(&mut rig, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(48_000))?;
+session::add_audio_clip(&mut rig, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(48_000))?;
 mix::set_gain_db(&mut rig, lead, -6.0)?;
 
 play::start(&mut rig)?;                 // builds the console, starts the transport
@@ -81,13 +81,13 @@ unless hardware is the point:
 
 ```sh
 cargo test                                     # the whole suite, no audio hardware needed
-cargo run --example new_song                   # project: tracks, clips, undo, save and open
-cargo run --example play_song                  # play: transport, loop, offline blocks
+cargo run --example new_session                # session: tracks, clips, undo, save and open
+cargo run --example play_session                  # play: transport, loop, offline blocks
 cargo run --example mix_session                # mix: faders, bus, sends, meters
 cargo run --example midi_keys                  # midi: notes into a monitoring track
 cargo run --example record_take                # record: a take from a synthetic microphone
 cargo run --example insert_plugin              # plugins: scan, insert, set a parameter
-cargo run --example export_song                # export: bounce to WAV
+cargo run --example export_session                # export: bounce to WAV
 cargo run --example list_devices --features devices
 ```
 
@@ -121,7 +121,7 @@ are published as whole prepared graphs and swapped in between two blocks.
 
 ## Status
 
-Working today: a project document with tracks, clips, markers, routing,
+Working today: a session document with tracks, clips, markers, routing,
 inserts, JSON files and undo; a console built from the document with
 faders, buses, sends and insert chains, swapped glitch-free into a running
 engine; offline rendering and WAV export; device output and capture;

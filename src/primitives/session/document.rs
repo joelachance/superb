@@ -8,7 +8,7 @@ use crate::primitives::{
 
 use crate::primitives::session::{Clip, Insert, Marker, Track, TrackKind, TrackSend};
 
-/// A project document: tracks, clips, markers, tempo map and loop range.
+/// A session: tracks, clips, markers, tempo map and loop range.
 ///
 /// All IDs are allocated from one per-session counter and never reused, so
 /// a `TrackId`, `ClipId`, `MarkerId` or `SendId` stays valid for the life
@@ -55,12 +55,12 @@ impl Session {
     // Document-level properties
     // ------------------------------------------------------------------
 
-    /// Project name.
+    /// Session name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// Renames the project.
+    /// Renames the session.
     pub fn set_name(&mut self, name: impl Into<String>) {
         self.name = name.into();
         self.touch();
@@ -854,8 +854,8 @@ mod tests {
 
     #[test]
     fn document_properties_and_revision() {
-        let mut s = Session::new("song", R);
-        assert_eq!(s.name(), "song");
+        let mut s = Session::new("session", R);
+        assert_eq!(s.name(), "session");
         assert_eq!(s.sample_rate(), R);
         assert_eq!(s.revision(), 0);
         assert!(s.loop_range().is_none());

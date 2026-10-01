@@ -2,8 +2,8 @@
 //!
 //! What you'll learn:
 //! - `plugins::scan` looks in the standard folders and `CLAP_PATH`
-//! - An insert is stored in the song; the running instance is created at
-//!   the next sync, so a song with a missing plugin still opens and plays
+//! - An insert is stored in the session; the running instance is created at
+//!   the next sync, so a session with a missing plugin still opens and plays
 //! - `set_param` reaches the document and the running instance at once
 //! - `failed` tells you which inserts did not load and why
 //!
@@ -14,16 +14,16 @@
 
 use superb::prelude::*;
 use superb::primitives::plugins::PluginFormat;
-use superb::{play, plugins, project};
+use superb::{play, plugins, session};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut rig = project::create("fx", rate, 256)?;
-    let vox = project::add_track(&mut rig, "vox", TrackKind::Audio)?;
+    let mut rig = session::create("fx", rate, 256)?;
+    let vox = session::add_track(&mut rig, "vox", TrackKind::Audio)?;
     let mut tone = PlanarBuffer::new(2, rate.hz() as usize);
     tone.fill(0.25);
     rig.cache.insert("tone.wav", tone);
-    project::add_audio_clip(
+    session::add_audio_clip(
         &mut rig,
         vox,
         "tone.wav",
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
                 let wet = play::advance(&mut rig, 4)?.peak();
                 println!("{} at max: peak {dry:.3} -> {wet:.3}", p.name);
                 println!(
-                    "stored in the song: {:?}",
+                    "stored in the session: {:?}",
                     rig.session.insert(fx)?.param(p.id)
                 );
             }
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
             println!("bypassed: loaded = {}", plugins::loaded(&rig, fx).is_some());
         }
         None => {
-            // No effect installed: show the failure path instead. The song
+            // No effect installed: show the failure path instead. The session
             // remembers the insert; the console runs without it.
             let mut desc =
                 PluginDescriptor::new(PluginFormat::Clap, "com.example.missing", "Missing FX");

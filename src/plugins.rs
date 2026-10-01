@@ -1,6 +1,6 @@
 //! Effects and instruments: find plugins, put one on a track, turn its knobs.
 //!
-//! An insert is remembered in the song (plugin, bypass, parameter values,
+//! An insert is remembered in the session (plugin, bypass, parameter values,
 //! saved state) and turned into a running instance when the console is
 //! built. Parameter changes take the two usual paths: into the document
 //! through undo and onto the running instance through its wait-free queue.
@@ -53,10 +53,10 @@ pub fn remove(rig: &mut Rig, insert: InsertId) -> Result<()> {
 /// session but not recorded in the undo history, and it is heard at the
 /// next block.
 ///
-/// Made of: `Insert::bypassed` through `project::switch` → the node's
+/// Made of: `Insert::bypassed` through `session::switch` → the node's
 /// bypass flag in [`LiveInsert::bypass`](crate::rig::LiveInsert::bypass).
 pub fn set_bypassed(rig: &mut Rig, insert: InsertId, on: bool) -> Result<()> {
-    crate::project::switch(rig, |s| {
+    crate::session::switch(rig, |s| {
         s.insert_mut(insert)?.bypassed = on;
         Ok(())
     })?;
@@ -110,7 +110,7 @@ mod tests {
     use crate::primitives::plugins::PluginFormat;
     use crate::primitives::session::TrackKind;
     use crate::primitives::{SampleRate, TimeDuration, TimePosition};
-    use crate::project;
+    use crate::session;
 
     const R: SampleRate = SampleRate::HZ_48K;
     const VIRTUAL: &str = "/virtual/test.clap";
@@ -124,12 +124,12 @@ mod tests {
     }
 
     fn tone_rig() -> (Rig, TrackId) {
-        let mut rig = project::create("fx", R, 64).unwrap();
-        let vox = project::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
+        let mut rig = session::create("fx", R, 64).unwrap();
+        let vox = session::add_track(&mut rig, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);
         rig.cache.insert("tone.wav", tone);
-        project::add_audio_clip(
+        session::add_audio_clip(
             &mut rig,
             vox,
             "tone.wav",
@@ -192,7 +192,7 @@ mod tests {
         play::sync(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry).abs() < 1e-3);
         // Undo the removal: the insert is back, active, at 0.25.
-        project::undo(&mut rig).unwrap();
+        session::undo(&mut rig).unwrap();
         play::sync(&mut rig).unwrap();
         assert!((settled(&mut rig) - dry * 0.25).abs() < 1e-3);
     }

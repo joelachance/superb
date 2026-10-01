@@ -4,7 +4,7 @@ Effects and instruments: find plugins, put one on a track, turn its knobs.
 
 ## Purpose
 
-An insert is stored in the song (plugin reference, bypass, parameter
+An insert is stored in the session (plugin reference, bypass, parameter
 values, saved state) and turned into a running instance when the console
 is built. Parameter changes go to the document through undo and to the
 running instance through its wait-free queue.
@@ -25,7 +25,7 @@ running instance through its wait-free queue.
 ## Usage
 
 ```rust
-use superb::{play, plugins, project};
+use superb::{play, plugins, session};
 
 let report = plugins::scan()?;
 if let Some(desc) = report.plugins.iter().find(|p| p.features.iter().any(|f| f == "audio-effect")) {
@@ -52,7 +52,7 @@ bundle once, `instantiate`, `load_state`, re-apply stored parameters) and
 
 ## Notes
 
-* A song whose plugin is missing still opens and plays; the insert is
+* A session whose plugin is missing still opens and plays; the insert is
   reported by `failed` and the rest of the chain runs.
 * Values are plain (in the parameter's `[min, max]`), not normalised.
 * Bypass and remove change the console's shape and need a sync;

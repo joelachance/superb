@@ -1,7 +1,7 @@
 //! `mix`: faders, pan, mute and solo, a reverb-style bus with sends, meters.
 //!
 //! What you'll learn:
-//! - Level changes go two places at once: the song (undoable) and the live
+//! - Level changes go two places at once: the session (undoable) and the live
 //!   strip (heard on the next block, no sync)
 //! - Buses collect tracks; `route` sends a track's output into one
 //! - Sends tap a copy of a track into a bus, pre- or post-fader
@@ -14,7 +14,7 @@
 //! ```
 
 use superb::prelude::*;
-use superb::{mix, play, project};
+use superb::{mix, play, session};
 
 /// Renders four blocks and returns the peak of the last one, so ramps have
 /// settled: what a meter would show.
@@ -28,16 +28,16 @@ fn level(rig: &mut Rig) -> Result<f32> {
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut rig = project::create("mix", rate, 128)?;
-    let vox = project::add_track(&mut rig, "vox", TrackKind::Audio)?;
-    let gtr = project::add_track(&mut rig, "gtr", TrackKind::Audio)?;
+    let mut rig = session::create("mix", rate, 128)?;
+    let vox = session::add_track(&mut rig, "vox", TrackKind::Audio)?;
+    let gtr = session::add_track(&mut rig, "gtr", TrackKind::Audio)?;
 
     // Two steady tones so levels are easy to read: 0.25 on each track.
     let mut tone = PlanarBuffer::new(2, rate.hz() as usize * 4);
     tone.fill(0.25);
     rig.cache.insert("tone.wav", tone);
     for t in [vox, gtr] {
-        project::add_audio_clip(
+        session::add_audio_clip(
             &mut rig,
             t,
             "tone.wav",
@@ -126,11 +126,11 @@ fn main() -> Result<()> {
         println!("room bus meter:          L {l:.3}  R {r:.3}");
     }
 
-    // Everything above is in the song. Undo it all and the document is back
+    // Everything above is in the session. Undo it all and the document is back
     // to two tracks at 0 dB; the console follows on the next sync.
     while rig.history.undo_len() > 4 {
         // 4 = the two tracks and two clips we started with
-        project::undo(&mut rig)?;
+        session::undo(&mut rig)?;
     }
     println!(
         "after undo: gtr {} dB, {} tracks, gtr sends {}",

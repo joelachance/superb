@@ -1,6 +1,6 @@
 //! The state every flow works on.
 //!
-//! A [`Rig`] is a plain record of the primitives a running song needs: the
+//! A [`Rig`] is a plain record of the primitives a running session needs: the
 //! document, its undo history, the audio in memory, and the live engine.
 //! Flow functions ([`play::start`](crate::play::start),
 //! [`record::stop`](crate::record::stop), ...) take `&mut Rig` so you don't
@@ -8,8 +8,8 @@
 //! is hidden behind methods: reach into any field and call a primitive
 //! directly whenever a flow does not do exactly what you want.
 //!
-//! Build one with [`project::create`](crate::project::create) or
-//! [`project::open`](crate::project::open), or with [`Rig::new`] from a
+//! Build one with [`session::create`](crate::session::create) or
+//! [`session::open`](crate::session::open), or with [`Rig::new`] from a
 //! [`Session`] you already have.
 
 use core::sync::atomic::AtomicBool;
@@ -28,7 +28,7 @@ use crate::primitives::{InsertId, Result, SendId, TrackId};
 
 /// Everything a session in progress consists of.
 pub struct Rig {
-    /// The song: tracks, clips, markers, routing, inserts, tempo.
+    /// The session: tracks, clips, markers, routing, inserts, tempo.
     pub session: Session,
     /// Undo history for `session`. Every flow edit pushes through this
     /// stack, so every edit is reversible. Consecutive edits of the same

@@ -1,6 +1,6 @@
 # play
 
-Hearing the song: build the console from the document, drive the engine.
+Hearing the session: build the console from the document, drive the engine.
 
 ## Purpose
 
@@ -14,10 +14,10 @@ device, `advance` renders blocks by hand.
 
 | verb | does |
 |---|---|
-| `sync(rig)` | rebuild the console from the song and swap it in |
+| `sync(rig)` | rebuild the console from the session and swap it in |
 | `start(rig)` | sync if needed, then `Play` |
 | `stop(rig)` / `seek(rig, to)` / `rewind(rig)` | transport commands |
-| `set_loop_enabled(rig, on)` | loop the range set with `project::set_loop` |
+| `set_loop_enabled(rig, on)` | loop the range set with `session::set_loop` |
 | `position(rig)` / `state(rig)` / `is_rolling(rig)` | read the engine's atomics |
 | `advance(rig, blocks) -> PlanarBuffer` | tick the engine loop `blocks` times and return the audio; collects a running take |
 | `start_output(rig, &OutputConfig)` (feature `devices`) | move the engine loop into a device stream; `advance` is then unavailable |
@@ -40,9 +40,9 @@ lower-level pieces the steps use; they predate the flow and remain public.
 
 ```rust
 use superb::prelude::*;
-use superb::{play, project};
+use superb::{play, session};
 
-let mut rig = project::create("song", SampleRate::HZ_48K, 256)?;
+let mut rig = session::create("session", SampleRate::HZ_48K, 256)?;
 // ... add tracks and clips ...
 play::start(&mut rig)?;
 let audio = play::advance(&mut rig, 47)?;          // ~0.25 s at 48 kHz

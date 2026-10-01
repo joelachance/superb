@@ -6,13 +6,13 @@ flow has its own note in `docs/flows/`.
 
 | flow | doc |
 |---|---|
-| `project` — new, open, save; tracks, clips, markers, tempo, loop; undo | [project.md](flows/project.md) |
+| `session` — new, open, save; tracks, clips, markers, tempo, loop; undo | [session.md](flows/session.md) |
 | `play` — sync the console, start, stop, seek, loop, render offline or on a device | [play.md](flows/play.md) |
 | `mix` — faders, pan, mute, solo, buses, sends, routing, meters | [mix.md](flows/mix.md) |
 | `midi` — monitor a MIDI track, send notes, connect a keyboard | [midi.md](flows/midi.md) |
 | `record` — arm, capture a take, place clips | [record.md](flows/record.md) |
 | `plugins` — scan, insert, parameters, bypass | [plugins.md](flows/plugins.md) |
-| `export` — bounce a range or the song to WAV | [export.md](flows/export.md) |
+| `export` — bounce a range or the session to WAV | [export.md](flows/export.md) |
 | `devices` — audio and MIDI hardware, rig-matched configurations | [devices.md](flows/devices.md) |
 
 ## Why free functions
@@ -21,7 +21,7 @@ You should know what you are going to get when you call something. A flow
 verb is sugar: it does one everyday job by calling primitives in a fixed
 order, and its doc comment ends with **Made of:** naming those calls. When
 the verb is not quite what you want, you call the same primitives yourself
-in your own order. There is no `Studio` object that owns the song and
+in your own order. There is no `Studio` object that owns the session and
 decides what you may do; the `Rig` is a struct with public fields, and every
 flow just borrows it.
 
@@ -36,7 +36,7 @@ Two kinds of function appear in a flow:
 
 ```rust
 pub struct Rig {
-    pub session: Session,            // the song
+    pub session: Session,            // the session
     pub history: UndoStack<Session>, // every edit goes through here
     pub cache: AudioCache,           // audio in memory, keyed by the path clips use
     pub engine: LiveEngine,          // control handle: commands, graph swaps, position
@@ -51,12 +51,12 @@ pub struct Rig {
 }
 ```
 
-`project::create` or `project::open` makes one; `Rig::new` wraps a
+`session::create` or `session::open` makes one; `Rig::new` wraps a
 `Session` you already have.
 
 ## Syncing
 
-The console the engine runs is built from the song. Edits that change its
+The console the engine runs is built from the session. Edits that change its
 *shape* (a new track, a clip moved, a send, a route, an insert, monitoring
 on a MIDI track) set `rig.needs_sync`. `play::sync` rebuilds the console
 and publishes it as a whole prepared graph; the engine swaps it in between
@@ -85,7 +85,7 @@ the clips it places into one step called "Record take".
 *Switches* (mute, solo, arm, monitoring, bypass, send on/off) are not
 edits. They are saved with the session, and they are heard at the next
 block, but they never enter the undo history: nobody expects Undo to
-un-mute a track. Flows flip them through `project::switch`, which also
+un-mute a track. Flows flip them through `session::switch`, which also
 tells the history that the saved state is gone, so `is_saved` turns false.
 
 ## Commands reach the engine at the next block
@@ -111,5 +111,5 @@ take can come from a file or a generator. With the `devices` feature,
 A verb earns its place by replacing at least three primitive calls or by
 hiding an ordering hazard. Put the shared parts in `steps`, end every verb
 doc with **Made of:**, set `needs_sync` for structural edits, flip switches
-through `project::switch`, add tests that run without hardware and an
+through `session::switch`, add tests that run without hardware and an
 example under `examples/flows/`. See [CONTRIBUTING.md](../CONTRIBUTING.md).

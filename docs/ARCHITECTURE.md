@@ -6,7 +6,7 @@ and [flows.md](flows.md) for the top tier in detail.
 
 ## The big picture
 
-A DAW has two very different jobs. One is a **document**: the song, with
+A DAW has two very different jobs. One is a **document**: the session, with
 its tracks, clips, tempo and routing, edited by a person on a UI thread that
 may take its time. The other is an **engine**: a callback the audio
 hardware fires every few milliseconds that must fill the next buffer before
@@ -15,7 +15,7 @@ and connects them deliberately.
 
 ```text
  flows (free functions over a Rig)
- project · play · mix · midi · record · plugins · export · devices
+ session · play · mix · midi · record · plugins · export · devices
  ─────────────────────────────────────────────────────────────────────
  primitives
    document side (UI thread)           engine side (audio thread)
@@ -37,7 +37,7 @@ primitives and each other, and all of them work on the `Rig`.
 
 ## The Rig
 
-`Rig` (`src/rig.rs`) is a plain record of the primitives a running song
+`Rig` (`src/rig.rs`) is a plain record of the primitives a running session
 needs: the `Session`, its `UndoStack`, the `AudioCache`, the `LiveEngine`
 control handle, the `EngineLoop` (until a device takes it), the handles
 into the last console that was built (`LiveHandles`: strip and send
@@ -77,16 +77,16 @@ Data crosses the thread boundary in exactly three ways:
   over a second queue and is freed on the control thread, so nothing is
   ever dropped on the audio thread.
 
-## From project to sound
+## From session to sound
 
-1. **`primitives::session`** holds the song as plain data: tracks (audio,
+1. **`primitives::session`** holds the session as plain data: tracks (audio,
    MIDI or bus), clips on tracks, markers, a tempo map, loop range, routing
    (each track's output bus and its sends) and insert chains (plugin,
    bypass, parameter values, saved state). It knows nothing about audio
    threads, so it can be cloned, saved as JSON and undone freely. Edits go
    through `primitives::undo` commands, which restore removed objects under
    their original IDs so the UI's handles stay valid.
-2. **`play::sync`** turns the song into a console and hands it to the
+2. **`play::sync`** turns the session into a console and hands it to the
    engine. Its steps are public:
    * `build_console` maps session tracks onto mixer strips and buses
      (`play::bridge`), mirrors gain, pan, mute, solo, outputs and sends,
@@ -205,7 +205,7 @@ scheduling, silence, MIDI routing and latency compensation treat them like
 built-ins. The CLAP host is the only FFI in the SDK; every unsafe block
 states its invariant, and the host is tested against an in-process plugin
 so no shared library is needed. `start_processing` is deferred to the
-first `process` and `stop_processing` to `deactivate`. The song stores a
+first `process` and `stop_processing` to `deactivate`. The session stores a
 plugin reference, parameter values and saved state; the instance is
 recreated at every sync and the stored values re-applied.
 
@@ -225,7 +225,7 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 |---|---|
 | a new kind of processor (effect, generator) | a `Node` impl, in `primitives::graph::nodes` if general, otherwise in your app |
 | a new console feature (VCA groups) | `primitives::mixer`, built from graph nodes |
-| something the song remembers | `primitives::session` (plain data) plus a command in `primitives::session::commands` |
+| something the session remembers | `primitives::session` (plain data) plus a command in `primitives::session::commands` |
 | a new audio file format | `primitives::io::files`, keeping any copyleft crate inside `decode.rs` |
 | a new audio or MIDI backend | `primitives::io::device` or `primitives::midi::input`, behind a feature |
 | a new plugin format | a `PluginInstance` impl in `primitives::plugins` |

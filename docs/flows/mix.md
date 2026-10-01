@@ -23,13 +23,13 @@ structural edit and marks the rig for a sync.
 | `set_send_enabled(rig, send, on)` | document + live send | switch (not undoable) |
 | `peak(rig, track) -> Option<[f32; 2]>` | live strip meter, read and reset | — |
 
-Buses are tracks of kind `Bus`; `add_bus` is `project::add_track` with that
+Buses are tracks of kind `Bus`; `add_bus` is `session::add_track` with that
 kind. `track` arguments accept a bus's ID wherever a strip makes sense.
 
 ## Usage
 
 ```rust
-use superb::{mix, play, project};
+use superb::{mix, play, session};
 
 let room = mix::add_bus(&mut rig, "room")?;
 let send = mix::add_send(&mut rig, vox, room, -6.0, false)?;   // post-fader
@@ -58,7 +58,7 @@ and 1.
 ## Notes
 
 * Pan law is a live-strip setting (`StripParams::set_pan_law`) and not in
-  the song; tracks default to constant power (−3 dB centre), buses to
+  the session; tracks default to constant power (−3 dB centre), buses to
   balance.
 * Solo is a shared counter across strips: soloing one track silences every
   other track; buses ignore solo.
