@@ -3,8 +3,9 @@
 //! What you'll learn:
 //! - Armed audio tracks receive a clip when a take stops
 //! - A take arrives through a capture queue; `record::start` (feature
-//!   `devices`) fills it from a microphone, and `record::steps::begin`
-//!   accepts any producer you like, which is what this example does
+//!   `devices`) fills it from a microphone and gathers it on a thread, and
+//!   `record::start_from` accepts any producer you like, which is what
+//!   this example does
 //! - `record::stop` stores the audio, places the clips as one undo step and
 //!   stops the transport
 //!
@@ -39,14 +40,14 @@ fn main() -> Result<()> {
     // `record::start` would open a real input here and hand us the same
     // consumer end.
     let (mut mic, blocks) = capture_queue(1, block, 64)?;
-    record::steps::begin(&mut rig, blocks, 1)?;
+    record::start_from(&mut rig, blocks, 1)?;
     println!("recording: {}", record::is_recording(&rig));
 
     // Half a second of "singing" (a 440 Hz tone), one block at a time,
     // while the engine keeps rolling. On a device both sides run on their
     // own threads; here they take turns. The queue is small, so the take
-    // has to be collected as it goes: `play::advance` does that; with a
-    // device you call `record::collect` from a timer.
+    // has to be collected as it goes: `play::advance` does that for a
+    // manual capture (a device capture has its own collector thread).
     let mut phase = 0.0f32;
     let mut sung = PlanarBuffer::new(1, block);
     let blocks = rate.hz() as usize / 2 / block;
@@ -107,12 +108,8 @@ fn main() -> Result<()> {
         } else {
             record::arm(&mut rig, vox, true)?;
             let mic = devices::input_config(&rig, None, 1);
-            record::start(&mut rig, &mic)?;
-            for _ in 0..10 {
-                // A UI timer would do this; 50 ms is well inside the queue.
-                std::thread::sleep(std::time::Duration::from_millis(50));
-                record::collect(&mut rig);
-            }
+            record::start(&mut rig, &mic)?; // a collector thread gathers the take
+            std::thread::sleep(std::time::Duration::from_millis(500));
             let clips = record::stop(&mut rig)?;
             println!("recorded {} clip(s) from the default input", clips.len());
         }

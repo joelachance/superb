@@ -136,7 +136,7 @@ pub fn advance(rig: &mut Rig, blocks: usize) -> Result<PlanarBuffer> {
         engine_loop.tick(&mut scratch)?;
         out.copy_block_from(i * block, &scratch, block)?;
         if let Some(recording) = rig.recording.as_mut() {
-            crate::record::steps::collect(recording);
+            crate::record::steps::collect(&mut recording.capture);
         }
     }
     rig.engine.reclaim();

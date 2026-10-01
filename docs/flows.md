@@ -60,7 +60,7 @@ The console the engine runs is built from the song. Edits that change its
 *shape* (a new track, a clip moved, a send, a route, an insert, monitoring
 on a MIDI track) set `rig.needs_sync`. `play::sync` rebuilds the console
 and publishes it as a whole prepared graph; the engine swaps it in between
-two blocks. `play::start`, `play::advance` and `record::steps::begin` sync
+two blocks. `play::start`, `play::advance` and `record::start_from` sync
 for you when the flag is set, so most programs never call `sync` directly.
 Call it yourself when you want to choose the moment the swap happens.
 
@@ -101,7 +101,7 @@ few milliseconds away.
 Everything runs without an audio device. `play::advance(&mut rig, blocks)`
 ticks the engine loop by hand and hands you the audio, which is how the
 tests and most examples hear the rig. `export` renders through its own
-offline engine. `record::steps::begin` accepts any capture producer, so a
+offline engine. `record::start_from` accepts any capture producer, so a
 take can come from a file or a generator. With the `devices` feature,
 `play::start_output` moves the engine loop into a real output stream and
 `record::start` opens a real input.
