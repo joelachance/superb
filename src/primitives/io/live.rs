@@ -2,7 +2,7 @@
 //!
 //! [`Engine::render`] has to be driven from exactly one thread: a device
 //! callback, or an offline loop. Play, stop, seek and "swap in this new
-//! graph" come from somewhere else, usually a UI. [`live_engine`] splits the
+//! graph" come from somewhere else, usually a UI. [`engine_pair`] splits the
 //! two roles:
 //!
 //! * [`EngineLoop`] is the audio side. It owns the [`Engine`] (wrapping a
@@ -10,7 +10,7 @@
 //!   applies pending commands, renders a block and publishes the transport
 //!   position. Hand it to a device stream with `EngineLoop::run_on_device`
 //!   (feature `devices`) or call `tick` from your own loop.
-//! * [`LiveEngine`] is the control side. It sends [`EngineCommand`]s over a
+//! * [`EngineHandle`] is the control side. It sends [`EngineCommand`]s over a
 //!   wait-free queue, publishes prepared graphs through a [`GraphEditor`],
 //!   queues software MIDI, and reads the position and state the loop
 //!   publishes through atomics.
@@ -22,11 +22,11 @@
 //! ```
 //! use superb::primitives::graph::nodes::ConstantNode;
 //! use superb::primitives::graph::AudioGraph;
-//! use superb::primitives::io::live::{live_engine, EngineCommand};
+//! use superb::primitives::io::live::{engine_pair, EngineCommand};
 //! use superb::primitives::buffers::PlanarBuffer;
 //! use superb::primitives::{SampleRate, TimePosition};
 //!
-//! let (mut control, mut audio) = live_engine(SampleRate::HZ_48K, 64, 120.0).unwrap();
+//! let (mut control, mut audio) = engine_pair(SampleRate::HZ_48K, 64, 120.0).unwrap();
 //!
 //! // Control thread: build a graph and publish it.
 //! let mut graph = AudioGraph::new();
@@ -133,7 +133,7 @@ fn state_from_u8(v: u8) -> TransportState {
 /// Every method is safe to call from a UI thread. Nothing here waits for
 /// the audio thread; commands and graphs are queued and applied at the next
 /// block.
-pub struct LiveEngine {
+pub struct EngineHandle {
     commands: Producer<EngineCommand>,
     midi: Producer<TimestampedMessage>,
     editor: GraphEditor,
@@ -143,7 +143,7 @@ pub struct LiveEngine {
     max_frames: usize,
 }
 
-impl LiveEngine {
+impl EngineHandle {
     /// Queues a command. Fails with [`SuperbError::CapacityExceeded`] if
     /// [`COMMAND_CAPACITY`] commands are already waiting.
     pub fn send(&mut self, command: EngineCommand) -> Result<()> {
@@ -230,9 +230,9 @@ impl LiveEngine {
     }
 }
 
-impl core::fmt::Debug for LiveEngine {
+impl core::fmt::Debug for EngineHandle {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("LiveEngine")
+        f.debug_struct("EngineHandle")
             .field("position", &self.position())
             .field("state", &self.state())
             .field("blocks", &self.blocks_rendered())
@@ -367,13 +367,13 @@ impl core::fmt::Debug for EngineLoop {
 ///
 /// The loop starts with an empty, prepared graph at `sample_rate` and
 /// `max_frames`, a stopped transport at `bpm`, and the built-in software
-/// MIDI queue attached. Publish a graph with [`LiveEngine::publish`], then
+/// MIDI queue attached. Publish a graph with [`EngineHandle::publish`], then
 /// drive [`EngineLoop::tick`].
-pub fn live_engine(
+pub fn engine_pair(
     sample_rate: SampleRate,
     max_frames: usize,
     bpm: f64,
-) -> Result<(LiveEngine, EngineLoop)> {
+) -> Result<(EngineHandle, EngineLoop)> {
     let (mut editor, live) = live_pair_with_capacity(SWAP_CAPACITY);
     editor.configure(sample_rate, max_frames);
     let mut engine = Engine::new(live, Transport::new(sample_rate, bpm));
@@ -388,7 +388,7 @@ pub fn live_engine(
     });
     let load = engine.load();
     Ok((
-        LiveEngine {
+        EngineHandle {
             commands: cmd_tx,
             midi: midi_tx,
             editor,
@@ -434,7 +434,7 @@ mod tests {
 
     #[test]
     fn empty_loop_renders_silence_and_does_not_move_while_stopped() {
-        let (control, mut audio) = live_engine(R, 32, 120.0).unwrap();
+        let (control, mut audio) = engine_pair(R, 32, 120.0).unwrap();
         let mut out = PlanarBuffer::new(2, 32);
         out.fill(1.0);
         audio.tick(&mut out).unwrap();
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn commands_drive_the_transport_in_order() {
-        let (mut control, mut audio) = live_engine(R, 64, 120.0).unwrap();
+        let (mut control, mut audio) = engine_pair(R, 64, 120.0).unwrap();
         control.publish(constant_graph(0.25)).unwrap();
         control
             .send(EngineCommand::Seek(TimePosition::from_samples(1_000)))
@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn loop_range_wraps_the_playhead() {
-        let (mut control, mut audio) = live_engine(R, 100, 120.0).unwrap();
+        let (mut control, mut audio) = engine_pair(R, 100, 120.0).unwrap();
         control.publish(constant_graph(0.1)).unwrap();
         let range = LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(150)).unwrap();
         control.send(EngineCommand::SetLoop(Some(range))).unwrap();
@@ -495,7 +495,7 @@ mod tests {
 
     #[test]
     fn published_graphs_swap_between_blocks_and_retire_to_the_control_side() {
-        let (mut control, mut audio) = live_engine(R, 16, 120.0).unwrap();
+        let (mut control, mut audio) = engine_pair(R, 16, 120.0).unwrap();
         control.publish(constant_graph(0.2)).unwrap();
         let mut out = PlanarBuffer::new(1, 16);
         audio.tick(&mut out).unwrap();
@@ -520,7 +520,7 @@ mod tests {
 
     #[test]
     fn software_midi_reaches_the_graph_sample_accurately() {
-        let (mut control, mut audio) = live_engine(R, 480, 120.0).unwrap();
+        let (mut control, mut audio) = engine_pair(R, 480, 120.0).unwrap();
         let mut graph = AudioGraph::new();
         let synth = graph.add_node(Box::new(MonoSynthNode::new(1)));
         graph.set_output(synth).unwrap();
@@ -536,7 +536,7 @@ mod tests {
 
     #[test]
     fn extra_midi_inputs_land_at_the_block_start() {
-        let (mut control, mut audio) = live_engine(R, 64, 120.0).unwrap();
+        let (mut control, mut audio) = engine_pair(R, 64, 120.0).unwrap();
         let mut graph = AudioGraph::new();
         let synth = graph.add_node(Box::new(MonoSynthNode::new(1)));
         graph.set_output(synth).unwrap();
@@ -564,7 +564,7 @@ mod tests {
 
     #[test]
     fn full_queues_report_capacity_errors() {
-        let (mut control, _audio) = live_engine(R, 64, 120.0).unwrap();
+        let (mut control, _audio) = engine_pair(R, 64, 120.0).unwrap();
         for _ in 0..COMMAND_CAPACITY {
             control.send(EngineCommand::Play).unwrap();
         }
@@ -590,17 +590,17 @@ mod tests {
 
     #[test]
     fn dropping_one_side_is_visible_to_the_other() {
-        let (control, audio) = live_engine(R, 64, 120.0).unwrap();
+        let (control, audio) = engine_pair(R, 64, 120.0).unwrap();
         assert!(!audio.is_detached());
         drop(control);
         assert!(audio.is_detached());
-        let (control, audio) = live_engine(R, 64, 120.0).unwrap();
+        let (control, audio) = engine_pair(R, 64, 120.0).unwrap();
         drop(audio);
         assert!(control.is_detached());
     }
 
     #[test]
     fn invalid_configuration_is_rejected() {
-        assert!(live_engine(R, 0, 120.0).is_err());
+        assert!(engine_pair(R, 0, 120.0).is_err());
     }
 }

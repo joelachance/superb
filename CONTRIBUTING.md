@@ -89,7 +89,7 @@ enforces this with a contract rather than a convention:
   which swaps whole prepared graphs between blocks. The flows always use
   the second route.
 * Nothing is dropped on the audio thread. Hand retired objects back to the
-  control thread through a queue and free them there (`LiveEngine::reclaim`).
+  control thread through a queue and free them there (`EngineHandle::reclaim`).
 * Debug builds can catch mistakes: call
   `primitives::realtime::thread::debug_assert_not_rt` at the top of
   functions that must never run on the audio thread.

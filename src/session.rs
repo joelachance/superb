@@ -162,7 +162,7 @@ pub fn set_tempo(rig: &mut Rig, bpm: f64) -> Result<()> {
 /// Sets or clears the loop range in the session and on the running engine.
 /// Enable looping with [`play::set_loop_enabled`](crate::play::set_loop_enabled).
 ///
-/// Made of: push `SetLoopRange` → `LiveEngine::send(SetLoop)`.
+/// Made of: push `SetLoopRange` → `EngineHandle::send(SetLoop)`.
 pub fn set_loop(rig: &mut Rig, range: Option<LoopRange>) -> Result<()> {
     edit(rig, SetLoopRange::new(range))?;
     rig.engine.send(EngineCommand::SetLoop(range))

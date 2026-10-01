@@ -28,8 +28,8 @@ resampling and bounce/export helpers.
 * `MidiTiming` — `Stream` (default: timestamps → frames via
   `FrameMapper`) or `BlockStart` (everything at frame 0).
 * `EngineStats` — `blocks`, `segments`, `midi_dropped` counters from `render`.
-* `live::{live_engine, LiveEngine, EngineLoop, EngineCommand}` — a running
-  engine split in two: `LiveEngine` is the control handle (transport
+* `live::{engine_pair, EngineHandle, EngineLoop, EngineCommand}` — a running
+  engine split in two: `EngineHandle` is the control handle (transport
   commands over a queue, `publish` of prepared graphs, software MIDI,
   position and state atomics, `reclaim` of retired graphs) and
   `EngineLoop` is the audio side (`tick` renders one block; with `devices`,

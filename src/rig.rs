@@ -16,7 +16,7 @@ use core::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use crate::play::{AudioCache, SessionPlayer};
-use crate::primitives::io::live::{live_engine, EngineLoop, LiveEngine};
+use crate::primitives::io::live::{engine_pair, EngineHandle, EngineLoop};
 use crate::primitives::mixer::{SendParams, StripParams};
 #[cfg(feature = "clap")]
 use crate::primitives::plugins::PluginInstance;
@@ -40,7 +40,7 @@ pub struct Rig {
     /// Audio held in memory, keyed by the path clips refer to.
     pub cache: AudioCache,
     /// Control handle to the engine: commands, graph swaps, position.
-    pub engine: LiveEngine,
+    pub engine: EngineHandle,
     /// The engine's audio side. Present until it is moved into a device
     /// stream (`play::start_output`, feature `devices`); while
     /// present, [`play::drive`](crate::play::drive) drives it by hand.
@@ -82,7 +82,7 @@ impl Rig {
         let bpm = session
             .tempo_map()
             .tempo_at(crate::primitives::BeatPosition::ZERO);
-        let (engine, engine_loop) = live_engine(session.sample_rate(), block_size, bpm)?;
+        let (engine, engine_loop) = engine_pair(session.sample_rate(), block_size, bpm)?;
         let mut history = UndoStack::new();
         history.set_coalesce_window(Some(Self::COALESCE_WINDOW));
         Ok(Rig {

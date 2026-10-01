@@ -6,7 +6,7 @@ Hearing the session: build the console from the document, drive the engine.
 
 `play` is where the document meets the engine. `rebuild` turns the `Session`
 into a `Mixer` full of source nodes and inserts, publishes it to the
-`LiveEngine`, and keeps the control-side handles in `rig.live`. The
+`EngineHandle`, and keeps the control-side handles in `rig.live`. The
 transport verbs send commands to the running engine. Without an audio
 device, `drive` renders blocks by hand.
 
@@ -29,7 +29,7 @@ device, `drive` renders blocks by hand.
 | `build_console(&session, &cache, channels) -> (Mixer, SessionPlayer)` | strips, buses, sends, clip sources, live instruments for monitoring MIDI tracks |
 | `attach_inserts(&session, &mut PluginLoader, &mut Mixer, &SessionPlayer) -> (Vec<LiveInsert>, failed)` | instantiate and chain each track's inserts; failures are returned, not fatal |
 | `collect_handles(&Mixer, &SessionPlayer) -> (StripHandles, SendHandles)` | the atomics the control side keeps |
-| `publish(&mut LiveEngine, Mixer)` | prepare and hand the graph to the engine |
+| `publish(&mut EngineHandle, Mixer)` | prepare and hand the graph to the engine |
 
 `play::bridge` (`SessionMixerBridge`: session track ↔ mixer strip map,
 routing and parameter mirroring) and `play::playback` (`AudioCache`,
@@ -61,10 +61,10 @@ play::start(&mut rig)?;
 
 ## Made of
 
-`rebuild`: `LiveEngine::reclaim` → `build_console` → `attach_inserts` →
+`rebuild`: `EngineHandle::reclaim` → `build_console` → `attach_inserts` →
 `collect_handles` → `publish`, then `LiveGraph::apply_pending` while the
 loop is still in the rig. `start` and the transport verbs:
-`LiveEngine::send(EngineCommand::…)`. `drive`: `EngineLoop::tick` per
+`EngineHandle::send(EngineCommand::…)`. `drive`: `EngineLoop::tick` per
 block plus `record::steps::collect`. `start_output`:
 `EngineLoop::run_on_device`.
 

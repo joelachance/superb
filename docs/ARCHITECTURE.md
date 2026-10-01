@@ -20,7 +20,7 @@ and connects them deliberately.
  primitives
    document side (UI thread)           engine side (audio thread)
 
-   session ── tracks, clips, inserts   io::live   LiveEngine ◄─queues─► EngineLoop
+   session ── tracks, clips, inserts   io::live   EngineHandle ◄─queues─► EngineLoop
    undo    ── history                  io         Engine, offline render, WAV, devices
                        play::rebuild ───► mixer      tracks, buses, sends, inserts
    automation ─► Arc<AtomicF32> ─────► graph      nodes, schedule, live swap
@@ -38,7 +38,7 @@ primitives and each other, and all of them work on the `Rig`.
 ## The Rig
 
 `Rig` (`src/rig.rs`) is a plain record of the primitives a running session
-needs: the `Session`, its `UndoStack`, the `AudioCache`, the `LiveEngine`
+needs: the `Session`, its `UndoStack`, the `AudioCache`, the `EngineHandle`
 control handle, the `EngineLoop` (until a device takes it), the handles
 into the last console that was built (`LiveHandles`: strip and send
 atomics, plugin parameter queues), the take being recorded, and the plugin
@@ -108,7 +108,7 @@ Data crosses the thread boundary in exactly three ways:
    propagates silence so idle branches cost nothing, delays shorter parallel
    paths so everything stays time-aligned, and routes MIDI to the nodes
    that asked for it.
-5. **`primitives::io::live`** is the running engine: `LiveEngine` on the
+5. **`primitives::io::live`** is the running engine: `EngineHandle` on the
    control side (commands, graph publishing, software MIDI, position and
    state atomics) and `EngineLoop` on the audio side, which applies
    commands, drains MIDI, renders a block through `Engine` and publishes

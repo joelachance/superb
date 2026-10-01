@@ -204,7 +204,7 @@ pub fn start(rig: &mut Rig, input: &crate::primitives::io::device::InputConfig) 
 /// that after every block, so an offline program never calls it.
 ///
 /// Made of: [`armed_tracks`] → [`play::rebuild`] when needed →
-/// `LiveEngine::send(Record)` → [`play::position`] for the punch-in.
+/// `EngineHandle::send(Record)` → [`play::position`] for the punch-in.
 pub fn start_from(rig: &mut Rig, blocks: CaptureConsumer, channels: usize) -> Result<()> {
     begin(
         rig,
@@ -264,7 +264,7 @@ pub fn collect(rig: &mut Rig) -> usize {
 /// clips (none if nothing was captured). The whole placement is one undo
 /// step called "Record take".
 ///
-/// Made of: `LiveEngine::send(Stop)` → drop the input stream →
+/// Made of: `EngineHandle::send(Stop)` → drop the input stream →
 /// [`steps::collect`] or `Collector::finish` → [`steps::finish_take`] →
 /// [`steps::take_name`] → [`steps::store_take`] → [`steps::place_clip`] per
 /// track inside an undo group; marks the rig for a rebuild so the take plays

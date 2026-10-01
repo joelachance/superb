@@ -64,7 +64,7 @@ pub fn release_note(rig: &mut Rig, channel: u8, note: u8) -> Result<()> {
 
 /// Queues any MIDI message for the start of the engine's next block.
 ///
-/// Made of: `LiveEngine::push_midi` with a zero timestamp.
+/// Made of: `EngineHandle::push_midi` with a zero timestamp.
 pub fn send(rig: &mut Rig, message: MidiMessage) -> Result<()> {
     rig.engine.push_midi(TimestampedMessage {
         timestamp_us: 0,
@@ -85,7 +85,7 @@ pub fn inputs() -> Result<Vec<crate::primitives::midi::input::MidiPortInfo>> {
 /// on every monitoring track. The connection lives in [`Rig::midi_inputs`]
 /// and closes when removed from there.
 ///
-/// Made of: `MidiInputBridge::connect` → `LiveEngine::send(AddMidiInput)`.
+/// Made of: `MidiInputBridge::connect` → `EngineHandle::send(AddMidiInput)`.
 #[cfg(feature = "midi-io")]
 pub fn connect_input(rig: &mut Rig, port_index: usize) -> Result<()> {
     let (bridge, consumer) =

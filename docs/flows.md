@@ -39,7 +39,7 @@ pub struct Rig {
     pub session: Session,            // the session
     pub history: UndoStack<Session>, // every edit goes through here
     pub cache: AudioCache,           // audio in memory, keyed by the path clips use
-    pub engine: LiveEngine,          // control handle: commands, graph swaps, position
+    pub engine: EngineHandle,          // control handle: commands, graph swaps, position
     pub engine_loop: Option<EngineLoop>, // the audio side, until a device takes it
     pub live: LiveHandles,           // strip, send and plugin handles from the last rebuild
     pub recording: Option<Recording>,

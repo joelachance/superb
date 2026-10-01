@@ -29,7 +29,7 @@ use crate::rig::{LiveHandles, Rig};
 
 /// Rebuilds the console from the session and swaps it into the engine.
 ///
-/// Made of: `LiveEngine::reclaim` (frees graphs the engine has retired, on
+/// Made of: `EngineHandle::reclaim` (frees graphs the engine has retired, on
 /// this thread) → [`steps::build_console`] → [`steps::attach_inserts`] →
 /// [`steps::collect_handles`] → [`steps::publish`], and while the engine
 /// loop is still in the rig, `LiveGraph::apply_pending` so the swap does not
@@ -62,7 +62,7 @@ pub fn rebuild(rig: &mut Rig) -> Result<()> {
 
 /// Starts the transport from where it is. Syncs first if the session changed.
 ///
-/// Made of: [`rebuild`] when needed → `LiveEngine::send(Play)`.
+/// Made of: [`rebuild`] when needed → `EngineHandle::send(Play)`.
 pub fn start(rig: &mut Rig) -> Result<()> {
     if rig.needs_rebuild {
         rebuild(rig)?;
@@ -72,14 +72,14 @@ pub fn start(rig: &mut Rig) -> Result<()> {
 
 /// Stops the transport where it is.
 ///
-/// Made of: `LiveEngine::send(Stop)`.
+/// Made of: `EngineHandle::send(Stop)`.
 pub fn stop(rig: &mut Rig) -> Result<()> {
     rig.engine.send(EngineCommand::Stop)
 }
 
 /// Moves the playhead. Works while stopped or rolling.
 ///
-/// Made of: `LiveEngine::send(Seek)`.
+/// Made of: `EngineHandle::send(Seek)`.
 pub fn seek(rig: &mut Rig, to: TimePosition) -> Result<()> {
     rig.engine.send(EngineCommand::Seek(to))
 }
@@ -94,7 +94,7 @@ pub fn rewind(rig: &mut Rig) -> Result<()> {
 /// Turns looping over the session's loop range on or off (set the range with
 /// [`session::set_loop`](crate::session::set_loop)).
 ///
-/// Made of: `LiveEngine::send(SetLoopEnabled)`.
+/// Made of: `EngineHandle::send(SetLoopEnabled)`.
 pub fn set_loop_enabled(rig: &mut Rig, on: bool) -> Result<()> {
     rig.engine.send(EngineCommand::SetLoopEnabled(on))
 }
@@ -173,7 +173,7 @@ pub mod steps {
     use crate::play::{MixerBinding, SessionPlayer};
     use crate::primitives::graph::nodes::MonoSynthNode;
     use crate::primitives::graph::MidiPort;
-    use crate::primitives::io::live::LiveEngine;
+    use crate::primitives::io::live::EngineHandle;
     use crate::primitives::mixer::{Mixer, StripId};
     use crate::primitives::plugins::PluginNode;
     use crate::primitives::session::{Session, TrackKind};
@@ -293,8 +293,8 @@ pub mod steps {
     /// next block. The mixer's bookkeeping is consumed; keep the handles
     /// from [`collect_handles`] first.
     ///
-    /// Made of: `Mixer::into_graph` → `LiveEngine::publish`.
-    pub fn publish(engine: &mut LiveEngine, mixer: Mixer) -> Result<()> {
+    /// Made of: `Mixer::into_graph` → `EngineHandle::publish`.
+    pub fn publish(engine: &mut EngineHandle, mixer: Mixer) -> Result<()> {
         engine.publish(mixer.into_graph())
     }
 }

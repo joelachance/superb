@@ -39,8 +39,8 @@ midi::release_note(&mut rig, 0, 60)?;
 `monitor`: `Track::armed` through `session::switch` (a MIDI track's
 "armed" flag means monitoring), `needs_rebuild`. `play_note` / `release_note`:
 `MidiMessage::note_on` / `note_off` → `send`. `send`:
-`LiveEngine::push_midi` with a zero timestamp. `connect_input`:
-`MidiInputBridge::connect` → `LiveEngine::send(EngineCommand::AddMidiInput)`.
+`EngineHandle::push_midi` with a zero timestamp. `connect_input`:
+`MidiInputBridge::connect` → `EngineHandle::send(EngineCommand::AddMidiInput)`.
 
 ## Notes
 

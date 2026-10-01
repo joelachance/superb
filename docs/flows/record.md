@@ -72,8 +72,8 @@ let clips = record::stop(&mut rig)?;
 
 `start_from` (and `start` after opening the input and spawning the
 collector): `armed_tracks` → `play::rebuild` if needed →
-`LiveEngine::send(Record)` → `play::position` for the punch-in. `stop`:
-`LiveEngine::send(Stop)` → drop the stream → `collect` or
+`EngineHandle::send(Record)` → `play::position` for the punch-in. `stop`:
+`EngineHandle::send(Stop)` → drop the stream → `collect` or
 `Collector::finish` → `finish_take` →
 `take_name` → `AudioCache::insert` → `UndoStack::begin_group` →
 `add_audio_clip` per track → `end_group`, `needs_rebuild`.
