@@ -12,90 +12,17 @@
 //! `superb::primitives::mixer` (`StripParams`, `SendParams`: the live side).
 
 use crate::primitives::mixer::SendTap;
-use crate::primitives::session::commands::{self, AddSend, RemoveSend, SetTrackOutput};
+use crate::primitives::session::commands::{self, AddSend, RemoveSend};
 use crate::primitives::session::{TrackKind, TrackSend};
 use crate::primitives::{Result, SendId, TrackId};
 use crate::session::Session;
 
-/// Sets a track's or bus's fader in dB. Moves within
-/// [`Session::COALESCE_WINDOW`] of each other are one undo step, so a fader
-/// ride undoes in one go.
+/// Adds a bus. Route tracks into it with [`track::route`](crate::track::route)
+/// and feed it with [`add_send`].
 ///
-/// Made of: push `set_track_gain_db` → `StripParams::set_gain_db` on the live strip.
-pub fn set_gain_db(session: &mut Session, track: TrackId, db: f32) -> Result<()> {
-    session.history.push(
-        &mut session.document,
-        commands::set_track_gain_db(track, db),
-    )?;
-    if let Some(strip) = session.live.strip(track) {
-        strip.set_gain_db(db);
-    }
-    Ok(())
-}
-
-/// Sets pan, `-1.0` (left) to `1.0` (right).
-///
-/// Made of: push `set_track_pan` → `StripParams::set_pan` on the live strip.
-pub fn set_pan(session: &mut Session, track: TrackId, pan: f32) -> Result<()> {
-    session
-        .history
-        .push(&mut session.document, commands::set_track_pan(track, pan))?;
-    if let Some(strip) = session.live.strip(track) {
-        strip.set_pan(pan);
-    }
-    Ok(())
-}
-
-/// Mutes or unmutes. A switch: saved with the document, heard at the next
-/// block, not an undo step.
-///
-/// Made of: `Track::muted` through `session::switch` → `StripParams::set_mute`
-/// on the live strip.
-pub fn set_mute(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    crate::session::switch(session, |s| {
-        s.track_mut(track)?.muted = on;
-        Ok(())
-    })?;
-    if let Some(strip) = session.live.strip(track) {
-        strip.set_mute(on);
-    }
-    Ok(())
-}
-
-/// Solos or un-solos. While anything is soloed, every other track is
-/// silent; buses keep passing what reaches them. A switch, like mute.
-///
-/// Made of: `Track::soloed` through `session::switch` → `StripParams::set_solo`
-/// on the live strip.
-pub fn set_solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    crate::session::switch(session, |s| {
-        s.track_mut(track)?.soloed = on;
-        Ok(())
-    })?;
-    if let Some(strip) = session.live.strip(track) {
-        strip.set_solo(on);
-    }
-    Ok(())
-}
-
-/// Adds a bus. Route tracks into it with [`route`] and feed it with
-/// [`add_send`].
-///
-/// Made of: [`session::add_track`](crate::session::add_track) with `TrackKind::Bus`.
+/// Made of: [`track::add`](crate::track::add) with `TrackKind::Bus`.
 pub fn add_bus(session: &mut Session, name: &str) -> Result<TrackId> {
-    crate::session::add_track(session, name, TrackKind::Bus)
-}
-
-/// Sends a track's (or bus's) output into `bus`, or back to the master
-/// with `None`. Bus chains that would loop are refused.
-///
-/// Made of: push `SetTrackOutput`; marks the session for a rebuild.
-pub fn route(session: &mut Session, track: TrackId, bus: Option<TrackId>) -> Result<()> {
-    session
-        .history
-        .push(&mut session.document, SetTrackOutput::new(track, bus))?;
-    session.needs_rebuild = true;
-    Ok(())
+    crate::track::add(session, name, TrackKind::Bus)
 }
 
 /// Adds a send from a track into a bus at `level_db`, tapped before or
@@ -176,6 +103,7 @@ mod tests {
     use crate::primitives::buffers::PlanarBuffer;
     use crate::primitives::{SampleRate, TimeDuration, TimePosition};
     use crate::session;
+    use crate::track;
     use crate::transport;
 
     const R: SampleRate = SampleRate::HZ_48K;
@@ -183,7 +111,7 @@ mod tests {
     /// One audio track with a cached 0.5 tone covering 0..4_000 frames.
     fn tone_rig() -> (Session, TrackId) {
         let mut session = session::create("mix", R, 64).unwrap();
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);
         session.cache.insert("tone.wav", tone);
@@ -220,8 +148,8 @@ mod tests {
         assert!((settled(&mut session) - 0.5).abs() < 1e-5);
         let steps_before = session.history.undo_len();
 
-        set_gain_db(&mut session, vox, -6.0206).unwrap();
-        set_gain_db(&mut session, vox, -6.0206).unwrap(); // a drag: one step
+        track::volume(&mut session, vox, -6.0206).unwrap();
+        track::volume(&mut session, vox, -6.0206).unwrap(); // a drag: one step
         session.history.seal();
         assert!((session.document.track(vox).unwrap().gain_db + 6.0206).abs() < 1e-6);
         assert!(
@@ -230,7 +158,7 @@ mod tests {
         );
         assert!(!session.needs_rebuild);
 
-        set_pan(&mut session, vox, -1.0).unwrap();
+        track::pan(&mut session, vox, -1.0).unwrap();
         let audio = session::steps::render_blocks(&mut session, 4).unwrap();
         assert!((audio.channel(0)[255] - 0.25).abs() < 1e-3);
         assert!(
@@ -239,20 +167,20 @@ mod tests {
         );
         assert_eq!(session.document.track(vox).unwrap().pan, -1.0);
 
-        set_mute(&mut session, vox, true).unwrap();
+        track::mute(&mut session, vox, true).unwrap();
         assert!(settled(&mut session).abs() < 1e-6);
         assert!(session.document.track(vox).unwrap().muted);
-        set_mute(&mut session, vox, false).unwrap();
+        track::mute(&mut session, vox, false).unwrap();
 
-        let other = session::add_track(&mut session, "other", TrackKind::Audio).unwrap();
+        let other = track::add(&mut session, "other", TrackKind::Audio).unwrap();
         session::steps::rebuild(&mut session).unwrap();
         balance_all(&session);
-        set_solo(&mut session, other, true).unwrap();
+        track::solo(&mut session, other, true).unwrap();
         assert!(
             settled(&mut session).abs() < 1e-6,
             "vox is silenced by the other solo"
         );
-        set_solo(&mut session, other, false).unwrap();
+        track::solo(&mut session, other, false).unwrap();
         assert!(settled(&mut session).abs() > 0.2);
 
         // The gain drag (one step), pan and the added track are undo steps;
@@ -297,19 +225,19 @@ mod tests {
         assert!(!session::is_saved(&session), "but it does count as unsaved");
 
         // Route the track through the bus and turn the bus down.
-        route(&mut session, vox, Some(room)).unwrap();
+        track::route(&mut session, vox, Some(room)).unwrap();
         session::steps::rebuild(&mut session).unwrap();
         balance_all(&session);
-        set_gain_db(&mut session, room, -6.0206).unwrap();
+        track::volume(&mut session, room, -6.0206).unwrap();
         assert!((settled(&mut session) - direct * 0.5).abs() < 1e-3);
         assert!(
-            route(&mut session, room, Some(room)).is_err(),
+            track::route(&mut session, room, Some(room)).is_err(),
             "a bus cannot feed itself"
         );
 
         remove_send(&mut session, send).unwrap();
         assert!(session.document.send(send).is_err());
-        route(&mut session, vox, None).unwrap();
+        track::route(&mut session, vox, None).unwrap();
         session::steps::rebuild(&mut session).unwrap();
         balance_all(&session);
         assert!((settled(&mut session) - direct).abs() < 1e-3);

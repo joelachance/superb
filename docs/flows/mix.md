@@ -23,7 +23,7 @@ structural edit and marks the session for a rebuild.
 | `set_send_enabled(session, send, on)` | document + live send | switch (not undoable) |
 | `peak(session, track) -> Option<[f32; 2]>` | live strip meter, read and reset | — |
 
-Buses are tracks of kind `Bus`; `add_bus` is `session::add_track` with that
+Buses are tracks of kind `Bus`; `add_bus` is `track::add` with that
 kind. `track` arguments accept a bus's ID wherever a strip makes sense.
 
 ## Usage
@@ -37,11 +37,11 @@ let send = mix::add_send(&mut session, vox, room, -6.0, SendTap::PostFader)?;
 session::steps::rebuild(&mut session)?;                                          // the console has the bus now
 
 for db in [-1.0, -2.0, -3.0] {
-    mix::set_gain_db(&mut session, vox, db)?;                       // heard immediately
+    track::volume(&mut session, vox, db)?;                       // heard immediately
 }
 // Moves within half a second merged into one undo step; a UI may also
 // call `session.history.seal()` on mouse up.
-mix::set_mute(&mut session, vox, true)?;                            // a switch: saved, not undoable
+track::mute(&mut session, vox, true)?;                            // a switch: saved, not undoable
 if let Some([l, r]) = mix::peak(&session, room) {
     println!("room {l:.2} {r:.2}");
 }

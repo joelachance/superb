@@ -48,7 +48,7 @@ Offline, from a producer you fill yourself:
 use superb::primitives::io::capture::capture_queue;
 use superb::{record, session, transport};
 
-record::arm(&mut session, vox, true)?;
+track::arm(&mut session, vox, true)?;
 transport::start(&mut session)?;
 let (mut mic, blocks) = capture_queue(1, 256, 64)?;
 record::start_from(&mut session, blocks, 1)?;

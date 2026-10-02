@@ -23,9 +23,9 @@ use std::path::{Path, PathBuf};
 
 use crate::primitives::io::live::EngineCommand;
 use crate::primitives::session::commands::{
-    self, AddClip, AddMarker, AddTrack, MoveClip, RemoveClip, RemoveTrack, SetLoopRange, SetTempo,
+    AddClip, AddMarker, MoveClip, RemoveClip, SetLoopRange, SetTempo,
 };
-use crate::primitives::session::{Clip, ClipSource, Document, Marker, MidiNote, Track, TrackKind};
+use crate::primitives::session::{Clip, ClipSource, Document, Marker, MidiNote};
 use crate::primitives::transport::LoopRange;
 use crate::primitives::undo::Command;
 use crate::primitives::{
@@ -338,29 +338,6 @@ pub fn is_saved(session: &Session) -> bool {
     session.history.is_clean()
 }
 
-/// Adds a track at the end. `TrackKind::Bus` makes a bus.
-///
-/// Made of: `Document::allocate_track_id` → `Track::with_id` → push `AddTrack`.
-pub fn add_track(session: &mut Session, name: &str, kind: TrackKind) -> Result<TrackId> {
-    let id = session.document.allocate_track_id();
-    structural(session, AddTrack::new(Track::with_id(id, name, kind)))?;
-    Ok(id)
-}
-
-/// Removes a track with everything on it. Undo brings it all back.
-///
-/// Made of: push `RemoveTrack`.
-pub fn remove_track(session: &mut Session, track: TrackId) -> Result<()> {
-    structural(session, RemoveTrack::new(track))
-}
-
-/// Renames a track. Consecutive renames of the same track are one undo step.
-///
-/// Made of: push `set_track_name`.
-pub fn rename_track(session: &mut Session, track: TrackId, name: &str) -> Result<()> {
-    edit(session, commands::set_track_name(track, name))
-}
-
 /// Places audio from the cache on a track. `take` is the key the audio was
 /// cached under (see [`Session::cache`]); the clip plays from the start of it.
 ///
@@ -532,6 +509,9 @@ pub(crate) fn switch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::primitives::session::commands;
+    use crate::primitives::session::TrackKind;
+    use crate::track;
     use core::time::Duration;
 
     const R: SampleRate = SampleRate::HZ_48K;
@@ -543,9 +523,9 @@ mod tests {
         assert!(session.needs_rebuild, "a fresh session has no console yet");
         session.needs_rebuild = false;
 
-        let vox = add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         assert!(session.needs_rebuild);
-        rename_track(&mut session, vox, "vocals").unwrap();
+        track::rename(&mut session, vox, "vocals").unwrap();
         assert_eq!(session.document.track(vox).unwrap().name, "vocals");
         let clip = add_audio_clip(
             &mut session,
@@ -577,7 +557,7 @@ mod tests {
         assert_eq!(session.document.clip(clip).unwrap().start().samples(), 300);
         remove_clip(&mut session, clip).unwrap();
         assert!(session.document.clip(clip).is_err());
-        remove_track(&mut session, vox).unwrap();
+        track::remove(&mut session, vox).unwrap();
         assert!(session.document.track(vox).is_err());
         while undo(&mut session).unwrap() {}
         assert!(
@@ -592,7 +572,7 @@ mod tests {
     fn a_pause_between_edits_starts_a_new_undo_step() {
         use std::time::Instant;
         let mut session = create("demo", R, 64).unwrap();
-        let vox = add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let steps = session.history.undo_len();
         let t0 = Instant::now();
         // Three moves in quick succession: one step.
@@ -624,7 +604,7 @@ mod tests {
     #[test]
     fn midi_clips_and_loop_range() {
         let mut session = create("demo", R, 64).unwrap();
-        let keys = add_track(&mut session, "keys", TrackKind::Midi).unwrap();
+        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         let notes = vec![MidiNote {
             beat: 0.0,
             length: 1.0,
@@ -663,7 +643,7 @@ mod tests {
         undo(&mut session).unwrap();
         assert_eq!(session.document.loop_range(), None);
         // Bus tracks refuse clips; the error comes back and nothing is recorded.
-        let bus = add_track(&mut session, "bus", TrackKind::Bus).unwrap();
+        let bus = track::add(&mut session, "bus", TrackKind::Bus).unwrap();
         let before = session.history.undo_len();
         assert!(add_midi_clip(
             &mut session,
@@ -683,11 +663,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("document.superb.json");
         let mut session = create("saved", R, 128).unwrap();
-        let t = add_track(&mut session, "t", TrackKind::Audio).unwrap();
+        let t = track::add(&mut session, "t", TrackKind::Audio).unwrap();
         add_marker(&mut session, "m", TimePosition::from_samples(7)).unwrap();
         save(&mut session, &path).unwrap();
         assert!(is_saved(&session));
-        add_track(&mut session, "later", TrackKind::Audio).unwrap();
+        track::add(&mut session, "later", TrackKind::Audio).unwrap();
         assert!(!is_saved(&session));
 
         let reopened = open(&path, 128).unwrap();

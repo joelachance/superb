@@ -14,13 +14,13 @@
 
 use superb::prelude::*;
 use superb::primitives::io::wav::{self, WavFormat};
-use superb::{export, mix, session, transport};
+use superb::{export, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let mut session = session::create("bounce", rate, 256)?;
-    let lead = session::add_track(&mut session, "lead", TrackKind::Audio)?;
-    let pad = session::add_track(&mut session, "pad", TrackKind::Audio)?;
+    let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
+    let pad = track::add(&mut session, "pad", TrackKind::Audio)?;
 
     // Two one-second tones, the second starting at 0.5 s: the document ends at 1.5 s.
     let mut a = PlanarBuffer::new(2, rate.hz() as usize);
@@ -45,8 +45,8 @@ fn main() -> Result<()> {
         TimePosition::from_seconds(0.5, rate),
         one,
     )?;
-    mix::set_gain_db(&mut session, pad, -6.0)?;
-    mix::set_pan(&mut session, lead, 0.3)?;
+    track::volume(&mut session, pad, -6.0)?;
+    track::pan(&mut session, lead, 0.3)?;
 
     // The live engine is untouched by an export: leave it stopped at zero.
     let dir = std::env::temp_dir();

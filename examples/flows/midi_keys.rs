@@ -13,18 +13,18 @@
 //! ```
 
 use superb::prelude::*;
-use superb::{midi, session, transport};
+use superb::{midi, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let mut session = session::create("keys", rate, 128)?;
-    let keys = session::add_track(&mut session, "keys", TrackKind::Midi)?;
+    let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
 
     // Monitoring is part of the document (undoable) and changes the console:
     // the instrument is a node on the track's strip.
-    midi::monitor(&mut session, keys, true)?;
+    track::monitor(&mut session, keys, true)?;
     transport::start(&mut session)?;
-    println!("monitoring: {}", midi::is_monitoring(&session, keys));
+    println!("monitoring: {}", track::is_monitoring(&session, keys));
     println!(
         "silence before any note: {}",
         session::steps::render_blocks(&mut session, 2)?.is_silent()
@@ -81,7 +81,7 @@ fn main() -> Result<()> {
     }
 
     // Monitoring off: the instrument leaves the console at the next rebuild.
-    midi::monitor(&mut session, keys, false)?;
+    track::monitor(&mut session, keys, false)?;
     midi::play_note(&mut session, 0, 60, 100)?;
     println!(
         "monitor off, note ignored: {}",

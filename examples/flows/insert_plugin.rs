@@ -14,12 +14,12 @@
 
 use superb::prelude::*;
 use superb::primitives::plugins::PluginFormat;
-use superb::{plugins, session, transport};
+use superb::{plugins, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let mut session = session::create("fx", rate, 256)?;
-    let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
+    let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
     let mut tone = PlanarBuffer::new(2, rate.hz() as usize);
     tone.fill(0.25);
     session.cache.insert("tone.wav", tone);

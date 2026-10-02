@@ -35,7 +35,7 @@ use superb::prelude::*;
 use superb::session;
 
 let mut session = session::create("session", SampleRate::HZ_48K, 256)?;
-let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
+let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 
 let mut take = PlanarBuffer::new(2, 48_000);
 take.fill(0.2);

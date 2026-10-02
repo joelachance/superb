@@ -19,7 +19,6 @@ use std::thread::JoinHandle;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
 use crate::primitives::io::live::EngineCommand;
-use crate::primitives::session::TrackKind;
 use crate::primitives::{ClipId, Result, SuperbError, TimeDuration, TimePosition, TrackId};
 use crate::session;
 use crate::session::Session;
@@ -150,33 +149,6 @@ impl core::fmt::Debug for Collector {
     }
 }
 
-/// Arms or disarms an audio track. Armed tracks receive a clip when a take
-/// is stopped. A switch: saved with the document, not an undo step.
-///
-/// Made of: `Track::armed` through `session::switch`.
-pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    if session.document.track(track)?.kind != TrackKind::Audio {
-        return Err(SuperbError::InvalidArgument {
-            what: "only audio tracks are armed for recording",
-        });
-    }
-    crate::session::switch(session, |s| {
-        s.track_mut(track)?.armed = on;
-        Ok(())
-    })
-}
-
-/// The audio tracks currently armed, in track order.
-pub fn armed_tracks(session: &Session) -> Vec<TrackId> {
-    session
-        .document
-        .tracks()
-        .iter()
-        .filter(|t| t.kind == TrackKind::Audio && t.armed)
-        .map(|t| t.id())
-        .collect()
-}
-
 /// `true` while a take is being captured.
 pub fn is_recording(session: &Session) -> bool {
     session.recording.is_some()
@@ -208,7 +180,7 @@ pub fn start(
 /// Blocks wait on the queue until [`collect`] runs; [`session::steps::render_blocks`] does
 /// that after every block, so an offline program never calls it.
 ///
-/// Made of: [`armed_tracks`] → [`session::steps::rebuild`] when needed →
+/// Made of: [`track::armed`](crate::track::armed) → [`session::steps::rebuild`] when needed →
 /// `EngineHandle::send(Record)` → [`transport::playhead`] for the punch-in.
 pub fn start_from(session: &mut Session, blocks: CaptureConsumer, channels: usize) -> Result<()> {
     begin(
@@ -228,7 +200,7 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
             "a take is already being recorded".into(),
         ));
     }
-    let tracks = armed_tracks(session);
+    let tracks = crate::track::armed(session);
     if tracks.is_empty() {
         return Err(SuperbError::Message(
             "arm an audio track before recording".into(),
@@ -454,7 +426,9 @@ pub mod steps {
 mod tests {
     use super::*;
     use crate::primitives::io::capture::capture_queue;
+    use crate::primitives::session::TrackKind;
     use crate::primitives::SampleRate;
+    use crate::track;
     use crate::transport;
 
     const R: SampleRate = SampleRate::HZ_48K;
@@ -475,12 +449,12 @@ mod tests {
     #[test]
     fn a_take_becomes_a_clip_on_every_armed_track() {
         let mut session = session::create("rec", R, 64).unwrap();
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
-        let gtr = session::add_track(&mut session, "gtr", TrackKind::Audio).unwrap();
-        let _idle = session::add_track(&mut session, "idle", TrackKind::Audio).unwrap();
-        arm(&mut session, vox, true).unwrap();
-        arm(&mut session, gtr, true).unwrap();
-        assert_eq!(armed_tracks(&session), [vox, gtr]);
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        let gtr = track::add(&mut session, "gtr", TrackKind::Audio).unwrap();
+        let _idle = track::add(&mut session, "idle", TrackKind::Audio).unwrap();
+        track::arm(&mut session, vox, true).unwrap();
+        track::arm(&mut session, gtr, true).unwrap();
+        assert_eq!(crate::track::armed(&session), [vox, gtr]);
         assert!(!is_recording(&session));
 
         // Roll to 640 frames, then punch in there.
@@ -538,8 +512,8 @@ mod tests {
     #[test]
     fn takes_get_distinct_names_and_empty_takes_leave_no_clip() {
         let mut session = session::create("rec", R, 64).unwrap();
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
-        arm(&mut session, vox, true).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        track::arm(&mut session, vox, true).unwrap();
         for i in 1..=2 {
             let (mut mic, blocks) = capture_queue(2, 64, 4).unwrap();
             start_from(&mut session, blocks, 2).unwrap();
@@ -570,9 +544,9 @@ mod tests {
     #[test]
     fn errors_are_explicit() {
         let mut session = session::create("rec", R, 64).unwrap();
-        let keys = session::add_track(&mut session, "keys", TrackKind::Midi).unwrap();
+        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         assert!(
-            arm(&mut session, keys, true).is_err(),
+            track::arm(&mut session, keys, true).is_err(),
             "MIDI tracks monitor, they do not record audio"
         );
         assert!(
@@ -584,8 +558,8 @@ mod tests {
             start_from(&mut session, blocks, 1).is_err(),
             "no armed track"
         );
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
-        arm(&mut session, vox, true).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        track::arm(&mut session, vox, true).unwrap();
         let (_a, blocks) = capture_queue(1, 64, 2).unwrap();
         start_from(&mut session, blocks, 1).unwrap();
         let (_b, blocks) = capture_queue(1, 64, 2).unwrap();
@@ -599,8 +573,8 @@ mod tests {
     #[test]
     fn a_collector_thread_gathers_the_take_by_itself() {
         let mut session = session::create("rec", R, 64).unwrap();
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
-        arm(&mut session, vox, true).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        track::arm(&mut session, vox, true).unwrap();
         // A queue of 64 blocks fed with 200, paced like a device, and no
         // `collect` calls: the thread keeps up on its own. (A failed push
         // counts as a drop, so the accounting below must balance exactly.)
@@ -664,8 +638,8 @@ mod tests {
     #[test]
     fn collecting_as_you_go_outlasts_the_queue() {
         let mut session = session::create("rec", R, 64).unwrap();
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
-        arm(&mut session, vox, true).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        track::arm(&mut session, vox, true).unwrap();
         // A queue of only two blocks; the take is ten blocks long.
         let (mut mic, blocks) = capture_queue(1, 64, 2).unwrap();
         start_from(&mut session, blocks, 1).unwrap();

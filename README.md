@@ -62,14 +62,14 @@ use superb::prelude::*;
 use superb::{mix, session, transport};
 
 let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
-let lead = session::add_track(&mut session, "lead", TrackKind::Audio)?;
+let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
 
 // Audio comes from the cache: a decoded file, or a buffer you made.
 let mut tone = PlanarBuffer::new(2, 48_000);
 tone.fill(0.25);
 session.cache.insert("tone.wav", tone);
 session::add_audio_clip(&mut session, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(48_000))?;
-mix::set_gain_db(&mut session, lead, -6.0)?;
+track::volume(&mut session, lead, -6.0)?;
 
 transport::start(&mut session)?;                 // builds the mixer, starts playing
 let audio = session::steps::render_blocks(&mut session, 8)?; // renders 8 blocks without an audio device

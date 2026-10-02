@@ -77,13 +77,14 @@ mod tests {
     use crate::primitives::transport::LoopRange;
     use crate::primitives::{SampleRate, TimeDuration};
     use crate::session;
+    use crate::track;
 
     const R: SampleRate = SampleRate::HZ_48K;
 
     /// A session with one audio track playing a cached 0.5 tone from 0..400 frames.
     fn tone_rig() -> (Session, crate::primitives::TrackId) {
         let mut session = session::create("tone", R, 64).unwrap();
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
         session.cache.insert("tone.wav", tone);

@@ -25,8 +25,8 @@ port.
 use superb::{midi, session, transport};
 use superb::prelude::*;
 
-let keys = session::add_track(&mut session, "keys", TrackKind::Midi)?;
-midi::monitor(&mut session, keys, true)?;
+let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
+track::monitor(&mut session, keys, true)?;
 transport::start(&mut session)?;
 midi::play_note(&mut session, 0, 60, 100)?;
 let audio = session::steps::render_blocks(&mut session, 8)?;        // middle C on the keys strip

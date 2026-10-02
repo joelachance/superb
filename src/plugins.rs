@@ -118,6 +118,7 @@ mod tests {
     use crate::primitives::session::TrackKind;
     use crate::primitives::{SampleRate, TimeDuration, TimePosition};
     use crate::session;
+    use crate::track;
     use crate::transport;
 
     const R: SampleRate = SampleRate::HZ_48K;
@@ -133,7 +134,7 @@ mod tests {
 
     fn tone_rig() -> (Session, TrackId) {
         let mut session = session::create("fx", R, 64).unwrap();
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);
         session.cache.insert("tone.wav", tone);

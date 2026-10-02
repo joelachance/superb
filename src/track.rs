@@ -1,0 +1,163 @@
+//! Tracks: add them, name them, and set their state.
+//!
+//! A track's *state* (mute, solo, arm, monitor, volume, pan, where its
+//! output goes) is what the strip shows. Switches (mute, solo, arm,
+//! monitor) are saved with the session, heard at the next block and never
+//! undo steps. Volume and pan are edits: they coalesce in the undo history
+//! and reach the live strip at once. Adding, removing and routing change
+//! the mixer's shape, so they rebuild it (at once while a device is
+//! playing, otherwise at the next start).
+//!
+//! Made of `superb::primitives::session` (the document's tracks and their
+//! commands) and `superb::primitives::mixer` (`StripParams`, the live side).
+
+use crate::primitives::session::commands::{self, AddTrack, RemoveTrack, SetTrackOutput};
+use crate::primitives::session::{Track, TrackKind};
+use crate::primitives::{Result, SuperbError, TrackId};
+use crate::session::Session;
+
+/// Adds a track at the end. `TrackKind::Bus` makes a bus.
+///
+/// Made of: `Document::allocate_track_id` → `Track::with_id` → push
+/// `AddTrack`; rebuilds the mixer.
+pub fn add(session: &mut Session, name: &str, kind: TrackKind) -> Result<TrackId> {
+    let id = session.document.allocate_track_id();
+    crate::session::structural(session, AddTrack::new(Track::with_id(id, name, kind)))?;
+    Ok(id)
+}
+
+/// Removes a track with everything on it. Undo brings it all back.
+///
+/// Made of: push `RemoveTrack`; rebuilds the mixer.
+pub fn remove(session: &mut Session, track: TrackId) -> Result<()> {
+    crate::session::structural(session, RemoveTrack::new(track))
+}
+
+/// Renames a track. Quick successive renames of one track are one undo step.
+///
+/// Made of: push `set_track_name`.
+pub fn rename(session: &mut Session, track: TrackId, name: &str) -> Result<()> {
+    crate::session::edit(session, commands::set_track_name(track, name))
+}
+
+/// Sets a track's or bus's volume: the fader, in dB. Moves within
+/// [`Session::COALESCE_WINDOW`] of each other are one undo step, so a
+/// fader ride undoes in one go.
+///
+/// Made of: push `set_track_gain_db` → `StripParams::set_gain_db` on the
+/// live strip.
+pub fn volume(session: &mut Session, track: TrackId, db: f32) -> Result<()> {
+    crate::session::edit(session, commands::set_track_gain_db(track, db))?;
+    if let Some(strip) = session.live.strip(track) {
+        strip.set_gain_db(db);
+    }
+    Ok(())
+}
+
+/// Sets pan, `-1.0` (left) to `1.0` (right). An edit, like volume.
+///
+/// Made of: push `set_track_pan` → `StripParams::set_pan` on the live strip.
+pub fn pan(session: &mut Session, track: TrackId, pan: f32) -> Result<()> {
+    crate::session::edit(session, commands::set_track_pan(track, pan))?;
+    if let Some(strip) = session.live.strip(track) {
+        strip.set_pan(pan);
+    }
+    Ok(())
+}
+
+/// Mutes or unmutes. State: saved with the session, heard at the next
+/// block, not an undo step.
+///
+/// Made of: `Track::muted` through `session::switch` →
+/// `StripParams::set_mute` on the live strip.
+pub fn mute(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
+    crate::session::switch(session, |d| {
+        d.track_mut(track)?.muted = on;
+        Ok(())
+    })?;
+    if let Some(strip) = session.live.strip(track) {
+        strip.set_mute(on);
+    }
+    Ok(())
+}
+
+/// Solos or un-solos. While anything is soloed, every other track is
+/// silent; buses keep passing what reaches them. State, like mute.
+///
+/// Made of: `Track::soloed` through `session::switch` →
+/// `StripParams::set_solo` on the live strip.
+pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
+    crate::session::switch(session, |d| {
+        d.track_mut(track)?.soloed = on;
+        Ok(())
+    })?;
+    if let Some(strip) = session.live.strip(track) {
+        strip.set_solo(on);
+    }
+    Ok(())
+}
+
+/// Arms or disarms an audio track for recording. Armed tracks receive a
+/// clip when a recording stops. State, like mute. MIDI tracks
+/// [`monitor`] instead.
+///
+/// Made of: `Track::armed` through `session::switch`.
+pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
+    if session.document.track(track)?.kind != TrackKind::Audio {
+        return Err(SuperbError::InvalidArgument {
+            what: "only audio tracks are armed for recording",
+        });
+    }
+    crate::session::switch(session, |d| {
+        d.track_mut(track)?.armed = on;
+        Ok(())
+    })
+}
+
+/// The audio tracks currently armed, in track order.
+pub fn armed(session: &Session) -> Vec<TrackId> {
+    session
+        .document
+        .tracks()
+        .iter()
+        .filter(|t| t.kind == TrackKind::Audio && t.armed)
+        .map(|t| t.id())
+        .collect()
+}
+
+/// Turns live monitoring on or off for a MIDI track. While on, the track
+/// carries an instrument that plays whatever MIDI reaches the engine.
+/// State, saved as the track's arm flag; it changes the mixer's shape, so
+/// it rebuilds.
+///
+/// Made of: `Track::armed` through `session::switch` → rebuild (the
+/// instrument is a node in the mixer).
+pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
+    if session.document.track(track)?.kind != TrackKind::Midi {
+        return Err(SuperbError::InvalidArgument {
+            what: "only MIDI tracks monitor live MIDI",
+        });
+    }
+    crate::session::switch(session, |d| {
+        d.track_mut(track)?.armed = on;
+        Ok(())
+    })?;
+    crate::session::changed_structure(session)
+}
+
+/// `true` if the MIDI track is monitoring.
+pub fn is_monitoring(session: &Session, track: TrackId) -> bool {
+    session
+        .document
+        .track(track)
+        .map(|t| t.kind == TrackKind::Midi && t.armed)
+        .unwrap_or(false)
+}
+
+/// Sends a track's (or bus's) output into `bus`, or back to the master
+/// with `None`. Bus chains that would loop are refused.
+///
+/// Made of: push `SetTrackOutput`; rebuilds the mixer.
+pub fn route(session: &mut Session, track: TrackId, bus: Option<TrackId>) -> Result<()> {
+    crate::session::structural(session, SetTrackOutput::new(track, bus))
+}

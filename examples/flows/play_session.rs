@@ -16,12 +16,12 @@
 //! ```
 
 use superb::prelude::*;
-use superb::{session, transport};
+use superb::{session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let mut session = session::create("play", rate, 256)?;
-    let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
+    let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 
     // Half a second of a plucked-sounding tone: a sine with a decay.
     let frames = rate.hz() as usize / 2;

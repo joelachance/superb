@@ -15,18 +15,18 @@
 
 use superb::prelude::*;
 use superb::primitives::io::capture::capture_queue;
-use superb::{record, session, transport};
+use superb::{record, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let block = 256;
     let mut session = session::create("record", rate, block)?;
-    let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
-    let _bed = session::add_track(&mut session, "bed", TrackKind::Audio)?;
+    let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
+    let _bed = track::add(&mut session, "bed", TrackKind::Audio)?;
 
     // Arm the vocal. Arming is a switch in the session: undoable, saved.
-    record::arm(&mut session, vox, true)?;
-    println!("armed: {:?}", record::armed_tracks(&session));
+    track::arm(&mut session, vox, true)?;
+    println!("armed: {:?}", track::armed(&session));
 
     // Roll the transport a second in, then punch in there.
     transport::start(&mut session)?;
@@ -109,7 +109,7 @@ fn main() -> Result<()> {
         if devices::inputs()?.is_empty() {
             println!("no input device to record from");
         } else {
-            record::arm(&mut session, vox, true)?;
+            track::arm(&mut session, vox, true)?;
             let mic = devices::input_config(&session, None, 1);
             record::start(&mut session, &mic)?; // a collector thread gathers the take
             std::thread::sleep(std::time::Duration::from_millis(500));

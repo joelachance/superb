@@ -14,7 +14,7 @@
 //! ```
 
 use superb::prelude::*;
-use superb::{mix, session, transport};
+use superb::{mix, session, track, transport};
 
 /// Renders four blocks and returns the peak of the last one, so ramps have
 /// settled: what a meter would show.
@@ -29,8 +29,8 @@ fn level(session: &mut Session) -> Result<f32> {
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let mut session = session::create("mix", rate, 128)?;
-    let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
-    let gtr = session::add_track(&mut session, "gtr", TrackKind::Audio)?;
+    let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
+    let gtr = track::add(&mut session, "gtr", TrackKind::Audio)?;
 
     // Two steady tones so levels are easy to read: 0.25 on each track.
     let mut tone = PlanarBuffer::new(2, rate.hz() as usize * 4);
@@ -59,7 +59,7 @@ fn main() -> Result<()> {
 
     // A fader drag: several moves, one undo step.
     for db in [-2.0, -4.0, -6.0206] {
-        mix::set_gain_db(&mut session, gtr, db)?;
+        track::volume(&mut session, gtr, db)?;
     }
     // Quick successive moves merged above; sealing ends the step at once
     // (a pause of half a second would too).
@@ -71,7 +71,7 @@ fn main() -> Result<()> {
     println!("undo steps so far: {}", session.history.undo_len());
 
     // Pan and mute/solo are heard immediately as well.
-    mix::set_pan(&mut session, vox, -1.0)?; // hard left
+    track::pan(&mut session, vox, -1.0)?; // hard left
     let audio = session::steps::render_blocks(&mut session, 4)?;
     let n = audio.frames() - 1;
     println!(
@@ -79,16 +79,16 @@ fn main() -> Result<()> {
         audio.channel(0)[n],
         audio.channel(1)[n]
     );
-    mix::set_pan(&mut session, vox, 0.0)?;
-    mix::set_mute(&mut session, gtr, true)?;
+    track::pan(&mut session, vox, 0.0)?;
+    track::mute(&mut session, gtr, true)?;
     println!("gtr muted:               {:.3}", level(&mut session)?);
-    mix::set_mute(&mut session, gtr, false)?;
-    mix::set_solo(&mut session, gtr, true)?;
+    track::mute(&mut session, gtr, false)?;
+    track::solo(&mut session, gtr, true)?;
     println!(
         "gtr soloed:              {:.3}  (vox silenced)",
         level(&mut session)?
     );
-    mix::set_solo(&mut session, gtr, false)?;
+    track::solo(&mut session, gtr, false)?;
 
     // A bus fed by sends: the classic reverb return, minus the reverb.
     // Adding the bus and the sends changes the console's shape, so these
@@ -113,12 +113,12 @@ fn main() -> Result<()> {
 
     // Route gtr *through* the bus instead of sending a copy, and turn the
     // bus down: the bus fader now scales gtr.
-    mix::route(&mut session, gtr, Some(room))?;
+    track::route(&mut session, gtr, Some(room))?;
     session::steps::rebuild(&mut session)?;
     for (_, strip) in &session.live.strips {
         strip.set_pan_law(PanLaw::Balance);
     }
-    mix::set_gain_db(&mut session, room, -6.0206)?;
+    track::volume(&mut session, room, -6.0206)?;
     println!("gtr via bus at -6 dB:    {:.3}", level(&mut session)?);
 
     // Meters: loudest sample per channel since the last read.

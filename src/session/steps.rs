@@ -212,6 +212,7 @@ mod tests {
     use super::*;
     use crate::primitives::session::TrackKind;
     use crate::primitives::{SampleRate, TimeDuration, TimePosition};
+    use crate::track;
     use crate::{session, transport};
 
     const R: SampleRate = SampleRate::HZ_48K;
@@ -219,7 +220,7 @@ mod tests {
     /// A document with one audio track playing a cached 0.5 tone from 0..400 frames.
     fn tone_rig() -> (Session, crate::primitives::TrackId) {
         let mut session = session::create("tone", R, 64).unwrap();
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
         session.cache.insert("tone.wav", tone);
@@ -254,7 +255,7 @@ mod tests {
         let after = render_blocks(&mut session, 3).unwrap();
         assert!(after.channel(0)[150..].iter().all(|&s| s.abs() < 1e-6));
         // Removing the track marks a rebuild; `render_blocks` runs it.
-        session::remove_track(&mut session, vox).unwrap();
+        track::remove(&mut session, vox).unwrap();
         assert!(session.needs_rebuild);
         transport::rewind(&mut session).unwrap();
         let gone = render_blocks(&mut session, 2).unwrap();
@@ -266,7 +267,7 @@ mod tests {
     #[test]
     fn armed_midi_tracks_get_a_live_instrument() {
         let mut session = session::create("keys", R, 64).unwrap();
-        let keys = session::add_track(&mut session, "keys", TrackKind::Midi).unwrap();
+        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         transport::start(&mut session).unwrap();
         let (mixer, wiring) = build_mixer(&session.document, &session.cache, 2).unwrap();
         assert_eq!(

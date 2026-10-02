@@ -11,40 +11,8 @@
 //! [`session::steps::build_mixer`](crate::session::steps::build_mixer) adds.
 
 use crate::primitives::midi::{MidiChannel, MidiMessage, TimestampedMessage};
-use crate::primitives::session::TrackKind;
-use crate::primitives::{Result, SuperbError, TrackId};
+use crate::primitives::Result;
 use crate::session::Session;
-
-/// Turns live monitoring on or off for a MIDI track. While on, the track
-/// carries an instrument that plays whatever MIDI reaches the engine. A
-/// switch: saved with the document (as the track's arm flag), not an undo
-/// step. It does change the console's shape, so it takes effect at the next
-/// rebuild.
-///
-/// Made of: `Track::armed` through `session::switch`; marks the session for a
-/// rebuild (the instrument is a node in the console).
-pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    if session.document.track(track)?.kind != TrackKind::Midi {
-        return Err(SuperbError::InvalidArgument {
-            what: "only MIDI tracks monitor live MIDI",
-        });
-    }
-    crate::session::switch(session, |s| {
-        s.track_mut(track)?.armed = on;
-        Ok(())
-    })?;
-    session.needs_rebuild = true;
-    Ok(())
-}
-
-/// `true` if the MIDI track is monitoring.
-pub fn is_monitoring(session: &Session, track: TrackId) -> bool {
-    session
-        .document
-        .track(track)
-        .map(|t| t.kind == TrackKind::Midi && t.armed)
-        .unwrap_or(false)
-}
 
 /// Plays a note on the engine's software input. It sounds at the start of
 /// the next block on every monitoring track. `channel` is `0..=15`, `note`
@@ -97,8 +65,11 @@ pub fn connect_input(session: &mut Session, port_index: usize) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::primitives::session::TrackKind;
     use crate::primitives::SampleRate;
+    use crate::primitives::{SuperbError, TrackId};
     use crate::session;
+    use crate::track;
     use crate::transport;
 
     const R: SampleRate = SampleRate::HZ_48K;
@@ -106,10 +77,10 @@ mod tests {
     #[test]
     fn a_monitoring_track_sounds_when_a_note_arrives() {
         let mut session = session::create("keys", R, 64).unwrap();
-        let keys = session::add_track(&mut session, "keys", TrackKind::Midi).unwrap();
-        assert!(!is_monitoring(&session, keys));
-        monitor(&mut session, keys, true).unwrap();
-        assert!(is_monitoring(&session, keys));
+        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
+        assert!(!track::is_monitoring(&session, keys));
+        track::monitor(&mut session, keys, true).unwrap();
+        assert!(track::is_monitoring(&session, keys));
         transport::start(&mut session).unwrap();
         // Nothing played yet: silence.
         assert!(session::steps::render_blocks(&mut session, 2)
@@ -124,7 +95,7 @@ mod tests {
         // Turning monitoring off removes the instrument at the next rebuild.
         // It is a switch: nothing lands in the undo history.
         let steps = session.history.undo_len();
-        monitor(&mut session, keys, false).unwrap();
+        track::monitor(&mut session, keys, false).unwrap();
         assert_eq!(session.history.undo_len(), steps);
         play_note(&mut session, 0, 69, 100).unwrap();
         assert!(session::steps::render_blocks(&mut session, 4)
@@ -135,12 +106,12 @@ mod tests {
     #[test]
     fn only_midi_tracks_monitor_and_bad_notes_are_refused() {
         let mut session = session::create("keys", R, 64).unwrap();
-        let vox = session::add_track(&mut session, "vox", TrackKind::Audio).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         assert!(matches!(
-            monitor(&mut session, vox, true),
+            track::monitor(&mut session, vox, true),
             Err(SuperbError::InvalidArgument { .. })
         ));
-        assert!(monitor(&mut session, TrackId::from_raw(99), true).is_err());
+        assert!(track::monitor(&mut session, TrackId::from_raw(99), true).is_err());
         assert!(
             play_note(&mut session, 16, 60, 100).is_err(),
             "channel out of range"

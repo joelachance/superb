@@ -15,6 +15,7 @@
 use superb::prelude::*;
 use superb::primitives::session::MidiNote;
 use superb::session;
+use superb::track;
 
 fn main() -> Result<()> {
     // 48 kHz, 256-frame blocks. Nothing is playing yet; this is just the
@@ -22,8 +23,8 @@ fn main() -> Result<()> {
     let mut session = session::create("My first document", SampleRate::HZ_48K, 256)?;
 
     // Tracks. `add_track` returns an ID you keep; names are for people.
-    let vox = session::add_track(&mut session, "vox", TrackKind::Audio)?;
-    let keys = session::add_track(&mut session, "keys", TrackKind::Midi)?;
+    let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
+    let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
 
     // Audio for the vox clip. A real program calls `session::import_audio`
     // (feature `files`); here we synthesise one second of a soft sine so the
