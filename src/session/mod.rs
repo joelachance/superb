@@ -254,7 +254,7 @@ impl PluginLoader {
         }
     }
 
-    /// Creates an instance for `insert`, restores its saved state and
+    /// Creates an instance for `insert`, restores its preset and
     /// applies its stored parameter values.
     pub fn instantiate(
         &mut self,
@@ -267,10 +267,10 @@ impl PluginLoader {
             PluginFormat::Clap => {
                 let bundle = self.load(&insert.plugin.path)?;
                 let mut plugin = bundle.instantiate(&insert.plugin.id)?;
-                if !insert.state.is_empty() {
-                    plugin.load_state(&insert.state)?;
+                if !insert.preset.is_empty() {
+                    plugin.load_state(&insert.preset)?;
                 }
-                for (param, value) in &insert.params {
+                for (param, value) in &insert.state.params {
                     plugin.set_param(*param, *value)?;
                 }
                 Ok(Box::new(plugin))
@@ -581,7 +581,7 @@ mod tests {
                 .history
                 .push_at(
                     &mut session.document,
-                    Box::new(commands::set_track_gain_db(vox, *db)),
+                    Box::new(commands::set_track_volume_db(vox, *db)),
                     t0 + Duration::from_millis(50 * i as u64),
                 )
                 .unwrap();
@@ -592,13 +592,13 @@ mod tests {
             .history
             .push_at(
                 &mut session.document,
-                Box::new(commands::set_track_gain_db(vox, -4.0)),
+                Box::new(commands::set_track_volume_db(vox, -4.0)),
                 t0 + Session::COALESCE_WINDOW + Duration::from_secs(1),
             )
             .unwrap();
         assert_eq!(session.history.undo_len(), steps + 2);
         assert!(undo(&mut session).unwrap());
-        assert_eq!(session.document.track(vox).unwrap().gain_db, -3.0);
+        assert_eq!(session.document.track(vox).unwrap().state.volume_db, -3.0);
     }
 
     #[test]

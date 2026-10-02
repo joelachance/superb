@@ -59,11 +59,11 @@ pub fn remove(session: &mut Session, insert: InsertId) -> Result<()> {
 /// document but not recorded in the undo history, and it is heard at the
 /// next block.
 ///
-/// Made of: `Insert::bypassed` through `session::switch` → the node's
+/// Made of: `InsertState::bypass` through `session::switch` → the node's
 /// bypass flag in [`LiveInsert::bypass`](crate::session::LiveInsert::bypass).
 pub fn set_bypassed(session: &mut Session, insert: InsertId, on: bool) -> Result<()> {
     crate::session::switch(session, |s| {
-        s.insert_mut(insert)?.bypassed = on;
+        s.insert_mut(insert)?.state.bypass = on;
         Ok(())
     })?;
     if let Some(live) = session.live.insert(insert) {
@@ -191,7 +191,7 @@ mod tests {
         set_bypassed(&mut session, gain, true).unwrap();
         assert!(!session.needs_rebuild);
         assert_eq!(session.history.undo_len(), steps);
-        assert!(session.document.insert(gain).unwrap().bypassed);
+        assert!(session.document.insert(gain).unwrap().state.bypass);
         assert!(
             (settled(&mut session) - dry).abs() < 1e-3,
             "input passes through"

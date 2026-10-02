@@ -134,7 +134,7 @@ fn main() -> Result<()> {
     }
     println!(
         "after undo: gtr {} dB, {} tracks, gtr sends {}",
-        session.document.track(gtr)?.gain_db,
+        session.document.track(gtr)?.state.volume_db,
         session.document.track_count(),
         session.document.track(gtr)?.sends().len()
     );

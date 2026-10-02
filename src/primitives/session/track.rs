@@ -163,22 +163,71 @@ fn check_length(length: TimeDuration) -> Result<()> {
     Ok(())
 }
 
+/// A track's state: everything its strip shows and a switch or fader can
+/// change. Saved with the document. Mute, solo, arm and monitor are
+/// switches; volume and pan are continuous.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrackState {
+    /// The fader, in dB (0 = unity).
+    pub volume_db: f32,
+    /// Pan in `-1.0..=1.0`.
+    pub pan: f32,
+    /// Muted.
+    pub mute: bool,
+    /// Soloed: while any track is soloed, every unsoloed track is silent.
+    pub solo: bool,
+    /// Armed: an audio track that receives a clip when a recording stops.
+    pub arm: bool,
+    /// Monitoring: a MIDI track that carries a live instrument for
+    /// incoming MIDI.
+    pub monitor: bool,
+}
+
+impl Default for TrackState {
+    fn default() -> Self {
+        Self {
+            volume_db: 0.0,
+            pan: 0.0,
+            mute: false,
+            solo: false,
+            arm: false,
+            monitor: false,
+        }
+    }
+}
+
+/// A send's state: its level and whether it is on.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SendState {
+    /// Send level in dB (0 = unity).
+    pub level_db: f32,
+    /// A disabled send passes no signal.
+    pub enabled: bool,
+}
+
+impl Default for SendState {
+    fn default() -> Self {
+        Self {
+            level_db: 0.0,
+            enabled: true,
+        }
+    }
+}
+
 /// A send from an audio/MIDI track to a [`TrackKind::Bus`] track.
 ///
 /// The destination is fixed at creation (remove and re-add to retarget);
-/// level, tap point and enable state are plain fields, edited through
+/// tap point and state are plain fields, edited through
 /// [`Document::send_mut`](crate::primitives::session::Document::send_mut) or the
 /// [`commands`](crate::primitives::session::commands) helpers.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrackSend {
     pub(crate) id: SendId,
     pub(crate) bus: TrackId,
-    /// Send level in dB (0 = unity).
-    pub level_db: f32,
     /// Tap before the fader/pan/mute (`true`) or after the strip (`false`).
     pub pre_fader: bool,
-    /// Disabled sends pass no signal.
-    pub enabled: bool,
+    /// Level and on/off.
+    pub state: SendState,
 }
 
 impl TrackSend {
@@ -193,15 +242,14 @@ impl TrackSend {
         Self {
             id,
             bus,
-            level_db: 0.0,
             pre_fader: false,
-            enabled: true,
+            state: SendState::default(),
         }
     }
 
     /// Sets the level in dB (builder style).
     pub fn level_db(mut self, level_db: f32) -> Self {
-        self.level_db = level_db;
+        self.state.level_db = level_db;
         self
     }
 
@@ -239,16 +287,8 @@ pub struct Track {
     pub kind: TrackKind,
     /// Display colour as `0xRRGGBB`.
     pub color: Option<u32>,
-    /// Fader gain in dB.
-    pub gain_db: f32,
-    /// Pan in `-1.0..=1.0`.
-    pub pan: f32,
-    /// Mute state.
-    pub muted: bool,
-    /// Solo state.
-    pub soloed: bool,
-    /// Record-arm state.
-    pub armed: bool,
+    /// What the strip shows: volume, pan, mute, solo, arm, monitor.
+    pub state: TrackState,
     pub(crate) output: Option<TrackId>,
     pub(crate) sends: Vec<TrackSend>,
     pub(crate) inserts: Vec<Insert>,
@@ -269,11 +309,7 @@ impl Track {
             name: name.into(),
             kind,
             color: None,
-            gain_db: 0.0,
-            pan: 0.0,
-            muted: false,
-            soloed: false,
-            armed: false,
+            state: TrackState::default(),
             output: None,
             sends: Vec::new(),
             inserts: Vec::new(),
@@ -400,12 +436,18 @@ mod tests {
         let s = TrackSend::new(bus);
         assert_eq!(s.id(), SendId::INVALID);
         assert_eq!(s.bus(), bus);
-        assert_eq!((s.level_db, s.pre_fader, s.enabled), (0.0, false, true));
+        assert_eq!(
+            (s.state.level_db, s.pre_fader, s.state.enabled),
+            (0.0, false, true)
+        );
         let s = TrackSend::with_id(SendId::from_raw(3), bus)
             .level_db(-6.0)
             .pre_fader();
         assert_eq!(s.id(), SendId::from_raw(3));
-        assert_eq!((s.level_db, s.pre_fader, s.enabled), (-6.0, true, true));
+        assert_eq!(
+            (s.state.level_db, s.pre_fader, s.state.enabled),
+            (-6.0, true, true)
+        );
     }
 
     #[test]
@@ -413,7 +455,7 @@ mod tests {
         let mut t = Track::new("lead", TrackKind::Midi);
         assert_eq!(t.id(), TrackId::INVALID);
         assert_eq!(t.kind, TrackKind::Midi);
-        assert_eq!(t.gain_db, 0.0);
+        assert_eq!(t.state.volume_db, 0.0);
         assert_eq!(t.output(), None);
         assert!(t.sends().is_empty());
         assert!(t.send(SendId::from_raw(1)).is_none());

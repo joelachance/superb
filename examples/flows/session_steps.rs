@@ -50,7 +50,7 @@ fn main() -> Result<()> {
 
     // A MIDI track with one A4 half-beat note; its fader at -3 dB.
     let keys = document.add_track("keys", TrackKind::Midi);
-    document.track_mut(keys)?.gain_db = -3.0;
+    document.track_mut(keys)?.state.volume_db = -3.0;
     document.add_clip(
         keys,
         Clip::new(
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
     // Routing lives in the document: keys → room bus (-6 dB) → master, and a
     // quiet pre-fader send from vox into the same bus.
     let room = document.add_track("room", TrackKind::Bus);
-    document.track_mut(room)?.gain_db = -6.0;
+    document.track_mut(room)?.state.volume_db = -6.0;
     document.set_track_output(keys, Some(room))?;
     let send = document.add_send(vox, TrackSend::new(room).level_db(-12.0).pre_fader())?;
 

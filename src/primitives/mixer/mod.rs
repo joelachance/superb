@@ -29,7 +29,7 @@
 //! let drums = mixer.add_track("drums");
 //! let src = mixer.graph_mut().add_node(Box::new(ConstantNode::new(0.5, 2)));
 //! mixer.connect_source(src, drums).unwrap();
-//! mixer.track_params(drums).unwrap().set_gain_db(-6.0206);
+//! mixer.track_params(drums).unwrap().set_volume_db(-6.0206);
 //!
 //! mixer.prepare(SampleRate::HZ_48K, 64).unwrap();
 //! mixer.process(BlockTime::free_running(), 64, &MidiEventBuffer::with_capacity(0)).unwrap();

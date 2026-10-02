@@ -36,7 +36,7 @@ fn main() -> Result<()> {
     // Wire the oscillator into this track's input (not straight to master).
     mixer.connect_source(osc, track)?;
     // track_params returns a handle to the strip; set_gain_db is a fader in dB.
-    mixer.track_params(track)?.set_gain_db(-3.0);
+    mixer.track_params(track)?.set_volume_db(-3.0);
 
     // Engine = graph/mixer processor + Transport (tempo/playhead).
     let mut engine = Engine::new(mixer, Transport::new(rate, 120.0));

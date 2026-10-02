@@ -94,12 +94,12 @@ impl StripParams {
     }
 
     /// Gain in decibels.
-    pub fn gain_db(&self) -> f32 {
+    pub fn volume_db(&self) -> f32 {
         linear_to_db(self.gain())
     }
 
     /// Sets gain in decibels.
-    pub fn set_gain_db(&self, db: f32) {
+    pub fn set_volume_db(&self, db: f32) {
         self.set_gain(db_to_linear(db));
     }
 
@@ -285,8 +285,8 @@ mod tests {
     fn gain_setters_in_db_and_linear() {
         let p = StripParams::new(None);
         assert_eq!(p.gain(), 1.0);
-        assert_eq!(p.gain_db(), 0.0);
-        p.set_gain_db(-6.0206);
+        assert_eq!(p.volume_db(), 0.0);
+        p.set_volume_db(-6.0206);
         assert!((p.gain() - 0.5).abs() < 1e-4);
         p.set_gain(-3.0);
         assert_eq!(p.gain(), 0.0);

@@ -93,10 +93,10 @@ use crate::session::{MixerBinding, Wiring};
 
 /// Builds a fresh mixer for the document: a strip per track and bus,
 /// routing and sends, a node per audible clip, and a live instrument
-/// on every armed MIDI track so it sounds when you play.
+/// on every monitoring MIDI track so it sounds when you play.
 ///
 /// Made of: `Mixer::new` → `Wiring::wire` → one `MonoSynthNode`
-/// plus a MIDI edge per armed MIDI track.
+/// plus a MIDI edge per monitoring MIDI track.
 pub fn build_mixer(
     document: &Document,
     cache: &AudioCache,
@@ -105,7 +105,7 @@ pub fn build_mixer(
     let mut mixer = Mixer::new(channels);
     let wiring = Wiring::wire(document, &mut mixer, cache)?;
     for track in document.tracks() {
-        if track.kind != TrackKind::Midi || !track.armed {
+        if track.kind != TrackKind::Midi || !track.state.monitor {
             continue;
         }
         let Some(MixerBinding::Track(strip)) = wiring.bridge().binding(track.id()) else {
@@ -121,7 +121,7 @@ pub fn build_mixer(
 }
 
 /// Loads every insert in the document and splices it into its strip's chain,
-/// with the node's bypass switch set to match the document. Failures
+/// with the node's bypass switch set from the insert's state. Failures
 /// are collected, not fatal.
 ///
 /// Made of: `PluginLoader::instantiate` → `PluginNode::new` →
@@ -155,7 +155,7 @@ pub fn attach_inserts(
                 .take_param_sender()
                 .expect("a fresh node has its sender");
             let bypass = node.bypass_handle();
-            bypass.store(insert.bypassed, core::sync::atomic::Ordering::Relaxed);
+            bypass.store(insert.state.bypass, core::sync::atomic::Ordering::Relaxed);
             match mixer.add_insert(strip, Box::new(node)) {
                 Ok(_) => live.push(LiveInsert {
                     id: insert.id(),
@@ -265,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn armed_midi_tracks_get_a_live_instrument() {
+    fn monitoring_midi_tracks_get_a_live_instrument() {
         let mut session = session::create("keys", R, 64).unwrap();
         let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         transport::start(&mut session).unwrap();
@@ -276,7 +276,7 @@ mod tests {
             "master pair + track pair, no instrument"
         );
         drop(wiring);
-        session.document.track_mut(keys).unwrap().armed = true;
+        session.document.track_mut(keys).unwrap().state.monitor = true;
         let (mixer, _) = build_mixer(&session.document, &session.cache, 2).unwrap();
         assert_eq!(mixer.graph().node_count(), 5, "plus the live synth");
         assert_eq!(mixer.graph().midi_edges().len(), 1);

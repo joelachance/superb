@@ -44,12 +44,12 @@ pub fn rename(session: &mut Session, track: TrackId, name: &str) -> Result<()> {
 /// [`Session::COALESCE_WINDOW`] of each other are one undo step, so a
 /// fader ride undoes in one go.
 ///
-/// Made of: push `set_track_gain_db` → `StripParams::set_gain_db` on the
+/// Made of: push `set_track_volume_db` → `StripParams::set_volume_db` on the
 /// live strip.
 pub fn volume(session: &mut Session, track: TrackId, db: f32) -> Result<()> {
-    crate::session::edit(session, commands::set_track_gain_db(track, db))?;
+    crate::session::edit(session, commands::set_track_volume_db(track, db))?;
     if let Some(strip) = session.live.strip(track) {
-        strip.set_gain_db(db);
+        strip.set_volume_db(db);
     }
     Ok(())
 }
@@ -68,11 +68,11 @@ pub fn pan(session: &mut Session, track: TrackId, pan: f32) -> Result<()> {
 /// Mutes or unmutes. State: saved with the session, heard at the next
 /// block, not an undo step.
 ///
-/// Made of: `Track::muted` through `session::switch` →
+/// Made of: `TrackState::mute` through `session::switch` →
 /// `StripParams::set_mute` on the live strip.
 pub fn mute(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
     crate::session::switch(session, |d| {
-        d.track_mut(track)?.muted = on;
+        d.track_mut(track)?.state.mute = on;
         Ok(())
     })?;
     if let Some(strip) = session.live.strip(track) {
@@ -84,11 +84,11 @@ pub fn mute(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 /// Solos or un-solos. While anything is soloed, every other track is
 /// silent; buses keep passing what reaches them. State, like mute.
 ///
-/// Made of: `Track::soloed` through `session::switch` →
+/// Made of: `TrackState::solo` through `session::switch` →
 /// `StripParams::set_solo` on the live strip.
 pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
     crate::session::switch(session, |d| {
-        d.track_mut(track)?.soloed = on;
+        d.track_mut(track)?.state.solo = on;
         Ok(())
     })?;
     if let Some(strip) = session.live.strip(track) {
@@ -101,7 +101,7 @@ pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 /// clip when a recording stops. State, like mute. MIDI tracks
 /// [`monitor`] instead.
 ///
-/// Made of: `Track::armed` through `session::switch`.
+/// Made of: `TrackState::arm` through `session::switch`.
 pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
     if session.document.track(track)?.kind != TrackKind::Audio {
         return Err(SuperbError::InvalidArgument {
@@ -109,7 +109,7 @@ pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
         });
     }
     crate::session::switch(session, |d| {
-        d.track_mut(track)?.armed = on;
+        d.track_mut(track)?.state.arm = on;
         Ok(())
     })
 }
@@ -120,7 +120,7 @@ pub fn armed(session: &Session) -> Vec<TrackId> {
         .document
         .tracks()
         .iter()
-        .filter(|t| t.kind == TrackKind::Audio && t.armed)
+        .filter(|t| t.kind == TrackKind::Audio && t.state.arm)
         .map(|t| t.id())
         .collect()
 }
@@ -130,7 +130,7 @@ pub fn armed(session: &Session) -> Vec<TrackId> {
 /// State, saved as the track's arm flag; it changes the mixer's shape, so
 /// it rebuilds.
 ///
-/// Made of: `Track::armed` through `session::switch` → rebuild (the
+/// Made of: `TrackState::arm` through `session::switch` → rebuild (the
 /// instrument is a node in the mixer).
 pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
     if session.document.track(track)?.kind != TrackKind::Midi {
@@ -139,7 +139,7 @@ pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
         });
     }
     crate::session::switch(session, |d| {
-        d.track_mut(track)?.armed = on;
+        d.track_mut(track)?.state.monitor = on;
         Ok(())
     })?;
     crate::session::changed_structure(session)
@@ -150,7 +150,7 @@ pub fn is_monitoring(session: &Session, track: TrackId) -> bool {
     session
         .document
         .track(track)
-        .map(|t| t.kind == TrackKind::Midi && t.armed)
+        .map(|t| t.kind == TrackKind::Midi && t.state.monitor)
         .unwrap_or(false)
 }
 

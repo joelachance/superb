@@ -116,7 +116,7 @@ assert!document.set_track_output(vox, Some(vox)).is_err());            // not a 
 let send = session.allocate_send_id();
 history.push(&mut session, AddSend::new(vox, TrackSend::with_id(send, verb).pre_fader())).unwrap();
 history.push(&mut session, set_send_level_db(send, -12.0)).unwrap();
-assert_eq!document.send(send).unwrap().level_db, -12.0);
+assert_eq!(document.send(send).unwrap().state.level_db, -12.0);
 
 // Removing the verb bus drops the send; undo puts both back.
 history.push(&mut session, superb::primitives::session::commands::RemoveTrack::new(verb)).unwrap();

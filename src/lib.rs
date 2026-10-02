@@ -54,7 +54,7 @@
 //! let track = mixer.add_track("lead");
 //! let osc = mixer.graph_mut().add_node(Box::new(SineNode::new(440.0, 0.5, 2)));
 //! mixer.connect_source(osc, track).unwrap();
-//! mixer.track_params(track).unwrap().set_gain_db(-6.0);
+//! mixer.track_params(track).unwrap().set_volume_db(-6.0);
 //!
 //! let mut engine = Engine::new(mixer, Transport::new(SampleRate::HZ_48K, 120.0));
 //! engine.transport_mut().play();

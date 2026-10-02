@@ -57,18 +57,20 @@ pub mod keys {
     pub const SESSION_NAME: u64 = 1;
     /// [`set_track_name`](super::set_track_name).
     pub const TRACK_NAME: u64 = 10;
-    /// [`set_track_gain_db`](super::set_track_gain_db).
-    pub const TRACK_GAIN: u64 = 11;
+    /// [`set_track_volume_db`](super::set_track_volume_db).
+    pub const TRACK_VOLUME: u64 = 11;
     /// [`set_track_pan`](super::set_track_pan).
     pub const TRACK_PAN: u64 = 12;
     /// [`set_track_mute`](super::set_track_mute).
     pub const TRACK_MUTE: u64 = 13;
     /// [`set_track_solo`](super::set_track_solo).
     pub const TRACK_SOLO: u64 = 14;
-    /// [`set_track_armed`](super::set_track_armed).
-    pub const TRACK_ARMED: u64 = 15;
+    /// [`set_track_arm`](super::set_track_arm).
+    pub const TRACK_ARM: u64 = 15;
     /// [`set_track_color`](super::set_track_color).
     pub const TRACK_COLOR: u64 = 16;
+    /// [`set_track_monitor`](super::set_track_monitor).
+    pub const TRACK_MONITOR: u64 = 17;
     /// [`MoveClip`](super::MoveClip).
     pub const CLIP_MOVE: u64 = 20;
     /// [`ResizeClip`](super::ResizeClip).
@@ -93,7 +95,7 @@ pub mod keys {
     pub const SEND_ENABLED: u64 = 51;
     /// [`set_send_pre_fader`](super::set_send_pre_fader).
     pub const SEND_PRE_FADER: u64 = 52;
-    /// [`set_insert_bypassed`](super::set_insert_bypassed).
+    /// [`set_insert_bypass`](super::set_insert_bypass).
     pub const INSERT_BYPASS: u64 = 60;
     /// [`set_insert_param`](super::set_insert_param): the key's `kind` is
     /// this base plus the parameter id, so different parameters never merge.
@@ -1001,18 +1003,18 @@ pub fn set_track_name(id: TrackId, name: impl Into<String>) -> PropertyEdit<Docu
 }
 
 /// Sets a track's fader gain in dB. Rejects non-finite values.
-pub fn set_track_gain_db(id: TrackId, gain_db: f32) -> PropertyEdit<Document, f32> {
+pub fn set_track_volume_db(id: TrackId, gain_db: f32) -> PropertyEdit<Document, f32> {
     track_property(
         "Set track gain",
-        keys::TRACK_GAIN,
+        keys::TRACK_VOLUME,
         id,
         gain_db,
-        |t| t.gain_db,
+        |t| t.state.volume_db,
         |t, v| {
             if !v.is_finite() {
                 return Err(SuperbError::InvalidArgument { what: "gain_db" });
             }
-            t.gain_db = v;
+            t.state.volume_db = v;
             Ok(())
         },
     )
@@ -1025,12 +1027,12 @@ pub fn set_track_pan(id: TrackId, pan: f32) -> PropertyEdit<Document, f32> {
         keys::TRACK_PAN,
         id,
         pan,
-        |t| t.pan,
+        |t| t.state.pan,
         |t, v| {
             if !(-1.0..=1.0).contains(&v) {
                 return Err(SuperbError::InvalidArgument { what: "pan" });
             }
-            t.pan = v;
+            t.state.pan = v;
             Ok(())
         },
     )
@@ -1043,9 +1045,9 @@ pub fn set_track_mute(id: TrackId, muted: bool) -> PropertyEdit<Document, bool> 
         keys::TRACK_MUTE,
         id,
         muted,
-        |t| t.muted,
+        |t| t.state.mute,
         |t, v| {
-            t.muted = v;
+            t.state.mute = v;
             Ok(())
         },
     )
@@ -1058,24 +1060,39 @@ pub fn set_track_solo(id: TrackId, soloed: bool) -> PropertyEdit<Document, bool>
         keys::TRACK_SOLO,
         id,
         soloed,
-        |t| t.soloed,
+        |t| t.state.solo,
         |t, v| {
-            t.soloed = v;
+            t.state.solo = v;
             Ok(())
         },
     )
 }
 
 /// Arms or disarms a track for recording.
-pub fn set_track_armed(id: TrackId, armed: bool) -> PropertyEdit<Document, bool> {
+pub fn set_track_arm(id: TrackId, arm: bool) -> PropertyEdit<Document, bool> {
     track_property(
         "Arm track",
-        keys::TRACK_ARMED,
+        keys::TRACK_ARM,
         id,
-        armed,
-        |t| t.armed,
+        arm,
+        |t| t.state.arm,
         |t, v| {
-            t.armed = v;
+            t.state.arm = v;
+            Ok(())
+        },
+    )
+}
+
+/// Turns a MIDI track's live monitoring on or off.
+pub fn set_track_monitor(id: TrackId, monitor: bool) -> PropertyEdit<Document, bool> {
+    track_property(
+        "Monitor track",
+        keys::TRACK_MONITOR,
+        id,
+        monitor,
+        |t| t.state.monitor,
+        |t, v| {
+            t.state.monitor = v;
             Ok(())
         },
     )
@@ -1121,12 +1138,12 @@ pub fn set_send_level_db(id: SendId, level_db: f32) -> PropertyEdit<Document, f3
         keys::SEND_LEVEL,
         id,
         level_db,
-        |s| s.level_db,
+        |s| s.state.level_db,
         |s, v| {
             if !v.is_finite() {
                 return Err(SuperbError::InvalidArgument { what: "level_db" });
             }
-            s.level_db = v;
+            s.state.level_db = v;
             Ok(())
         },
     )
@@ -1139,9 +1156,9 @@ pub fn set_send_enabled(id: SendId, enabled: bool) -> PropertyEdit<Document, boo
         keys::SEND_ENABLED,
         id,
         enabled,
-        |s| s.enabled,
+        |s| s.state.enabled,
         |s, v| {
-            s.enabled = v;
+            s.state.enabled = v;
             Ok(())
         },
     )
@@ -1184,14 +1201,14 @@ fn insert_property<V: Clone + Send + Sync + 'static>(
 }
 
 /// Bypasses or re-enables an insert.
-pub fn set_insert_bypassed(id: InsertId, bypassed: bool) -> PropertyEdit<Document, bool> {
+pub fn set_insert_bypass(id: InsertId, bypass: bool) -> PropertyEdit<Document, bool> {
     insert_property(
         "Bypass insert",
         keys::INSERT_BYPASS,
         id,
-        bypassed,
-        |i| i.bypassed,
-        |i, v| i.bypassed = v,
+        bypass,
+        |i| i.state.bypass,
+        |i, v| i.state.bypass = v,
     )
 }
 
@@ -1548,15 +1565,15 @@ mod tests {
         let (mut s, mut h, a, clip) = base();
         h.push(&mut s, set_session_name("document")).unwrap();
         h.push(&mut s, set_track_name(a, "vox")).unwrap();
-        h.push(&mut s, set_track_gain_db(a, -3.0)).unwrap();
-        h.push(&mut s, set_track_gain_db(a, -6.0)).unwrap();
+        h.push(&mut s, set_track_volume_db(a, -3.0)).unwrap();
+        h.push(&mut s, set_track_volume_db(a, -6.0)).unwrap();
         assert_eq!(h.undo_len(), 3);
-        assert!(h.push(&mut s, set_track_gain_db(a, f32::NAN)).is_err());
+        assert!(h.push(&mut s, set_track_volume_db(a, f32::NAN)).is_err());
         assert!(h.push(&mut s, set_track_pan(a, 1.5)).is_err());
         h.push(&mut s, set_track_pan(a, -0.5)).unwrap();
         h.push(&mut s, set_track_mute(a, true)).unwrap();
         h.push(&mut s, set_track_solo(a, true)).unwrap();
-        h.push(&mut s, set_track_armed(a, true)).unwrap();
+        h.push(&mut s, set_track_arm(a, true)).unwrap();
         h.push(&mut s, set_track_color(a, Some(0x123456))).unwrap();
         h.push(&mut s, set_clip_name(clip, "take")).unwrap();
         h.push(&mut s, set_clip_gain_db(clip, -2.0)).unwrap();
@@ -1565,11 +1582,11 @@ mod tests {
         assert_eq!(
             (
                 t.name.as_str(),
-                t.gain_db,
-                t.pan,
-                t.muted,
-                t.soloed,
-                t.armed,
+                t.state.volume_db,
+                t.state.pan,
+                t.state.mute,
+                t.state.solo,
+                t.state.arm,
                 t.color
             ),
             ("vox", -6.0, -0.5, true, true, true, Some(0x123456))
@@ -1582,11 +1599,11 @@ mod tests {
         assert_eq!(
             (
                 t.name.as_str(),
-                t.gain_db,
-                t.pan,
-                t.muted,
-                t.soloed,
-                t.armed,
+                t.state.volume_db,
+                t.state.pan,
+                t.state.mute,
+                t.state.solo,
+                t.state.arm,
                 t.color
             ),
             ("a", 0.0, 0.0, false, false, false, None)
@@ -1595,7 +1612,7 @@ mod tests {
         assert_eq!((i.name.as_str(), i.gain_db, i.muted), ("i", 0.0, false));
         assert_eq!(s.name(), "t");
         while h.redo(&mut s).unwrap() {}
-        assert_eq!(s.track(a).unwrap().gain_db, -6.0);
+        assert_eq!(s.track(a).unwrap().state.volume_db, -6.0);
         // Missing targets fail cleanly.
         assert!(h
             .push(&mut s, set_track_name(TrackId::from_raw(999), "x"))
@@ -1650,7 +1667,7 @@ mod tests {
         h.push(&mut s, set_send_pre_fader(id, true)).unwrap();
         let send = s.send(id).unwrap();
         assert_eq!(
-            (send.level_db, send.enabled, send.pre_fader),
+            (send.state.level_db, send.state.enabled, send.pre_fader),
             (-9.0, false, true)
         );
         h.undo(&mut s).unwrap();
@@ -1658,12 +1675,12 @@ mod tests {
         h.undo(&mut s).unwrap();
         let send = s.send(id).unwrap();
         assert_eq!(
-            (send.level_db, send.enabled, send.pre_fader),
+            (send.state.level_db, send.state.enabled, send.pre_fader),
             (-3.0, true, false),
             "level edits were one step"
         );
         while h.redo(&mut s).unwrap() {}
-        assert_eq!(s.send(id).unwrap().level_db, -9.0);
+        assert_eq!(s.send(id).unwrap().state.level_db, -9.0);
         h.seal();
 
         h.push(&mut s, RemoveSend::new(auto)).unwrap();
@@ -1687,7 +1704,7 @@ mod tests {
         h.undo(&mut s).unwrap();
         assert_eq!(s.track(sub).unwrap().output(), Some(fx));
         assert_eq!(s.send_count(), 2);
-        assert_eq!(s.send(id).unwrap().level_db, -9.0);
+        assert_eq!(s.send(id).unwrap().state.level_db, -9.0);
         assert_eq!(s.send_track(auto).unwrap(), k);
         h.redo(&mut s).unwrap();
         assert_eq!(s.send_count(), 0);
@@ -1767,13 +1784,13 @@ mod tests {
         while h.redo(&mut s).unwrap() {}
         assert_eq!(s.insert(eq).unwrap().param(1), Some(0.2));
 
-        h.push(&mut s, set_insert_bypassed(eq, true)).unwrap();
-        assert!(s.insert(eq).unwrap().bypassed);
+        h.push(&mut s, set_insert_bypass(eq, true)).unwrap();
+        assert!(s.insert(eq).unwrap().state.bypass);
         h.push(&mut s, RemoveInsert::new(gate)).unwrap();
         assert_eq!(chain(&s), [comp, eq]);
         h.undo(&mut s).unwrap();
         assert_eq!(chain(&s), [comp, gate, eq], "restored at its old position");
-        assert!(s.insert(eq).unwrap().bypassed);
+        assert!(s.insert(eq).unwrap().state.bypass);
         assert!(h
             .push(&mut s, RemoveInsert::new(InsertId::from_raw(999)))
             .is_err());

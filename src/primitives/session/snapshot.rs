@@ -110,7 +110,7 @@ pub struct SendSnapshot {
     pub level_db: f32,
     /// Pre-fader tap.
     pub pre_fader: bool,
-    /// Enabled.
+    /// On.
     pub enabled: bool,
 }
 
@@ -125,12 +125,14 @@ pub struct InsertSnapshot {
     pub path: std::path::PathBuf,
     /// The plugin's ID inside the bundle.
     pub plugin: String,
-    /// Bypassed.
-    pub bypassed: bool,
+    /// Bypassed (`bypassed` in files written before the state structs).
+    #[serde(alias = "bypassed")]
+    pub bypass: bool,
     /// `(parameter id, value)` pairs the user has set.
     pub params: Vec<(u32, f64)>,
-    /// Opaque plugin state, or empty.
-    pub state: Vec<u8>,
+    /// Opaque bytes the plugin saved (`state` in older files), or empty.
+    #[serde(alias = "state")]
+    pub preset: Vec<u8>,
 }
 
 /// A track.
@@ -144,16 +146,25 @@ pub struct TrackSnapshot {
     pub kind: TrackKind,
     /// Colour as `0xRRGGBB`.
     pub color: Option<u32>,
-    /// Fader gain in dB.
-    pub gain_db: f32,
+    /// The fader in dB (`gain_db` in files written before the state structs).
+    #[serde(alias = "gain_db")]
+    pub volume_db: f32,
     /// Pan `-1..=1`.
     pub pan: f32,
-    /// Mute state.
-    pub muted: bool,
-    /// Solo state.
-    pub soloed: bool,
-    /// Record-arm state.
-    pub armed: bool,
+    /// Muted (`muted` in older files).
+    #[serde(alias = "muted")]
+    pub mute: bool,
+    /// Soloed (`soloed` in older files).
+    #[serde(alias = "soloed")]
+    pub solo: bool,
+    /// Armed (`armed` in older files, where it also meant monitoring on a
+    /// MIDI track).
+    #[serde(alias = "armed")]
+    pub arm: bool,
+    /// Monitoring (absent in older files: a MIDI track's `armed` is read as
+    /// monitoring instead).
+    #[serde(default)]
+    pub monitor: bool,
     /// Raw ID of the bus track the output feeds (`None` = master; absent
     /// in files written before routing existed).
     #[serde(default)]
@@ -227,9 +238,9 @@ impl From<&TrackSend> for SendSnapshot {
         Self {
             id: s.id.raw(),
             bus: s.bus.raw(),
-            level_db: s.level_db,
+            level_db: s.state.level_db,
             pre_fader: s.pre_fader,
-            enabled: s.enabled,
+            enabled: s.state.enabled,
         }
     }
 }
@@ -241,9 +252,9 @@ impl From<&Insert> for InsertSnapshot {
             format: i.plugin.format,
             path: i.plugin.path.clone(),
             plugin: i.plugin.id.clone(),
-            bypassed: i.bypassed,
-            params: i.params.clone(),
-            state: i.state.clone(),
+            bypass: i.state.bypass,
+            params: i.state.params.clone(),
+            preset: i.preset.clone(),
         }
     }
 }
@@ -255,11 +266,12 @@ impl From<&Track> for TrackSnapshot {
             name: t.name.clone(),
             kind: t.kind,
             color: t.color,
-            gain_db: t.gain_db,
-            pan: t.pan,
-            muted: t.muted,
-            soloed: t.soloed,
-            armed: t.armed,
+            volume_db: t.state.volume_db,
+            pan: t.state.pan,
+            mute: t.state.mute,
+            solo: t.state.solo,
+            arm: t.state.arm,
+            monitor: t.state.monitor,
             output: t.output.map(TrackId::raw),
             sends: t.sends.iter().map(SendSnapshot::from).collect(),
             inserts: t.inserts.iter().map(InsertSnapshot::from).collect(),
@@ -385,11 +397,18 @@ impl Document {
                 return Err(SuperbError::InvalidArgument { what: "track id 0" });
             }
             track.color = t.color;
-            track.gain_db = t.gain_db;
-            track.pan = t.pan;
-            track.muted = t.muted;
-            track.soloed = t.soloed;
-            track.armed = t.armed;
+            track.state.volume_db = t.volume_db;
+            track.state.pan = t.pan;
+            track.state.mute = t.mute;
+            track.state.solo = t.solo;
+            if t.kind == TrackKind::Midi && t.arm && !t.monitor {
+                // Files from before `monitor` existed armed a MIDI track to
+                // mean "monitor".
+                track.state.monitor = true;
+            } else {
+                track.state.arm = t.arm;
+                track.state.monitor = t.monitor;
+            }
             if t.kind == TrackKind::Bus && !t.clips.is_empty() {
                 return Err(SuperbError::InvalidArgument {
                     what: "bus tracks hold no clips",
@@ -428,9 +447,9 @@ impl Document {
                         id: i.plugin.clone(),
                     },
                 );
-                insert.bypassed = i.bypassed;
-                insert.params = i.params.clone();
-                insert.state = i.state.clone();
+                insert.state.bypass = i.bypass;
+                insert.state.params = i.params.clone();
+                insert.preset = i.preset.clone();
                 track.inserts.push(insert);
             }
             let index = document.track_count();
@@ -450,9 +469,9 @@ impl Document {
                     return Err(SuperbError::InvalidArgument { what: "send id 0" });
                 }
                 let mut send = TrackSend::with_id(send_id, TrackId::from_raw(s.bus));
-                send.level_db = s.level_db;
+                send.state.level_db = s.level_db;
                 send.pre_fader = s.pre_fader;
-                send.enabled = s.enabled;
+                send.state.enabled = s.enabled;
                 document.add_send(id, send)?;
             }
         }
@@ -536,15 +555,15 @@ mod tests {
         s.add_send(keys, TrackSend::new(bus).level_db(-9.0).pre_fader())
             .unwrap();
         let disabled = s.add_send(drums, TrackSend::new(room)).unwrap();
-        s.send_mut(disabled).unwrap().enabled = false;
+        s.send_mut(disabled).unwrap().state.enabled = false;
         let mut verb = Insert::new(PluginRef {
             format: PluginFormat::Clap,
             path: "/plugins/verb.clap".into(),
             id: "com.example.verb".into(),
         });
-        verb.bypassed = true;
+        verb.state.bypass = true;
         verb.set_param(3, 0.25);
-        verb.state = vec![1, 2, 3];
+        verb.preset = vec![1, 2, 3];
         s.add_insert(room, verb).unwrap();
         s.add_insert(
             drums,
@@ -556,9 +575,9 @@ mod tests {
         )
         .unwrap();
         s.track_mut(drums).unwrap().color = Some(0xFF8800);
-        s.track_mut(drums).unwrap().gain_db = -3.5;
-        s.track_mut(keys).unwrap().pan = 0.25;
-        s.track_mut(keys).unwrap().soloed = true;
+        s.track_mut(drums).unwrap().state.volume_db = -3.5;
+        s.track_mut(keys).unwrap().state.pan = 0.25;
+        s.track_mut(keys).unwrap().state.solo = true;
         let mut audio = Clip::new(
             "kick",
             TimePosition::from_samples(100),
@@ -650,12 +669,12 @@ mod tests {
         assert_eq!(back.track(drums).unwrap().output(), Some(room));
         assert_eq!(back.send_count(), 2);
         assert!(back.tracks()[1].sends()[0].pre_fader);
-        assert!(!back.track(drums).unwrap().sends()[0].enabled);
+        assert!(!back.track(drums).unwrap().sends()[0].state.enabled);
         let verb = &back.track(room).unwrap().inserts()[0];
         assert_eq!(verb.plugin.id, "com.example.verb");
-        assert!(verb.bypassed);
+        assert!(verb.state.bypass);
         assert_eq!(verb.param(3), Some(0.25));
-        assert_eq!(verb.state, [1, 2, 3]);
+        assert_eq!(verb.preset, [1, 2, 3]);
         assert_eq!(back.insert_count(), 2);
         let mut pre_routing: serde_json::Value = serde_json::from_str(&json).unwrap();
         for t in pre_routing["tracks"].as_array_mut().unwrap() {
@@ -808,5 +827,65 @@ mod tests {
         let mut snap = rich_session().snapshot();
         snap.format_version = 0;
         assert!(Document::from_snapshot(&snap).is_ok());
+    }
+
+    #[test]
+    fn files_with_the_old_state_field_names_load() {
+        // Written before `state` grouped the fields: gain_db, muted, soloed,
+        // armed, bypassed and a plugin `state` blob, and no `monitor`. An
+        // armed MIDI track meant "monitoring".
+        let mut original = rich_session();
+        let keys = original
+            .tracks()
+            .iter()
+            .find(|t| t.kind == TrackKind::Midi)
+            .unwrap()
+            .id();
+        original.track_mut(keys).unwrap().state.arm = true;
+        fn rename(obj: &mut serde_json::Map<String, serde_json::Value>, from: &str, to: &str) {
+            if let Some(v) = obj.remove(from) {
+                obj.insert(to.to_owned(), v);
+            }
+        }
+        let mut v: serde_json::Value = serde_json::from_str(&original.to_json().unwrap()).unwrap();
+        for t in v["tracks"].as_array_mut().unwrap() {
+            let o = t.as_object_mut().unwrap();
+            rename(o, "volume_db", "gain_db");
+            rename(o, "mute", "muted");
+            rename(o, "solo", "soloed");
+            rename(o, "arm", "armed");
+            o.remove("monitor");
+            for i in o["inserts"].as_array_mut().unwrap() {
+                let io = i.as_object_mut().unwrap();
+                rename(io, "bypass", "bypassed");
+                rename(io, "preset", "state");
+            }
+        }
+        let json = v.to_string();
+        assert!(!json.contains("monitor") && !json.contains("volume_db"));
+        let back = Document::from_json(&json).unwrap();
+        for t in back.tracks() {
+            let o = original.track(t.id()).unwrap();
+            assert_eq!(t.state.volume_db, o.state.volume_db, "{}", t.name);
+            assert_eq!(t.state.pan, o.state.pan);
+            assert_eq!(t.state.mute, o.state.mute);
+            assert_eq!(t.state.solo, o.state.solo);
+            if t.id() == keys {
+                assert!(
+                    t.state.monitor && !t.state.arm,
+                    "armed MIDI reads as monitoring"
+                );
+            } else {
+                assert_eq!(t.state.arm, o.state.arm);
+                assert!(!t.state.monitor);
+            }
+            for (i, oi) in t.inserts().iter().zip(o.inserts()) {
+                assert_eq!(i.state, oi.state);
+                assert_eq!(i.preset, oi.preset);
+            }
+            for (sd, os) in t.sends().iter().zip(o.sends()) {
+                assert_eq!(sd.state, os.state);
+            }
+        }
     }
 }

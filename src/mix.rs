@@ -78,11 +78,11 @@ pub fn level(session: &mut Session, send: SendId, db: f32) -> Result<()> {
 /// Switches a send on or off. State, like mute: saved, heard at the next
 /// block, not an undo step.
 ///
-/// Made of: `TrackSend::enabled` through `session::switch` →
+/// Made of: `SendState::enabled` through `session::switch` →
 /// `SendParams::set_enabled` on the live send.
 pub fn enable(session: &mut Session, send: SendId, on: bool) -> Result<()> {
     crate::session::switch(session, |s| {
-        s.send_mut(send)?.enabled = on;
+        s.send_mut(send)?.state.enabled = on;
         Ok(())
     })?;
     if let Some(live) = session.live.send(send) {
@@ -154,7 +154,7 @@ mod tests {
         track::volume(&mut session, vox, -6.0206).unwrap();
         track::volume(&mut session, vox, -6.0206).unwrap(); // a drag: one step
         session.history.seal();
-        assert!((session.document.track(vox).unwrap().gain_db + 6.0206).abs() < 1e-6);
+        assert!((session.document.track(vox).unwrap().state.volume_db + 6.0206).abs() < 1e-6);
         assert!(
             (settled(&mut session) - 0.25).abs() < 1e-3,
             "heard without a rebuild"
@@ -168,11 +168,11 @@ mod tests {
             audio.channel(1)[255].abs() < 1e-6,
             "hard left: right is silent"
         );
-        assert_eq!(session.document.track(vox).unwrap().pan, -1.0);
+        assert_eq!(session.document.track(vox).unwrap().state.pan, -1.0);
 
         track::mute(&mut session, vox, true).unwrap();
         assert!(settled(&mut session).abs() < 1e-6);
-        assert!(session.document.track(vox).unwrap().muted);
+        assert!(session.document.track(vox).unwrap().state.mute);
         track::mute(&mut session, vox, false).unwrap();
 
         let other = track::add(&mut session, "other", TrackKind::Audio).unwrap();
@@ -192,8 +192,8 @@ mod tests {
         while session.history.undo_len() > steps_before {
             assert!(session::undo(&mut session).unwrap());
         }
-        assert_eq!(session.document.track(vox).unwrap().gain_db, 0.0);
-        assert_eq!(session.document.track(vox).unwrap().pan, 0.0);
+        assert_eq!(session.document.track(vox).unwrap().state.volume_db, 0.0);
+        assert_eq!(session.document.track(vox).unwrap().state.pan, 0.0);
     }
 
     #[test]
@@ -223,7 +223,7 @@ mod tests {
         let steps = session.history.undo_len();
         enable(&mut session, send, false).unwrap();
         assert!((settled(&mut session) - direct).abs() < 1e-3);
-        assert!(!session.document.send(send).unwrap().enabled);
+        assert!(!session.document.send(send).unwrap().state.enabled);
         assert_eq!(session.history.undo_len(), steps, "a switch, not an edit");
         assert!(!session::is_saved(&session), "but it does count as unsaved");
 

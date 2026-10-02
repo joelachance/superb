@@ -1096,11 +1096,11 @@ mod tests {
             .add_send(TrackId::from_raw(999), TrackSend::new(fx))
             .is_err());
         assert_eq!(s.send_count(), 2);
-        assert_eq!(s.send(id).unwrap().level_db, -6.0);
+        assert_eq!(s.send(id).unwrap().state.level_db, -6.0);
         assert_eq!(s.send_track(auto).unwrap(), k);
         assert!(s.send(auto).unwrap().pre_fader);
-        s.send_mut(auto).unwrap().enabled = false;
-        assert!(!s.send(auto).unwrap().enabled);
+        s.send_mut(auto).unwrap().state.enabled = false;
+        assert!(!s.send(auto).unwrap().state.enabled);
         assert_eq!(
             s.sends_to(fx).map(|(t, s)| (t, s.id())).collect::<Vec<_>>(),
             [(a, id), (k, auto)]

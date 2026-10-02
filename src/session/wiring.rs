@@ -363,7 +363,7 @@ mod tests {
 
         // Route through a bus at -6.02 dB: half the level.
         let sub = document.add_track("sub", TrackKind::Bus);
-        document.track_mut(sub).unwrap().gain_db = -6.0206;
+        document.track_mut(sub).unwrap().state.volume_db = -6.0206;
         document.set_track_output(vox, Some(sub)).unwrap();
         let through_bus = steady_level(&document, &cache);
         assert!(
@@ -383,10 +383,10 @@ mod tests {
         );
 
         // Disabled send contributes nothing; a bus feeding a muted bus is silent.
-        document.send_mut(send).unwrap().enabled = false;
+        document.send_mut(send).unwrap().state.enabled = false;
         assert!((steady_level(&document, &cache) - through_bus).abs() < 1e-3);
-        document.track_mut(fx).unwrap().muted = true;
-        document.send_mut(send).unwrap().enabled = true;
+        document.track_mut(fx).unwrap().state.mute = true;
+        document.send_mut(send).unwrap().state.enabled = true;
         assert!((steady_level(&document, &cache) - through_bus).abs() < 1e-3);
         let wiring = {
             let mut mixer = Mixer::new(2);

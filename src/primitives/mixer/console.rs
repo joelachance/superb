@@ -737,7 +737,7 @@ mod tests {
         assert_eq!(settle(&mut m), vec![0.75, 0.75]);
         m.track_params(b).unwrap().set_gain(0.5);
         assert_eq!(settle(&mut m), vec![0.5, 0.5]);
-        m.bus_params(m.master()).unwrap().set_gain_db(-6.0206);
+        m.bus_params(m.master()).unwrap().set_volume_db(-6.0206);
         let out = settle(&mut m);
         assert!(close(out[0], 0.25));
         assert_eq!(m.tracks().len(), 2);

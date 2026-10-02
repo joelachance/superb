@@ -144,20 +144,20 @@ impl MixerBridge {
             match binding {
                 MixerBinding::Track(mid) => {
                     if let Ok(params) = mixer.track_params(*mid) {
-                        params.set_gain_db(track.gain_db);
-                        params.set_pan(track.pan);
-                        params.set_mute(track.muted);
-                        params.set_solo(track.soloed);
+                        params.set_volume_db(track.state.volume_db);
+                        params.set_pan(track.state.pan);
+                        params.set_mute(track.state.mute);
+                        params.set_solo(track.state.solo);
                     }
                 }
                 MixerBinding::Bus(bid) => {
                     if let Ok(params) = mixer.bus_params(*bid) {
-                        params.set_gain_db(track.gain_db);
-                        params.set_pan(track.pan);
-                        params.set_mute(track.muted);
+                        params.set_volume_db(track.state.volume_db);
+                        params.set_pan(track.state.pan);
+                        params.set_mute(track.state.mute);
                         // Buses have no shared solo count by default; still
                         // mirror the flag for consistency.
-                        params.set_solo(track.soloed);
+                        params.set_solo(track.state.solo);
                     }
                 }
             }
@@ -172,8 +172,8 @@ impl MixerBridge {
                 continue;
             };
             if let Ok(params) = mixer.send_params(*mixer_send) {
-                params.set_level_db(send.level_db);
-                params.set_enabled(send.enabled);
+                params.set_level_db(send.state.level_db);
+                params.set_enabled(send.state.enabled);
             }
         }
     }
@@ -280,9 +280,9 @@ impl MixerBridge {
                     }
                     self.sends.retain(|(sid, _)| *sid != send.id());
                 }
-                let level = crate::primitives::buffers::gain::db_to_linear(send.level_db);
+                let level = crate::primitives::buffers::gain::db_to_linear(send.state.level_db);
                 let created = mixer.add_send(mid, bus, level, tap)?;
-                mixer.send_params(created)?.set_enabled(send.enabled);
+                mixer.send_params(created)?.set_enabled(send.state.enabled);
                 self.sends.push((send.id(), created));
                 changed += 1;
             }
@@ -323,9 +323,9 @@ mod tests {
     fn apply_strip_params_mirrors_gain_mute() {
         let mut document = Document::new("demo", SampleRate::HZ_48K);
         let id = document.add_track("lead", TrackKind::Audio);
-        document.track_mut(id).unwrap().gain_db = -6.0;
-        document.track_mut(id).unwrap().muted = true;
-        document.track_mut(id).unwrap().pan = -0.5;
+        document.track_mut(id).unwrap().state.volume_db = -6.0;
+        document.track_mut(id).unwrap().state.mute = true;
+        document.track_mut(id).unwrap().state.pan = -0.5;
 
         let mut mixer = Mixer::new(2);
         let mut bridge = MixerBridge::new();
@@ -334,7 +334,7 @@ mod tests {
 
         let mid = bridge.mixer_track(id).unwrap();
         let params = mixer.track_params(mid).unwrap();
-        assert!((params.gain_db() - -6.0).abs() < 1e-6);
+        assert!((params.volume_db() - -6.0).abs() < 1e-6);
         assert!(params.is_muted());
         assert!((params.pan() - -0.5).abs() < 1e-6);
     }
@@ -422,7 +422,7 @@ mod tests {
         let b = document
             .add_send(lead, TrackSend::new(room).pre_fader())
             .unwrap();
-        document.send_mut(b).unwrap().enabled = false;
+        document.send_mut(b).unwrap().state.enabled = false;
 
         let mut mixer = Mixer::new(2);
         let mut bridge = MixerBridge::new();
@@ -442,12 +442,12 @@ mod tests {
         assert!(!mixer.send_params(mb).unwrap().is_enabled());
 
         // Parameter-only changes: no structural edit, mirrored by either call.
-        document.send_mut(a).unwrap().level_db = -12.0;
-        document.send_mut(b).unwrap().enabled = true;
+        document.send_mut(a).unwrap().state.level_db = -12.0;
+        document.send_mut(b).unwrap().state.enabled = true;
         assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 0);
         assert!((mixer.send_params(ma).unwrap().level_db() - -12.0).abs() < 1e-4);
         assert!(mixer.send_params(mb).unwrap().is_enabled());
-        document.send_mut(a).unwrap().level_db = -1.0;
+        document.send_mut(a).unwrap().state.level_db = -1.0;
         bridge.apply_strip_params(&document, &mixer);
         assert!((mixer.send_params(ma).unwrap().level_db() - -1.0).abs() < 1e-4);
 

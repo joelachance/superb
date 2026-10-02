@@ -33,7 +33,7 @@ fn main() -> Result<()> {
     // connect_source feeds that gain into the track strip (then to master).
     mixer.connect_source(gain, track)?;
     let params = mixer.track_params(track)?;
-    params.set_gain_db(-6.0);
+    params.set_volume_db(-6.0);
     // pan: -1.0 = hard left, 0.0 = center, +1.0 = hard right.
     params.set_pan(-0.3);
 

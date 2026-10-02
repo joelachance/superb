@@ -56,10 +56,10 @@ mod snapshot;
 mod track;
 
 pub use document::Document;
-pub use insert::{Insert, PluginRef};
+pub use insert::{Insert, InsertState, PluginRef};
 pub use marker::Marker;
 pub use snapshot::{
     ClipSnapshot, DocumentSnapshot, InsertSnapshot, MarkerSnapshot, MeterSnapshot, SendSnapshot,
     TempoPointSnapshot, TempoSnapshot, TrackSnapshot, FORMAT_VERSION,
 };
-pub use track::{Clip, ClipSource, MidiNote, Track, TrackKind, TrackSend};
+pub use track::{Clip, ClipSource, MidiNote, SendState, Track, TrackKind, TrackSend, TrackState};
