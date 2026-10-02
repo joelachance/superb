@@ -31,6 +31,12 @@ impl AudioCache {
         arc
     }
 
+    /// Inserts (or replaces) an already shared buffer for `path`, so two
+    /// keys can name the same audio without copying it.
+    pub fn insert_shared(&mut self, path: impl Into<PathBuf>, buffer: Arc<PlanarBuffer>) {
+        self.entries.insert(path.into(), buffer);
+    }
+
     /// Shared buffer for `path`, if present.
     pub fn get(&self, path: &Path) -> Option<Arc<PlanarBuffer>> {
         self.entries.get(path).map(Arc::clone)
@@ -80,5 +86,11 @@ mod tests {
         assert_eq!(cache.get(Path::new("a.wav")).unwrap().frames(), 20);
         assert!(!Arc::ptr_eq(&first, &second));
         assert!(cache.get(Path::new("missing.wav")).is_none());
+        cache.insert_shared("b.wav", Arc::clone(&second));
+        assert!(Arc::ptr_eq(
+            &cache.get(Path::new("b.wav")).unwrap(),
+            &second
+        ));
+        assert_eq!(cache.len(), 2);
     }
 }

@@ -1,8 +1,8 @@
-//! `record`: arm a track, capture a take, get a clip.
+//! `record`: arm a track, record, get a clip.
 //!
 //! What you'll learn:
-//! - Armed audio tracks receive a clip when a take stops
-//! - A take arrives through a capture queue; `record::start` (feature
+//! - Armed audio tracks receive a clip when a recording stops
+//! - A recording arrives through a capture queue; `record::start` (feature
 //!   `devices`) fills it from a microphone and gathers it on a thread, and
 //!   `record::start_from` accepts any producer you like, which is what
 //!   this example does
@@ -45,7 +45,7 @@ fn main() -> Result<()> {
 
     // Half a second of "singing" (a 440 Hz tone), one block at a time,
     // while the engine keeps rolling. On a device both sides run on their
-    // own threads; here they take turns. The queue is small, so the take
+    // own threads; here they take turns. The queue is small, so the recording
     // has to be collected as it goes: `session::steps::render_blocks` does that for a
     // manual capture (a device capture has its own collector thread).
     let mut phase = 0.0f32;
@@ -69,7 +69,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // Stop: the take is drained into the cache and placed on every armed
+    // Stop: the recording is drained into the cache and placed on every armed
     // track, starting at the punch-in point.
     let clips = record::stop(&mut session)?;
     for id in &clips {
@@ -92,12 +92,12 @@ fn main() -> Result<()> {
     transport::seek(&mut session, TimePosition::from_seconds(1.0, rate))?;
     transport::start(&mut session)?;
     let heard = session::steps::render_blocks(&mut session, 8)?;
-    println!("playback of the take, peak {:.3}", heard.peak());
+    println!("playback of the clip, peak {:.3}", heard.peak());
 
     // Undo removes the clip (the audio stays in the cache).
     session::undo(&mut session)?;
     println!(
-        "after undo: {} clips, cache holds {} take(s)",
+        "after undo: {} clips, cache holds {} recording(s)",
         session.document.clip_count(),
         session.cache.len()
     );
@@ -111,7 +111,7 @@ fn main() -> Result<()> {
         } else {
             track::arm(&mut session, vox, true)?;
             let mic = devices::input_config(&session, None, 1);
-            record::start(&mut session, &mic)?; // a collector thread gathers the take
+            record::start(&mut session, &mic)?; // a collector thread gathers the recording
             std::thread::sleep(std::time::Duration::from_millis(500));
             let clips = record::stop(&mut session)?;
             println!("recorded {} clip(s) from the default input", clips.len());

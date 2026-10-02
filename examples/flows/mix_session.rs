@@ -106,9 +106,9 @@ fn main() -> Result<()> {
         "plus bus with two sends: {:.3}  (tracks + half of each)",
         level(&mut session)?
     );
-    mix::set_send_level_db(&mut session, vox_send, -12.04)?;
+    mix::level(&mut session, vox_send, -12.04)?;
     println!("vox send at -12 dB:      {:.3}", level(&mut session)?);
-    mix::set_send_enabled(&mut session, vox_send, false)?;
+    mix::enable(&mut session, vox_send, false)?;
     println!("vox send off:            {:.3}", level(&mut session)?);
 
     // Route gtr *through* the bus instead of sending a copy, and turn the

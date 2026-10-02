@@ -60,10 +60,12 @@ pub fn remove_send(session: &mut Session, send: SendId) -> Result<()> {
     Ok(())
 }
 
-/// Sets a send's level in dB. Consecutive moves are one undo step.
+/// Sets a send's level in dB. Moves within [`Session::COALESCE_WINDOW`] of
+/// each other are one undo step.
 ///
-/// Made of: push `set_send_level_db` → `SendParams::set_level_db` on the live send.
-pub fn set_send_level_db(session: &mut Session, send: SendId, db: f32) -> Result<()> {
+/// Made of: push `set_send_level_db` → `SendParams::set_level_db` on the
+/// live send.
+pub fn level(session: &mut Session, send: SendId, db: f32) -> Result<()> {
     session
         .history
         .push(&mut session.document, commands::set_send_level_db(send, db))?;
@@ -73,11 +75,12 @@ pub fn set_send_level_db(session: &mut Session, send: SendId, db: f32) -> Result
     Ok(())
 }
 
-/// Switches a send on or off. A switch, like mute.
+/// Switches a send on or off. State, like mute: saved, heard at the next
+/// block, not an undo step.
 ///
 /// Made of: `TrackSend::enabled` through `session::switch` →
 /// `SendParams::set_enabled` on the live send.
-pub fn set_send_enabled(session: &mut Session, send: SendId, on: bool) -> Result<()> {
+pub fn enable(session: &mut Session, send: SendId, on: bool) -> Result<()> {
     crate::session::switch(session, |s| {
         s.send_mut(send)?.enabled = on;
         Ok(())
@@ -212,13 +215,13 @@ mod tests {
             "track + unity send"
         );
 
-        set_send_level_db(&mut session, send, -6.0206).unwrap();
+        level(&mut session, send, -6.0206).unwrap();
         assert!(
             (settled(&mut session) - direct * 1.5).abs() < 1e-3,
             "live send level"
         );
         let steps = session.history.undo_len();
-        set_send_enabled(&mut session, send, false).unwrap();
+        enable(&mut session, send, false).unwrap();
         assert!((settled(&mut session) - direct).abs() < 1e-3);
         assert!(!session.document.send(send).unwrap().enabled);
         assert_eq!(session.history.undo_len(), steps, "a switch, not an edit");

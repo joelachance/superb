@@ -1,11 +1,11 @@
-//! Recording: arm tracks, capture input, turn the take into a clip.
+//! Recording: arm tracks, capture input, get a clip on each of them.
 //!
-//! A take flows through a [`CaptureConsumer`]: the input side fills it with
-//! blocks and something empties it into the growing take, because the
+//! A recording flows through a [`CaptureConsumer`]: the input side fills it
+//! with blocks and something empties it into the growing audio, because the
 //! queue holds only a fraction of a second. With a device (`start`) a
 //! collector thread does the emptying. With a source of your own
 //! ([`start_from`]) the blocks wait until [`collect`] runs, which
-//! [`session::steps::render_blocks`] does after every block. [`stop`] puts the take in the
+//! [`session::steps::render_blocks`] does after every block. [`stop`] puts the audio in the
 //! audio cache and places a clip on every armed track, as one undo step.
 //!
 //! Made of `superb::primitives::io::capture` (the queue),
@@ -24,15 +24,15 @@ use crate::session;
 use crate::session::Session;
 use crate::transport;
 
-/// A take in progress.
+/// A recording in progress.
 pub struct Recording {
     /// Where the captured blocks are being gathered.
     pub capture: Capture,
-    /// Where on the timeline the take started.
+    /// Where on the timeline the recording started.
     pub punch_in: TimePosition,
     /// Tracks that were armed when recording started; each gets a clip.
     pub tracks: Vec<TrackId>,
-    /// Channels in the take.
+    /// Channels being recorded.
     pub channels: usize,
     /// The input stream keeping the capture alive, when recording from hardware.
     #[cfg(feature = "devices")]
@@ -40,13 +40,13 @@ pub struct Recording {
 }
 
 impl Recording {
-    /// Frames gathered into the take so far.
+    /// Frames gathered so far.
     pub fn frames(&self) -> usize {
         self.capture.frames()
     }
 
     /// Blocks the input side could not queue because the queue was full.
-    /// Anything above zero means a gap in the take.
+    /// Anything above zero means a gap in the recording.
     pub fn dropped(&self) -> u64 {
         self.capture.dropped()
     }
@@ -65,7 +65,7 @@ impl core::fmt::Debug for Recording {
     }
 }
 
-/// How a take's blocks get from the capture queue into memory.
+/// How a recording's blocks get from the capture queue into memory.
 pub enum Capture {
     /// Blocks wait on the queue until [`collect`] moves them into `planes`.
     /// [`session::steps::render_blocks`] collects after every block it renders; with a
@@ -99,7 +99,7 @@ impl Capture {
 }
 
 /// A thread that moves captured blocks into memory as they arrive, so a
-/// take can be as long as memory allows no matter how small the queue is.
+/// recording can be as long as memory allows no matter how small the queue is.
 /// Made by [`steps::spawn_collector`]; [`finish`](Collector::finish) hands
 /// the planes back.
 pub struct Collector {
@@ -129,7 +129,7 @@ impl Collector {
         let handle = self.handle.take().expect("finish is called once");
         handle
             .join()
-            .map_err(|_| SuperbError::Message("the take collector thread panicked".into()))
+            .map_err(|_| SuperbError::Message("the recording collector thread panicked".into()))
     }
 }
 
@@ -149,14 +149,14 @@ impl core::fmt::Debug for Collector {
     }
 }
 
-/// `true` while a take is being captured.
+/// `true` while a recording is running.
 pub fn is_recording(session: &Session) -> bool {
     session.recording.is_some()
 }
 
 /// Starts recording from a hardware input onto every armed track, from the
 /// current playhead position. The transport starts rolling, and a collector
-/// thread gathers the take until [`stop`].
+/// thread gathers the audio until [`stop`].
 ///
 /// Made of: [`steps::open_input`] with 64 queued blocks →
 /// [`steps::spawn_collector`] → the same beginning as [`start_from`].
@@ -197,7 +197,7 @@ pub fn start_from(session: &mut Session, blocks: CaptureConsumer, channels: usiz
 fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()> {
     if session.recording.is_some() {
         return Err(SuperbError::Message(
-            "a take is already being recorded".into(),
+            "a recording is already running".into(),
         ));
     }
     let tracks = crate::track::armed(session);
@@ -221,9 +221,9 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
     Ok(())
 }
 
-/// Moves waiting blocks into the take when the capture is manual (see
+/// Moves waiting blocks into the recording when the capture is manual (see
 /// [`start_from`]); with a collector thread there is nothing to do.
-/// Returns the frames gathered in total, or zero when no take is running.
+/// Returns the frames gathered in total, or zero when nothing is recording.
 ///
 /// Made of: [`steps::collect`].
 pub fn collect(session: &mut Session) -> usize {
@@ -236,16 +236,17 @@ pub fn collect(session: &mut Session) -> usize {
     }
 }
 
-/// Stops the take and the transport, stores the captured audio, and places
-/// one clip per armed track starting at the punch-in point. Returns the new
-/// clips (none if nothing was captured). The whole placement is one undo
-/// step called "Record take".
+/// Stops the recording and the transport, stores the audio, and places one
+/// clip per armed track starting at the punch-in point, each named after
+/// its track (`vox 1`, `vox 2`, ...). The clips share one buffer. Returns
+/// the new clips (none if nothing was captured). The whole placement is
+/// one undo step called "Record".
 ///
 /// Made of: `EngineHandle::send(Stop)` → drop the input stream →
-/// [`steps::collect`] or `Collector::finish` → [`steps::finish_take`] →
-/// [`steps::take_name`] → [`steps::store_take`] → [`steps::place_clip`] per
-/// track inside an undo group; marks the session for a rebuild so the take plays
-/// back on its strip.
+/// [`steps::collect`] or `Collector::finish` → [`steps::finish_recording`]
+/// → per track, [`steps::clip_name`] → `AudioCache::insert_shared` →
+/// [`steps::place_clip`], inside one undo group; rebuilds the mixer so the
+/// clips play back on their strips.
 pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     let recording = session
         .recording
@@ -272,16 +273,23 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         }
         Capture::Threaded(collector) => collector.finish()?,
     };
-    let audio = steps::finish_take(planes);
+    let audio = steps::finish_recording(planes);
     if audio.frames() == 0 {
         return Ok(Vec::new());
     }
     let length = TimeDuration::from_samples(audio.frames() as i64);
-    let name = steps::take_name(session);
-    steps::store_take(&mut session.cache, &name, audio);
-    session.history.begin_group("Record take");
+    let audio = Arc::new(audio);
+    session.history.begin_group("Record");
     let mut clips = Vec::with_capacity(tracks.len());
     for track in &tracks {
+        let name = match steps::clip_name(session, *track) {
+            Ok(name) => name,
+            Err(e) => {
+                session.history.cancel_group(&mut session.document)?;
+                return Err(e);
+            }
+        };
+        session.cache.insert_shared(&name, Arc::clone(&audio));
         match steps::place_clip(session, *track, &name, punch_in, length) {
             Ok(clip) => clips.push(clip),
             Err(e) => {
@@ -320,7 +328,7 @@ pub mod steps {
         let stop = Arc::new(AtomicBool::new(false));
         let (frames_t, stop_t) = (Arc::clone(&frames), Arc::clone(&stop));
         let handle = std::thread::Builder::new()
-            .name("superb take collector".into())
+            .name("superb recording collector".into())
             .spawn(move || {
                 let mut planes = vec![Vec::new(); channels];
                 loop {
@@ -337,7 +345,9 @@ pub mod steps {
                     }
                 }
             })
-            .map_err(|e| SuperbError::Message(format!("cannot start the take collector: {e}")))?;
+            .map_err(|e| {
+                SuperbError::Message(format!("cannot start the recording collector: {e}"))
+            })?;
         Ok(Collector {
             frames,
             dropped,
@@ -346,7 +356,7 @@ pub mod steps {
         })
     }
 
-    /// Moves every waiting block into the take when the capture is manual;
+    /// Moves every waiting block into the recording when the capture is manual;
     /// a threaded capture needs nothing. Returns the frames appended.
     pub fn collect(capture: &mut Capture) -> usize {
         match capture {
@@ -356,7 +366,7 @@ pub mod steps {
     }
 
     /// Appends every waiting block to `planes` and hands the blocks back to
-    /// the input side. Blocks with fewer channels than the take are padded
+    /// the input side. Blocks with fewer channels than the recording are padded
     /// with silence. Returns the frames appended. Allocates; never call it
     /// on the audio thread.
     pub fn append_blocks(blocks: &mut CaptureConsumer, planes: &mut [Vec<f32>]) -> usize {
@@ -378,47 +388,37 @@ pub mod steps {
 
     /// Turns collected planes into one buffer. Empty planes give a buffer
     /// with no frames.
-    pub fn finish_take(planes: Vec<Vec<f32>>) -> PlanarBuffer {
+    pub fn finish_recording(planes: Vec<Vec<f32>>) -> PlanarBuffer {
         let channels = planes.len();
         let refs: Vec<&[f32]> = planes.iter().map(Vec::as_slice).collect();
         PlanarBuffer::from_planes(&refs).unwrap_or_else(|_| PlanarBuffer::new(channels, 0))
     }
 
-    /// A cache key for a new take that no earlier take uses: `take 1`,
-    /// `take 2`, ...
-    pub fn take_name(session: &Session) -> String {
-        let mut n = session.cache.len() + 1;
+    /// A name for a new clip on `track` that no cache entry uses yet:
+    /// `vox 1`, `vox 2`, ... The clip and the audio it plays share it.
+    pub fn clip_name(session: &Session, track: TrackId) -> Result<String> {
+        let base = session.document.track(track)?.name.clone();
+        let mut n = 1;
         loop {
-            let name = format!("take {n}");
+            let name = format!("{base} {n}");
             if session.cache.get(std::path::Path::new(&name)).is_none() {
-                return name;
+                return Ok(name);
             }
             n += 1;
         }
     }
 
-    /// Puts the captured audio into the cache under `name`.
-    ///
-    /// Made of: `AudioCache::insert`.
-    pub fn store_take(
-        cache: &mut crate::primitives::io::cache::AudioCache,
-        name: &str,
-        audio: PlanarBuffer,
-    ) -> Arc<PlanarBuffer> {
-        cache.insert(name, audio)
-    }
-
-    /// Places a clip of the cached take on `track`.
+    /// Places a clip of cached audio on `track`.
     ///
     /// Made of: [`session::add_audio_clip`].
     pub fn place_clip(
         session: &mut Session,
         track: TrackId,
-        take: &str,
+        audio: &str,
         start: TimePosition,
         length: TimeDuration,
     ) -> Result<ClipId> {
-        crate::session::add_audio_clip(session, track, take, start, length)
+        crate::session::add_audio_clip(session, track, audio, start, length)
     }
 }
 
@@ -447,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn a_take_becomes_a_clip_on_every_armed_track() {
+    fn a_recording_becomes_a_clip_on_every_armed_track() {
         let mut session = session::create("rec", R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let gtr = track::add(&mut session, "gtr", TrackKind::Audio).unwrap();
@@ -477,18 +477,25 @@ mod tests {
         let clips = stop(&mut session).unwrap();
         assert_eq!(clips.len(), 2);
         assert!(!is_recording(&session));
-        for clip in &clips {
+        for (clip, name) in clips.iter().zip(["vox 1", "gtr 1"]) {
             let c = session.document.clip(*clip).unwrap();
             assert_eq!(c.start(), TimePosition::from_samples(640));
             assert_eq!(c.length(), TimeDuration::from_samples(320));
-            assert_eq!(c.name, "take 1");
+            assert_eq!(c.name, name);
         }
         assert_eq!(session.document.clip_track(clips[0]).unwrap(), vox);
         assert_eq!(session.document.clip_track(clips[1]).unwrap(), gtr);
-        assert_eq!(session.cache.len(), 1);
-        assert_eq!(session.history.undo_label(), Some("Record take"));
+        assert_eq!(session.cache.len(), 2, "one entry per clip");
+        assert!(
+            Arc::ptr_eq(
+                &session.cache.get("vox 1".as_ref()).unwrap(),
+                &session.cache.get("gtr 1".as_ref()).unwrap()
+            ),
+            "sharing one buffer"
+        );
+        assert_eq!(session.history.undo_label(), Some("Record"));
 
-        // Stopping stopped the transport; the take plays back from its place.
+        // Stopping stopped the transport; the clips play back from their place.
         session::steps::render_blocks(&mut session, 1).unwrap();
         assert_eq!(
             transport::state(&session),
@@ -497,7 +504,7 @@ mod tests {
         transport::seek(&mut session, TimePosition::from_samples(640)).unwrap();
         transport::start(&mut session).unwrap();
         let heard = session::steps::render_blocks(&mut session, 4).unwrap();
-        assert!(heard.channel(0)[200].abs() > 0.2, "two tracks of the take");
+        assert!(heard.channel(0)[200].abs() > 0.2, "two tracks of the clip");
         assert_eq!(session.live.strips.len(), 3, "one handle per track");
 
         // One undo removes both clips.
@@ -510,7 +517,7 @@ mod tests {
     }
 
     #[test]
-    fn takes_get_distinct_names_and_empty_takes_leave_no_clip() {
+    fn clips_get_distinct_names_and_empty_recordings_leave_no_clip() {
         let mut session = session::create("rec", R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         track::arm(&mut session, vox, true).unwrap();
@@ -521,7 +528,7 @@ mod tests {
             let clips = stop(&mut session).unwrap();
             assert_eq!(
                 session.document.clip(clips[0]).unwrap().name,
-                format!("take {i}")
+                format!("vox {i}")
             );
         }
         assert_eq!(session.cache.len(), 2);
@@ -602,8 +609,8 @@ mod tests {
             dropped < 100,
             "the collector fell far behind: {dropped} dropped"
         );
-        let take = session.cache.get("take 1".as_ref()).unwrap();
-        assert!(take.channel(0).iter().all(|&s| s == 0.5));
+        let audio = session.cache.get("vox 1".as_ref()).unwrap();
+        assert!(audio.channel(0).iter().all(|&s| s == 0.5));
 
         // An unfinished collector just lets its thread go.
         let (_mic, blocks) = capture_queue(1, 64, 2).unwrap();
@@ -628,11 +635,11 @@ mod tests {
             unreachable!()
         };
         assert!(blocks.is_empty());
-        let audio = steps::finish_take(planes);
+        let audio = steps::finish_recording(planes);
         assert_eq!(audio.channels(), 2);
         assert_eq!(audio.channel(0), &[1.0; 8]);
         assert_eq!(audio.channel(1), &[0.0; 8]);
-        assert_eq!(steps::finish_take(vec![Vec::new(); 2]).frames(), 0);
+        assert_eq!(steps::finish_recording(vec![Vec::new(); 2]).frames(), 0);
     }
 
     #[test]
@@ -640,7 +647,7 @@ mod tests {
         let mut session = session::create("rec", R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         track::arm(&mut session, vox, true).unwrap();
-        // A queue of only two blocks; the take is ten blocks long.
+        // A queue of only two blocks; the recording is ten blocks long.
         let (mut mic, blocks) = capture_queue(1, 64, 2).unwrap();
         start_from(&mut session, blocks, 1).unwrap();
         for i in 0..10 {
