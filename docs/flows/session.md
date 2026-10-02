@@ -1,69 +1,91 @@
 # session
 
-Starting a session, putting things in it, saving it, undoing.
+The session: the one thing you open, edit and play.
 
 ## Purpose
 
-`session` owns the document side of a `Session`: it creates and opens rigs,
-and every edit to the session's *structure* goes through it. Each edit is an
-undoable command on `session.history`; structural ones also mark the session for a
-rebuild so the console follows.
+`Session` is the struct every flow takes. It holds the `Document` (tracks,
+clips, routing, tempo), its undo history, the audio in memory and the
+running engine. This module creates, opens and saves it, edits the
+document with undo, and in `session::steps` holds the engine side: how the
+document becomes the mixer the engine runs.
 
 ## Verbs
 
 | verb | does | undo step |
 |---|---|---|
-| `create(name, sample_rate, block_size)` | a new `Session` around an empty session | — |
-| `open(path, block_size)` / `save(session, path)` / `is_saved(session)` | JSON file in, out, and the clean flag | — |
-| `add_track(session, name, kind)` / `remove_track` / `rename_track` | tracks of kind Audio, Midi or Bus | one each (quick renames merge) |
-| `add_audio_clip(session, track, take, start, length)` | a clip of cached audio (`take` is the cache key) | one |
+| `create(name, sample_rate, block_size) -> Session` | a new session around an empty document | — |
+| `open(path, block_size)` / `save(session, path)` / `is_saved(session)` | JSON file in, out, and the clean flag (state changes count as unsaved) | — |
+| `add_audio_clip(session, track, audio, start, length)` | a clip of cached audio (`audio` is the cache key) | one |
 | `add_midi_clip(session, track, name, start, length, notes)` | a clip of inline MIDI notes | one |
 | `move_clip` / `remove_clip` | | moves within half a second are one step |
 | `add_marker(session, name, at)` | | one |
 | `set_tempo(session, bpm)` | initial tempo of the tempo map | one |
-| `set_loop(session, Option<LoopRange>)` | the session's loop range; also told to the engine | one |
-| `undo(session)` / `redo(session)` | return `false` when there is nothing to do; mark the session for a rebuild | |
+| `set_loop(session, Option<LoopRange>)` | the loop range; also told to the engine | one |
+| `undo(session)` / `redo(session)` | return `false` when there is nothing to do; rebuild the mixer | |
 | `import_audio(session, track, path, at)` (feature `files`) | decode, resample to the session's rate, cache, place a clip of the full length | one |
 
-The crate-private helpers `edit`, `structural` and `switch` are how the
-other flows change the session; see [flows.md](../flows.md).
+Tracks are added and set up in [`track`](track.md).
+
+## Steps (`session::steps`)
+
+| step | does |
+|---|---|
+| `rebuild(session)` | build a fresh mixer from the document and swap it into the engine; the structural flows call it for you |
+| `render_blocks(session, blocks) -> PlanarBuffer` | run the engine loop for `blocks` blocks when no sound card is attached, and return the audio |
+| `build_mixer(&document, &cache, channels) -> (Mixer, Wiring)` | strips, buses, sends, clip nodes, a live instrument per monitoring MIDI track |
+| `attach_inserts(&document, &mut PluginLoader, &mut Mixer, &Wiring) -> (Vec<LiveInsert>, failures)` | instantiate each insert into its strip's chain; failures are returned, not fatal |
+| `collect_handles(&Mixer, &Wiring) -> (StripHandles, SendHandles)` | the atomics the control side keeps |
+| `publish(&mut EngineHandle, Mixer)` | prepare the graph and hand it to the engine |
+
+`session::bridge` (`MixerBridge`: document track ↔ mixer strip map, with
+routing and state mirroring) and `session::wiring` (`Wiring`, `WiredClip`,
+`schedule_midi_notes`: a node per clip) are the pieces the steps use. The
+`session_steps` example builds a mixer from them without a `Session`.
 
 ## Usage
 
 ```rust
 use superb::prelude::*;
-use superb::session;
+use superb::{session, track};
 
-let mut session = session::create("session", SampleRate::HZ_48K, 256)?;
+let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
 let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 
-let mut take = PlanarBuffer::new(2, 48_000);
-take.fill(0.2);
-session.cache.insert("take-1.wav", take);
+let mut audio = PlanarBuffer::new(2, 48_000);
+audio.fill(0.2);
+session.cache.insert("vox 1", audio);
 let clip = session::add_audio_clip(
-    &mut session, vox, "take-1.wav", TimePosition::ZERO, TimeDuration::from_samples(48_000),
+    &mut session, vox, "vox 1", TimePosition::ZERO, TimeDuration::from_samples(48_000),
 )?;
 session::move_clip(&mut session, clip, TimePosition::from_samples(24_000))?;
 session::undo(&mut session)?;   // the clip is back at zero
-session::save(&mut session, "session.superb.json")?;
+session::save(&mut session, "demo.superb.json")?;
 ```
 
 Audio is not embedded in the file: clips refer to cache keys, and a program
-that opens a session re-caches the audio (`AudioCache::load` with the `files`
-feature, or `session.cache.insert`).
+that opens a session re-caches the audio (`AudioCache::load` with the
+`files` feature, or `session.cache.insert`).
 
 ## Made of
 
-`Document::allocate_*_id` → `Track::with_id` / `Clip::with_id` /
-`Marker::with_id` → the matching command in `primitives::session::commands`
-pushed through `UndoStack::push`; `DocumentSnapshot` and `serde_json` for
-files; `AudioCache::load` for import. `set_loop` additionally sends
-`EngineCommand::SetLoop` so the transport knows the range at once.
+`Document::allocate_*_id` → `Clip::with_id` / `Marker::with_id` → the
+matching command in `primitives::session::commands` pushed through
+`UndoStack::push`; `DocumentSnapshot` and `serde_json` for files;
+`AudioCache::load` for import. `set_loop` additionally sends
+`EngineCommand::SetLoop`. `rebuild`: `EngineHandle::reclaim` →
+`build_mixer` → `attach_inserts` → `collect_handles` → `publish`, then
+`LiveGraph::apply_pending` while the loop is still in the session.
+`render_blocks`: `EngineLoop::tick` per block, plus
+`record::steps::collect` while a recording runs.
+
+The crate-private helpers `edit`, `structural`, `changed_structure` and
+`set_state` are how the other flows change the document; see
+[flows.md](../flows.md).
 
 ## Limitations
 
-* Clips are placed whole; there is no trimming, splitting or fades yet
-  (the session primitives have `offset` on audio clips; the flow does not
-  expose it).
-* Tempo is a single initial value here; `session.session.tempo_map_mut()`
+* Clips are placed whole; there is no trimming, splitting or fades in the
+  flow yet (the primitives have `offset` and fades on audio clips).
+* Tempo is a single initial value here; `session.document.tempo_map_mut()`
   gives tempo and meter changes, which bypass undo.

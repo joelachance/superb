@@ -15,14 +15,14 @@ and connects them deliberately.
 
 ```text
  flows (free functions over a Session)
- session · play · mix · midi · record · plugins · export · devices
+ session · track · transport · mix · midi · record · plugins · export · devices
  ─────────────────────────────────────────────────────────────────────
  primitives
    document side (UI thread)           engine side (audio thread)
 
-   session ── tracks, clips, inserts   io::live   EngineHandle ◄─queues─► EngineLoop
+   session ── Document: tracks, clips  io::live   EngineHandle ◄─queues─► EngineLoop
    undo    ── history                  io         Engine, offline render, WAV, devices
-                       session::steps::rebuild ───► mixer      tracks, buses, sends, inserts
+                  session::steps::rebuild ───► mixer      strips, buses, sends, inserts
    automation ─► Arc<AtomicF32> ─────► graph      nodes, schedule, live swap
                                        plugins    PluginNode, CLAP host
                                        transport  playhead, tempo map
@@ -37,14 +37,15 @@ primitives and each other, and all of them work on the `Session`.
 
 ## The Session
 
-`Session` (`src/session.rs`) is a plain record of the primitives a running session
-needs: the `Document`, its `UndoStack`, the `AudioCache`, the `EngineHandle`
-control handle, the `EngineLoop` (until a device takes it), the handles
-into the last console that was built (`LiveHandles`: strip and send
-atomics, plugin parameter queues), the take being recorded, and the plugin
-loader. It has constructors and nothing else. Flow verbs take `&mut Session`
-so a call does not need seven arguments; steps take the fields they need,
-so a program can assemble its own verb.
+`Session` (`src/session/mod.rs`) is the one thing a program works on: a
+plain record of the `Document` (what gets saved), its `UndoStack`, the
+`AudioCache`, the `EngineHandle` control handle, the `EngineLoop` (until a
+device takes it), the handles into the last mixer that was built
+(`LiveHandles`: strip and send atomics, plugin parameter queues), the
+recording in progress, and the plugin loader. It has constructors and
+nothing else. Flow verbs take `&mut Session` so a call does not need seven
+arguments; steps take the fields they need, so a program can assemble its
+own verb.
 
 ## The two-thread contract
 
@@ -79,17 +80,18 @@ Data crosses the thread boundary in exactly three ways:
 
 ## From session to sound
 
-1. **`primitives::session`** holds the session as plain data: tracks (audio,
-   MIDI or bus), clips on tracks, markers, a tempo map, loop range, routing
+1. **`primitives::session`** holds the `Document` as plain data: tracks
+   (audio, MIDI or bus) with their state (volume, pan, mute, solo, arm,
+   monitor), clips on tracks, markers, a tempo map, loop range, routing
    (each track's output bus and its sends) and insert chains (plugin,
-   bypass, parameter values, saved state). It knows nothing about audio
+   state, preset). It knows nothing about audio
    threads, so it can be cloned, saved as JSON and undone freely. Edits go
    through `primitives::undo` commands, which restore removed objects under
    their original IDs so the UI's handles stay valid.
-2. **`session::steps::rebuild`** turns the session into a console and hands it to the
-   engine. Its steps are public:
-   * `build_mixer` maps session tracks onto mixer strips and buses
-     (`session::bridge`), mirrors gain, pan, mute, solo, outputs and sends,
+2. **`session::steps::rebuild`** turns the document into a mixer and hands
+   it to the engine. Structural flows call it; its steps are public:
+   * `build_mixer` maps document tracks onto mixer strips and buses
+     (`session::bridge`), mirrors volume, pan, mute, solo, outputs and sends,
      and attaches one source node per audible clip (`session::wiring`):
      `BufferPlayerNode` for audio in the cache, `ScheduledSynthNode` for
      MIDI notes converted through the tempo map, plus a live instrument
@@ -100,9 +102,9 @@ Data crosses the thread boundary in exactly three ways:
    * `collect_handles` gathers the strip, send and plugin handles the
      control side keeps.
    * `publish` prepares the mixer's graph and sends it to the engine.
-3. **`primitives::mixer`** builds the console out of graph nodes: every
-   track is an input summing node, an insert chain, and a strip node (gain,
-   pan, mute/solo, meter); buses are the same; sends are gain nodes tapped
+3. **`primitives::mixer`** builds the mixer out of graph nodes: every
+   track is an input summing node, an insert chain, and a strip node
+   (volume, pan, mute/solo, meter); buses are the same; sends are gain nodes tapped
    before or after the fader.
 4. **`primitives::graph`** compiles the nodes into a topological schedule,
    propagates silence so idle branches cost nothing, delays shorter parallel
@@ -121,8 +123,8 @@ Data crosses the thread boundary in exactly three ways:
 
 Recording runs the other way: a device (or any producer) fills a capture
 queue, a collector thread (or `record::collect`, for a source you drive
-yourself) moves blocks into the take on the control thread, and
-`record::stop` stores the take in the cache and places one clip per
+yourself) moves blocks into memory on the control thread, and
+`record::stop` stores the audio in the cache and places one clip per
 armed track as a single undo step.
 
 ## Rules of the house
@@ -164,7 +166,8 @@ heard if nothing is soloed or it is soloed itself; buses ignore solo.
 Inserts sit between the input node and the strip node; pre-fader sends
 tap after the last insert.
 
-**Live engine.** Commands and graphs go one way, position and state come
+**Live engine.** Commands and graphs go one way, position and transport
+state come
 back as atomics. A published graph must be prepared for the engine's
 sample rate and block size or it is rejected, never re-prepared on the
 audio thread. The swap queue holds two graphs; `session::steps::rebuild` reclaims
@@ -182,13 +185,15 @@ previous state in `apply`, not at construction, so redo after other edits
 is still correct. A failed revert clears the whole history because the
 document state is unknown. The clean (saved) state is a depth index that
 becomes unreachable if the saved step is coalesced onto or discarded.
-Flows add one convention on top: switches (mute, solo, arm, bypass) are
-not edits. They change the document directly and tell the history its
-saved state is gone (`UndoStack::mark_dirty`), so they are saved but never
-undone.
+Flows add one convention on top: state (mute, solo, arm, monitor, bypass,
+send on/off) is not an edit. It changes the document directly and tells
+the history its saved point is gone (`UndoStack::mark_dirty`), so it is
+saved but never undone. Volume and pan are state in the document but
+continuous, so they go through the history and coalesce.
 
-**Session.** The document is plain data with no `Arc` handles and no audio
-types. IDs come from one per-session counter and are never reused. The
+**Document.** The document is plain data with no `Arc` handles and no audio
+types. Each object's settable fields sit under one `state` field
+(`TrackState`, `SendState`, `InsertState`). IDs come from one per-session counter and are never reused. The
 file format is a separate primitive-only snapshot with a format version,
 not the in-memory types, and old fields load with defaults. Routing is
 validated in the document (targets must be buses, bus chains may not form
@@ -209,11 +214,12 @@ first `process` and `stop_processing` to `deactivate`. The session stores a
 plugin reference, parameter values and saved state; the instance is
 recreated at every rebuild and the stored values re-applied.
 
-**Rebuild.** A rebuild builds a whole new console and swaps it in; it never
+**Rebuild.** A rebuild builds a whole new mixer and swaps it in; it never
 edits the running one. That keeps the audio thread's contract simple at
-the cost of resetting plugin tails and meters when the console's shape
-changes. Level edits do not need a rebuild because they go to the live
-handles directly.
+the cost of resetting plugin tails and meters when the mixer's shape
+changes. Structural edits trigger it themselves: at once while a device
+drives the engine, otherwise at the next start or render. Level edits and
+state changes do not rebuild because they go to the live handles directly.
 
 **Features.** Hardware (`devices`, `midi-io`) and the copyleft decoder
 (`files`) are opt-in so the default build and `cargo test` need nothing
@@ -224,20 +230,20 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 | you want to add | it belongs in |
 |---|---|
 | a new kind of processor (effect, generator) | a `Node` impl, in `primitives::graph::nodes` if general, otherwise in your app |
-| a new console feature (VCA groups) | `primitives::mixer`, built from graph nodes |
+| a new mixer feature (VCA groups) | `primitives::mixer`, built from graph nodes |
 | something the session remembers | `primitives::session` (plain data) plus a command in `primitives::session::commands` |
 | a new audio file format | `primitives::io::files`, keeping any copyleft crate inside `decode.rs` |
 | a new audio or MIDI backend | `primitives::io::device` or `primitives::midi::input`, behind a feature |
 | a new plugin format | a `PluginInstance` impl in `primitives::plugins` |
 | an everyday task made of several primitive calls | a verb in the matching flow, with its steps in `steps` and a "Made of:" list |
-| a new everyday area (say, comping takes) | a new top-level flow module, plus a doc in `docs/flows/` and an example |
+| a new thing or task (say, comping) | a new top-level flow module, plus a doc in `docs/flows/` and an example |
 | a shared primitive (time type, queue) | the `primitives` root or `primitives::realtime` |
 
 ## Not there yet
 
 Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
-Incremental edits to a running console (a rebuild replaces it). Monitoring a
-live input through a strip while recording. Punch-in/out and loop
+Incremental edits to a running mixer (a rebuild replaces it). Per-track
+input routing and monitoring a live input through a strip. Punch-in/out and loop
 recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
 Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes
 owned by the session. Multi-bus or sidechain nodes.

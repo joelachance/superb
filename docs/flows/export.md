@@ -4,7 +4,7 @@ Getting the session out: render a range or the whole session to a file.
 
 ## Purpose
 
-Export builds its own copy of the console, inserts included, and drives it
+Export builds its own copy of the mixer, inserts included, and runs it
 offline as fast as the machine allows. The running engine is untouched, so
 you can bounce while listening.
 

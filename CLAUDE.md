@@ -10,9 +10,11 @@ for the engine, `docs/flows.md` for the flow tier, and
 ## Layout
 
 - `src/primitives/` is the engine; modules never import a flow or the `Session`.
-- `src/<flow>.rs` (`session`, `play`, `mix`, `midi`, `record`, `plugins`,
-  `export`, `devices`) are free functions over `src/session.rs`. Verbs take
-  `&mut Session`; steps take primitives; every verb doc ends with "Made of:".
+- Flows (`session`, `track`, `transport`, `mix`, `midi`, `record`,
+  `plugins`, `export`, `devices`) are free functions over the `Session`
+  struct in `src/session/mod.rs`; `session::steps` is its engine side.
+  Verbs take `&mut Session`; steps take primitives; every verb doc ends
+  with "Made of:".
 - `examples/flows/`, `examples/primitives/`, registered in `Cargo.toml`.
 - `docs/primitives/<module>.md`, `docs/flows/<flow>.md`.
 
@@ -36,13 +38,15 @@ cargo doc --no-deps
   no-alloc test under `tests/`.
 - No unsafe outside `primitives::realtime::{alloc, spsc}` and
   `primitives::plugins::clap`.
-- Structural edits set `session.needs_rebuild`; switches (mute, solo, arm,
-  bypass) go through `session::switch` and never enter the undo history;
-  level edits reach the document and the live handle.
-- Names follow the rules in CONTRIBUTING.md "Naming" and the one-word
-  table in docs/TERMINOLOGY.md: one word per thing (session, rebuild,
-  take), DAW words keep their DAW meaning (sync, advance), verbs are
-  imperative with suffixed variants, queries read as what they return,
-  enums over bool parameters, no duplicate homes, no silent obligations.
+- Structural edits go through `session::structural` (rebuilds the mixer);
+  state (mute, solo, arm, monitor, bypass, send on/off) goes through
+  `session::set_state` and never enters the undo history; level edits
+  reach the document and the live handle.
+- Names follow CONTRIBUTING.md "Naming" and the one-word table in
+  docs/TERMINOLOGY.md: session / document / mixer / recording / clip,
+  DAW words keep their DAW meaning (sync, advance, sample), setters are
+  nouns without `set_`, state lives under `.state`, queries read as what
+  they return, enums over bool parameters, no duplicate homes, no silent
+  obligations.
 - Every public item is documented; update the doc note and the example
   when an API changes.

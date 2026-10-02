@@ -19,7 +19,7 @@ A mixing console built on `superb::primitives::graph::AudioGraph`.
   `graph_mut` (for adding source/effect nodes), `track_params`/
   `bus_params`/`send_params` (control handles), `solo_count`/`clear_solo`.
 * `StripParams` — the lock-free control surface of a track or bus:
-  `gain`/`set_gain`, `gain_db`/`set_gain_db`, `pan`/`set_pan`, `pan_law`/
+  `gain`/`set_gain` (linear), `volume_db`/`set_volume_db` (the fader), `pan`/`set_pan`, `pan_law`/
   `set_pan_law`, `mute`/`set_mute` (`is_muted`), `solo`/`set_solo`
   (`is_solo`), `peak`/`take_peak`.
 * `SendParams` — `level`/`set_level`, `level_db`/`set_level_db`,

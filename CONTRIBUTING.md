@@ -46,10 +46,10 @@ shared types at the root, then `buffers` and `realtime`, then `transport`,
 `undo` and `session` beside them. A primitive never imports a flow or the
 `Session`.
 
-**Flows** (`src/<flow>.rs`, one file per everyday task) are free functions
-over the `Session`. A flow function earns its place by replacing at least three
-primitive calls or by hiding an ordering hazard (rebuild before publish, stop
-before draining a take). Rules:
+**Flows** (`src/<flow>.rs`, one per thing you work with or task you do)
+are free functions over the `Session`. A flow function earns its place by
+replacing at least three primitive calls or by hiding an ordering hazard
+(rebuild before publish, stop before draining a recording). Rules:
 
 * A *verb* takes `&mut Session` and does the whole job. A *step* takes the
   individual primitives it needs and lives in the flow's `steps` module,
@@ -57,40 +57,49 @@ before draining a take). Rules:
 * Every verb's doc comment ends with a **Made of:** list naming the
   primitive and step calls in order. Keep it accurate when you change the
   body; it is the contract that lets a reader bypass the verb.
-* Edits that change the console's shape (tracks, clips, sends, routing,
-  inserts, monitoring) set `session.needs_rebuild`. Edits to a level go to the
-  document *and* the live handle at once and do not need a rebuild.
+* Edits that change the mixer's shape (tracks, clips, sends, routing,
+  inserts, monitoring) go through `session::structural`, which rebuilds at
+  once while a device drives the engine and otherwise flags
+  `needs_rebuild`. Edits to a level go to the document *and* the live
+  handle at once and do not rebuild.
 * A continuous edit (fader, knob, clip drag) pushes through the undo stack
   and coalesces by time (`Session::COALESCE_WINDOW`), so a drag is one step
-  without the UI having to say when it ended. A switch (mute, solo, arm,
-  monitoring, bypass, send on/off) is not an edit: it goes through
-  `session::switch`, which changes the document directly and marks the
+  without the UI having to say when it ended. State (mute, solo, arm,
+  monitor, bypass, send on/off) is not an edit: it goes through
+  `session::set_state`, which changes the document directly and marks the
   history dirty, and never enters the undo history.
 * No behaviour on the `Session` itself beyond constructors; it is a record.
 
 ## Naming
 
 Names follow [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md): prefer the word a
-musician would use (track, clip, bus, send, take, transport) over engine
+musician would use (track, clip, bus, send, recording, transport) over engine
 jargon, and when a jargon term is unavoidable, explain it once in the
 module docs. Before adding a name, check it against these rules; each one
 exists because its absence cost a rename.
 
-* **One word per thing, across both tiers.** The document is the
-  *session* in the type, the module, the flow and the prose; never song or
-  project. Rebuilding the console is *rebuild*. A pass of recording is a
-  *take*. If two words are in use for one thing, pick one and rename the
+* **One word per thing, across both tiers.** The thing you open is the
+  *session*; its saved shape is the *document*; what the engine runs is
+  the *mixer*; rebuilding it is *rebuild*; a recording in progress is a
+  *recording* and its result a *clip*. Never song, project, console or
+  take. If two words are in use for one thing, pick one and rename the
   other.
 * **A word with a DAW meaning keeps it.** *Sync* is clock synchronisation,
   *advance* moves the playhead, *gain* is a multiplier, *bounce* renders
   to a file. Do not borrow one for something else; TERMINOLOGY lists them.
-* **A flow sits over one primitive or over a task, and is named for it.**
-  `session`, `midi` and `plugins` share their primitive's name; `play`,
-  `mix`, `record`, `export` and `devices` are tasks. No invented areas.
+* **A flow is named for the thing or the task.** `session`, `track`,
+  `transport`, `midi` and `plugins` are things and share a primitive's
+  name; `mix`, `record`, `export` and `devices` are tasks. State lives
+  with its thing: mute and arm are `track::mute` and `track::arm`, not
+  `mix::` or `record::`. No invented areas.
 * **Verbs are imperative and say what happens.** `start`, `stop`,
-  `rebuild`, `drive`, `bounce`. One verb per action: no `begin` next to
-  `start`. A variant gets a suffix on the same verb: `start_from`,
-  `bounce_at_rate`, `bounce_session`.
+  `rebuild`, `bounce`. One verb per action: no `begin` next to `start`. A
+  variant gets a suffix on the same verb: `start_from`, `bounce_at_rate`,
+  `bounce_session`.
+* **A setter is the noun of what it sets.** `track::volume(s, t, db)`,
+  `track::input(s, t, ch)`, `mix::level(s, send, db)`, `plugins::bypass(s,
+  i, on)`: no `set_` prefix. Units go in the doc, not the name, when only
+  one unit exists at that tier (dB everywhere in the flows).
 * **Queries read as what they return.** `is_x` for a bool, a noun for data
   (`info`, `failures`, `params`, `position`). Never a past participle for
   a getter: `loaded` reads as a question and returned a descriptor.
@@ -98,8 +107,11 @@ exists because its absence cost a rename.
   not `pre_fader: true`.
 * **Types and fields are named for their role, not their mechanism.**
   `EngineHandle` and `EngineLoop` say which side you hold; `Wiring` is the
-  map from session to console; `param_queue` holds parameter changes. A
+  map from document to mixer; `param_queue` holds parameter changes. A
   type called `Player` must play.
+* **State is a field called `state`.** Every document object keeps its
+  settable fields under one `state` (`TrackState`, `SendState`,
+  `InsertState`), with nouns for switches: `mute`, not `muted`.
 * **One home per behaviour.** A device listing lives in `devices`, an
   offline render in `export`. When two functions do the same thing,
   delete one rather than alias it.

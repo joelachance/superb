@@ -15,6 +15,7 @@ ports. Without them the module is empty and the session renders through
 | `outputs()` / `inputs()` | `devices` | device listings with the default marked and the channel count when known |
 | `output_config(session, Option<name>) -> OutputConfig` | `devices` | the session's sample rate, block size and channel count on the named or default device |
 | `input_config(session, Option<name>, channels) -> InputConfig` | `devices` | likewise for an input |
+| `output(session, &OutputConfig)` | `devices` | play the session through that device: the engine loop moves into its stream and structural edits rebuild at once |
 | `midi_inputs()` | `midi-io` | MIDI input ports |
 
 ## Usage

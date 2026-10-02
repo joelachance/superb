@@ -15,11 +15,17 @@ undone freely.
 
 ## Key types
 
+State: each object keeps its settable fields under one `state`:
+`Track.state: TrackState { volume_db, pan, mute, solo, arm, monitor }`,
+`TrackSend.state: SendState { level_db, enabled }`, `Insert.state:
+InsertState { bypass, params }` (the plugin's own saved bytes are
+`Insert.preset`). Snapshots accept the older flat field names.
+
 Inserts: a track's plugin chain is part of the document. `Insert`
 (`PluginRef` = format, id, path; `bypassed`; `params: Vec<(u32, f64)>`;
 `state: Vec<u8>`) lives in `Track::inserts()`, is saved in the snapshot,
 and is edited through the `AddInsert` / `RemoveInsert` / `MoveInsert`
-commands and the coalescing `set_insert_bypassed` / `set_insert_param`
+commands and the coalescing `set_insert_bypass` / `set_insert_param`
 property edits. `Document::allocate_insert_id` mints IDs.
 
 
@@ -49,7 +55,7 @@ property edits. `Document::allocate_insert_id` mints IDs.
   `RemoveTrack`, `MoveTrack`, `SetTrackOutput`, `AddSend`, `RemoveSend`,
   `AddClip`, `RemoveClip`, `MoveClip`, `ResizeClip`, `AddMarker`,
   `RemoveMarker`, `MoveMarker`, `SetTempo`, `SetLoopRange`, plus
-  `PropertyEdit` helpers (`set_track_gain_db`, `set_track_pan`,
+  `PropertyEdit` helpers (`set_track_volume_db`, `set_track_pan`,
   `set_clip_name`, `set_send_level_db`, `set_send_enabled`,
   `set_send_pre_fader`, ...). Drag-style commands coalesce.
 

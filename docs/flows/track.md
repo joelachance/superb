@@ -1,0 +1,71 @@
+# track
+
+Tracks: add them, name them, set their state.
+
+## Purpose
+
+A track's *state* is what its strip shows: volume, pan, mute, solo, arm,
+monitor, and where its output goes. It lives in the document as
+`Track.state: TrackState` and is saved with the session. Mute, solo, arm
+and monitor are switches in the UI sense: heard at the next block, never
+undo steps.
+Volume and pan are continuous: they coalesce in the undo history and reach
+the live strip at once. Adding, removing and routing change the mixer's
+shape, so they rebuild it.
+
+## Verbs
+
+| verb | does | undo |
+|---|---|---|
+| `add(session, name, kind) -> TrackId` | an Audio, Midi or Bus track | one |
+| `remove(session, track)` | with everything on it; undo brings it back | one |
+| `rename(session, track, name)` | | quick renames merge |
+| `volume(session, track, db)` | the fader, in dB; document + live strip | drag (coalesces) |
+| `pan(session, track, pan)` | `-1.0` left to `1.0` right | drag |
+| `mute(session, track, on)` / `solo(session, track, on)` | state; document + live strip | — |
+| `arm(session, track, on)` | state; audio tracks only; armed tracks get a clip when a recording stops | — |
+| `armed(session) -> Vec<TrackId>` | the armed audio tracks | |
+| `monitor(session, track, on)` | state; MIDI tracks only; the track carries a live instrument; rebuilds | — |
+| `is_monitoring(session, track)` | | |
+| `route(session, track, Some(bus) or None)` | output into a bus or the master; loops refused | one |
+
+## Usage
+
+```rust
+use superb::prelude::*;
+use superb::{session, track};
+
+let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
+let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
+let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
+for db in [-1.0, -2.0, -3.0] {
+    track::volume(&mut session, vox, db)?;   // one undo step, heard at once
+}
+track::mute(&mut session, vox, true)?;       // state: saved, not undoable
+track::arm(&mut session, vox, true)?;
+track::monitor(&mut session, keys, true)?;   // the keys track now sounds when MIDI arrives
+assert_eq!(session.document.track(vox)?.state.volume_db, -3.0);
+```
+
+## Made of
+
+`add`: `Document::allocate_track_id` → `Track::with_id` → `AddTrack`
+through `session::structural`. `volume` / `pan`: `set_track_volume_db` /
+`set_track_pan` through `session::edit`, then `StripParams::set_volume_db`
+/ `set_pan` on the live strip. `mute` / `solo` / `arm` / `monitor`:
+`TrackState::{mute, solo, arm, monitor}` through `session::set_state`,
+then `StripParams::set_mute` / `set_solo` for the first two and a rebuild
+for `monitor`. `route`: `SetTrackOutput` through `session::structural`.
+
+## Notes
+
+* Pan law is a live-strip setting (`StripParams::set_pan_law`), not in the
+  document; tracks default to constant power (−3 dB centre), buses to
+  balance.
+* Solo is a shared counter across strips: soloing one track silences every
+  other track; buses ignore solo.
+* The instrument a monitoring MIDI track gets is `MonoSynthNode`, a simple
+  synth for hearing that MIDI arrives; an instrument plugin on the track
+  (`plugins::insert`) is the real thing.
+* Not yet: choosing which input channel feeds a track (`track::input`) and
+  hearing that input through the strip.
