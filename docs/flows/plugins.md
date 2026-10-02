@@ -32,9 +32,9 @@ if let Some(desc) = report.plugins.iter().find(|p| p.features.iter().any(|f| f =
     let fx = plugins::insert(&mut session, vox, desc)?;
     transport::start(&mut session)?;                       // the instance exists from here
     if let Some(p) = plugins::params(&session, fx).first().cloned() {
-        plugins::set_param(&mut session, fx, p.id, p.max)?;
+        plugins::param(&mut session, fx, p.id, p.max)?;
     }
-    plugins::set_bypassed(&mut session, fx, true)?;   // needs a rebuild to take effect
+    plugins::bypass(&mut session, fx, true)?;   // needs a rebuild to take effect
 }
 for (id, why) in plugins::failures(&session) {
     eprintln!("{id}: {why}");

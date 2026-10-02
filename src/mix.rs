@@ -78,10 +78,10 @@ pub fn level(session: &mut Session, send: SendId, db: f32) -> Result<()> {
 /// Switches a send on or off. State, like mute: saved, heard at the next
 /// block, not an undo step.
 ///
-/// Made of: `SendState::enabled` through `session::switch` →
+/// Made of: `SendState::enabled` through `session::set_state` →
 /// `SendParams::set_enabled` on the live send.
 pub fn enable(session: &mut Session, send: SendId, on: bool) -> Result<()> {
-    crate::session::switch(session, |s| {
+    crate::session::set_state(session, |s| {
         s.send_mut(send)?.state.enabled = on;
         Ok(())
     })?;

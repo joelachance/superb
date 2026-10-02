@@ -68,10 +68,10 @@ pub fn pan(session: &mut Session, track: TrackId, pan: f32) -> Result<()> {
 /// Mutes or unmutes. State: saved with the session, heard at the next
 /// block, not an undo step.
 ///
-/// Made of: `TrackState::mute` through `session::switch` →
+/// Made of: `TrackState::mute` through `session::set_state` →
 /// `StripParams::set_mute` on the live strip.
 pub fn mute(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    crate::session::switch(session, |d| {
+    crate::session::set_state(session, |d| {
         d.track_mut(track)?.state.mute = on;
         Ok(())
     })?;
@@ -84,10 +84,10 @@ pub fn mute(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 /// Solos or un-solos. While anything is soloed, every other track is
 /// silent; buses keep passing what reaches them. State, like mute.
 ///
-/// Made of: `TrackState::solo` through `session::switch` →
+/// Made of: `TrackState::solo` through `session::set_state` →
 /// `StripParams::set_solo` on the live strip.
 pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    crate::session::switch(session, |d| {
+    crate::session::set_state(session, |d| {
         d.track_mut(track)?.state.solo = on;
         Ok(())
     })?;
@@ -101,14 +101,14 @@ pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 /// clip when a recording stops. State, like mute. MIDI tracks
 /// [`monitor`] instead.
 ///
-/// Made of: `TrackState::arm` through `session::switch`.
+/// Made of: `TrackState::arm` through `session::set_state`.
 pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
     if session.document.track(track)?.kind != TrackKind::Audio {
         return Err(SuperbError::InvalidArgument {
             what: "only audio tracks are armed for recording",
         });
     }
-    crate::session::switch(session, |d| {
+    crate::session::set_state(session, |d| {
         d.track_mut(track)?.state.arm = on;
         Ok(())
     })
@@ -130,7 +130,7 @@ pub fn armed(session: &Session) -> Vec<TrackId> {
 /// State, saved as the track's arm flag; it changes the mixer's shape, so
 /// it rebuilds.
 ///
-/// Made of: `TrackState::arm` through `session::switch` → rebuild (the
+/// Made of: `TrackState::arm` through `session::set_state` → rebuild (the
 /// instrument is a node in the mixer).
 pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
     if session.document.track(track)?.kind != TrackKind::Midi {
@@ -138,7 +138,7 @@ pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
             what: "only MIDI tracks monitor live MIDI",
         });
     }
-    crate::session::switch(session, |d| {
+    crate::session::set_state(session, |d| {
         d.track_mut(track)?.state.monitor = on;
         Ok(())
     })?;

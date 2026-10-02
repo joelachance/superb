@@ -85,7 +85,7 @@ the clips it places into one step called "Record take".
 *Switches* (mute, solo, arm, monitoring, bypass, send on/off) are not
 edits. They are saved with the session, and they are heard at the next
 block, but they never enter the undo history: nobody expects Undo to
-un-mute a track. Flows flip them through `session::switch`, which also
+un-mute a track. Flows flip them through `session::set_state`, which also
 tells the history that the saved state is gone, so `is_saved` turns false.
 
 ## Commands reach the engine at the next block
@@ -111,5 +111,5 @@ take can come from a file or a generator. With the `devices` feature,
 A verb earns its place by replacing at least three primitive calls or by
 hiding an ordering hazard. Put the shared parts in `steps`, end every verb
 doc with **Made of:**, set `needs_rebuild` for structural edits, flip switches
-through `session::switch`, add tests that run without hardware and an
+through `session::set_state`, add tests that run without hardware and an
 example under `examples/flows/`. See [CONTRIBUTING.md](../CONTRIBUTING.md).

@@ -68,7 +68,7 @@ fn main() -> Result<()> {
             let dry = session::steps::render_blocks(&mut session, 4)?.peak();
             // Turn the first automatable knob to its maximum and listen.
             if let Some(p) = params.iter().find(|p| p.automatable) {
-                plugins::set_param(&mut session, fx, p.id, p.max)?;
+                plugins::param(&mut session, fx, p.id, p.max)?;
                 let wet = session::steps::render_blocks(&mut session, 4)?.peak();
                 println!("{} at max: peak {dry:.3} -> {wet:.3}", p.name);
                 println!(
@@ -77,7 +77,7 @@ fn main() -> Result<()> {
                 );
             }
             // Bypass leaves the plugin out of the console entirely.
-            plugins::set_bypassed(&mut session, fx, true)?;
+            plugins::bypass(&mut session, fx, true)?;
             session::steps::rebuild(&mut session)?;
             println!(
                 "bypassed, still loaded: {}",

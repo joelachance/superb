@@ -35,7 +35,7 @@ midi::release_note(&mut session, 0, 60)?;
 
 ## Made of
 
-`monitor`: `Track::armed` through `session::switch` (a MIDI track's
+`monitor`: `Track::armed` through `session::set_state` (a MIDI track's
 "armed" flag means monitoring), `needs_rebuild`. `play_note` / `release_note`:
 `MidiMessage::note_on` / `note_off` → `send`. `send`:
 `EngineHandle::push_midi` with a zero timestamp. `connect_input`:

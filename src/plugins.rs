@@ -59,10 +59,10 @@ pub fn remove(session: &mut Session, insert: InsertId) -> Result<()> {
 /// document but not recorded in the undo history, and it is heard at the
 /// next block.
 ///
-/// Made of: `InsertState::bypass` through `session::switch` → the node's
+/// Made of: `InsertState::bypass` through `session::set_state` → the node's
 /// bypass flag in [`LiveInsert::bypass`](crate::session::LiveInsert::bypass).
-pub fn set_bypassed(session: &mut Session, insert: InsertId, on: bool) -> Result<()> {
-    crate::session::switch(session, |s| {
+pub fn bypass(session: &mut Session, insert: InsertId, on: bool) -> Result<()> {
+    crate::session::set_state(session, |s| {
         s.insert_mut(insert)?.state.bypass = on;
         Ok(())
     })?;
@@ -77,7 +77,7 @@ pub fn set_bypassed(session: &mut Session, insert: InsertId, on: bool) -> Result
 ///
 /// Made of: push `set_insert_param` → `ParamChange` onto the running
 /// instance's queue, when it is loaded.
-pub fn set_param(session: &mut Session, insert: InsertId, param: u32, value: f64) -> Result<()> {
+pub fn param(session: &mut Session, insert: InsertId, param: u32, value: f64) -> Result<()> {
     session.history.push(
         &mut session.document,
         commands::set_insert_param(insert, param, value),
@@ -175,8 +175,8 @@ mod tests {
         // latency, which the graph compensates).
         assert!((settled(&mut session) - dry).abs() < 1e-3);
 
-        set_param(&mut session, gain, 7, 0.5).unwrap();
-        set_param(&mut session, gain, 7, 0.25).unwrap(); // a knob drag: one step
+        param(&mut session, gain, 7, 0.5).unwrap();
+        param(&mut session, gain, 7, 0.25).unwrap(); // a knob drag: one step
         assert!(
             (settled(&mut session) - dry * 0.25).abs() < 1e-3,
             "heard live"
@@ -188,7 +188,7 @@ mod tests {
 
         // Bypass is a live switch: heard at once, no rebuild, not an undo step.
         let steps = session.history.undo_len();
-        set_bypassed(&mut session, gain, true).unwrap();
+        bypass(&mut session, gain, true).unwrap();
         assert!(!session.needs_rebuild);
         assert_eq!(session.history.undo_len(), steps);
         assert!(session.document.insert(gain).unwrap().state.bypass);
@@ -200,7 +200,7 @@ mod tests {
         // A rebuilt console starts bypassed too, from the document.
         session::steps::rebuild(&mut session).unwrap();
         assert!((settled(&mut session) - dry).abs() < 1e-3);
-        set_bypassed(&mut session, gain, false).unwrap();
+        bypass(&mut session, gain, false).unwrap();
         assert!((settled(&mut session) - dry * 0.25).abs() < 1e-3);
         remove(&mut session, gain).unwrap();
         assert!(session.document.insert(gain).is_err());
@@ -230,7 +230,7 @@ mod tests {
             .iter()
             .any(|(id, why)| *id == vst && why.contains("VST3")));
         // Setting a parameter on an unloaded insert still records in the document.
-        set_param(&mut session, gone, 1, 0.5).unwrap();
+        param(&mut session, gone, 1, 0.5).unwrap();
         assert_eq!(session.document.insert(gone).unwrap().param(1), Some(0.5));
     }
 }

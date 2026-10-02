@@ -493,11 +493,11 @@ pub(crate) fn changed_structure(session: &mut Session) -> Result<()> {
     Ok(())
 }
 
-/// Flips a switch (mute, solo, arm, monitor, bypass, send on/off) on the
-/// document. Switches are saved with the document but are not edits: they
-/// never enter the undo history, so the history is told its saved state is
-/// gone and [`is_saved`] turns false.
-pub(crate) fn switch(
+/// Changes state (mute, solo, arm, monitor, bypass, send on/off) on the
+/// document. State is saved with the session but is not an edit: it never
+/// enters the undo history, so the history is told its saved point is gone
+/// and [`is_saved`] turns false.
+pub(crate) fn set_state(
     session: &mut Session,
     flip: impl FnOnce(&mut Document) -> Result<()>,
 ) -> Result<()> {
