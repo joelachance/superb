@@ -38,10 +38,11 @@ Tracks are added and set up in [`track`](track.md).
 | `collect_handles(&Mixer, &Wiring) -> (StripHandles, SendHandles)` | the atomics the control side keeps |
 | `publish(&mut EngineHandle, Mixer)` | prepare the graph and hand it to the engine |
 
-`session::bridge` (`MixerBridge`: document track ↔ mixer strip map, with
-routing and state mirroring) and `session::wiring` (`Wiring`, `WiredClip`,
-`schedule_midi_notes`: a node per clip) are the pieces the steps use. The
-`session_steps` example builds a mixer from them without a `Session`.
+`Wiring` is what `build_mixer` returns beside the mixer: `strip(track)`,
+`strips()`, `send(send)`, `sends()` say what each document track and send
+became, and `clips()` lists the node made for each clip (`WiredClip`). The
+bridge beneath it is internal. The `session_steps` example builds a mixer
+this way without a `Session`.
 
 ## Usage
 

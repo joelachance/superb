@@ -243,10 +243,10 @@ pub fn collect(session: &mut Session) -> usize {
 /// one undo step called "Record".
 ///
 /// Made of: `EngineHandle::send(Stop)` → drop the input stream →
-/// [`steps::collect`] or `Collector::finish` → [`steps::finish_recording`]
-/// → per track, [`steps::clip_name`] → `AudioCache::insert_shared` →
-/// [`steps::place_clip`], inside one undo group; rebuilds the mixer so the
-/// clips play back on their strips.
+/// [`steps::collect`] or `Collector::finish` → the planes become one
+/// buffer → per track, a name no cache entry uses (`vox 1`) →
+/// `AudioCache::insert_shared` → [`session::add_audio_clip`], inside one
+/// undo group; rebuilds the mixer so the clips play back on their strips.
 pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     let recording = session
         .recording
@@ -303,7 +303,8 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     Ok(clips)
 }
 
-/// The steps `start`, [`start_from`], [`collect`] and [`stop`] are made of.
+/// The steps `start`, [`start_from`] and [`collect`] are made of, for
+/// recording from a source of your own.
 pub mod steps {
     use super::*;
 
@@ -369,7 +370,7 @@ pub mod steps {
     /// the input side. Blocks with fewer channels than the recording are padded
     /// with silence. Returns the frames appended. Allocates; never call it
     /// on the audio thread.
-    pub fn append_blocks(blocks: &mut CaptureConsumer, planes: &mut [Vec<f32>]) -> usize {
+    pub(crate) fn append_blocks(blocks: &mut CaptureConsumer, planes: &mut [Vec<f32>]) -> usize {
         let mut appended = 0;
         while let Some(block) = blocks.pop() {
             let frames = block.frames();
@@ -388,7 +389,7 @@ pub mod steps {
 
     /// Turns collected planes into one buffer. Empty planes give a buffer
     /// with no frames.
-    pub fn finish_recording(planes: Vec<Vec<f32>>) -> PlanarBuffer {
+    pub(crate) fn finish_recording(planes: Vec<Vec<f32>>) -> PlanarBuffer {
         let channels = planes.len();
         let refs: Vec<&[f32]> = planes.iter().map(Vec::as_slice).collect();
         PlanarBuffer::from_planes(&refs).unwrap_or_else(|_| PlanarBuffer::new(channels, 0))
@@ -396,7 +397,7 @@ pub mod steps {
 
     /// A name for a new clip on `track` that no cache entry uses yet:
     /// `vox 1`, `vox 2`, ... The clip and the audio it plays share it.
-    pub fn clip_name(session: &Session, track: TrackId) -> Result<String> {
+    pub(crate) fn clip_name(session: &Session, track: TrackId) -> Result<String> {
         let base = session.document.track(track)?.name.clone();
         let mut n = 1;
         loop {
@@ -411,7 +412,7 @@ pub mod steps {
     /// Places a clip of cached audio on `track`.
     ///
     /// Made of: [`session::add_audio_clip`].
-    pub fn place_clip(
+    pub(crate) fn place_clip(
         session: &mut Session,
         track: TrackId,
         audio: &str,

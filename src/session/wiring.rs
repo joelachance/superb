@@ -2,7 +2,7 @@
 //! a source node for every clip.
 //!
 //! [`Wiring::wire`] binds strips and buses through the
-//! [`MixerBridge`], mirrors routing and strip settings, then attaches
+//! `MixerBridge` (internal), mirrors routing and strip settings, then attaches
 //! one node per audible clip: [`BufferPlayerNode`] for audio the
 //! [`AudioCache`] holds (a missing entry plays as silence), and
 //! [`ScheduledSynthNode`] for MIDI notes converted through the tempo map.
@@ -16,7 +16,7 @@ use crate::primitives::io::cache::AudioCache;
 use crate::primitives::mixer::Mixer;
 use crate::primitives::session::{Clip, ClipSource, Document, MidiNote, TrackKind};
 use crate::primitives::transport::TempoMap;
-use crate::primitives::{BeatPosition, ClipId, NodeId, Result, TrackId};
+use crate::primitives::{BeatPosition, ClipId, NodeId, Result, SendId, TrackId};
 
 use crate::session::bridge::{MixerBinding, MixerBridge};
 
@@ -36,7 +36,7 @@ pub struct WiredClip {
 
 /// The map from a document onto the console built for it.
 ///
-/// Owns the [`MixerBridge`] side table (track → strip, send → send)
+/// Owns the `MixerBridge` side table (track → strip, send → send)
 /// plus the clip nodes created. A structural edit to the document means a
 /// fresh [`wire`](Wiring::wire) of a fresh mixer.
 #[derive(Clone, Debug)]
@@ -115,8 +115,28 @@ impl Wiring {
         Ok(Self { bridge, clips })
     }
 
-    /// Side table from the last [`wire`](Self::wire).
-    pub fn bridge(&self) -> &MixerBridge {
+    /// The strip or bus a document track became, if it is in the mixer.
+    pub fn strip(&self, track: TrackId) -> Option<MixerBinding> {
+        self.bridge.binding(track)
+    }
+
+    /// Every document track and the strip or bus it became.
+    pub fn strips(&self) -> &[(TrackId, MixerBinding)] {
+        self.bridge.entries()
+    }
+
+    /// The mixer send a document send became, if any.
+    pub fn send(&self, send: SendId) -> Option<SendId> {
+        self.bridge.mixer_send(send)
+    }
+
+    /// Every document send and the mixer send it became.
+    pub fn sends(&self) -> &[(SendId, SendId)] {
+        self.bridge.send_entries()
+    }
+
+    /// The side table itself, for the steps.
+    pub(crate) fn bridge(&self) -> &MixerBridge {
         &self.bridge
     }
 
@@ -132,7 +152,7 @@ impl Wiring {
 /// Note-on/off pairs whose onset falls outside `[clip.start, clip.end)` are
 /// dropped. Off events are clamped to the clip end so notes cannot ring
 /// past the clip.
-pub fn schedule_midi_notes(
+pub(crate) fn schedule_midi_notes(
     clip: &Clip,
     notes: &[MidiNote],
     tempo: &TempoMap,

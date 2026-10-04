@@ -12,12 +12,12 @@
 //! `superb::primitives::undo` (the history) and the engine side in
 //! [`steps`]. Each function below lists the primitive calls it makes.
 
-pub mod bridge;
+pub(crate) mod bridge;
 pub mod steps;
 pub mod wiring;
 
-pub use bridge::{MixerBinding, MixerBridge};
-pub use wiring::{schedule_midi_notes, WiredClip, Wiring};
+pub use bridge::MixerBinding;
+pub use wiring::{WiredClip, Wiring};
 
 use std::path::{Path, PathBuf};
 
@@ -243,7 +243,7 @@ impl PluginLoader {
     }
 
     /// Number of bundles held open.
-    pub fn loaded(&self) -> usize {
+    pub(crate) fn loaded(&self) -> usize {
         #[cfg(feature = "clap")]
         {
             self.bundles.len()

@@ -47,6 +47,7 @@ cargo doc --no-deps
   DAW words keep their DAW meaning (sync, advance, sample), setters are
   nouns without `set_`, state lives under `.state`, queries read as what
   they return, enums over bool parameters, no duplicate homes, no silent
-  obligations.
+  obligations, sugar only for controls a musician knows, plumbing
+  `pub(crate)`.
 - Every public item is documented; update the doc note and the example
   when an API changes.

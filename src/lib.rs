@@ -151,7 +151,7 @@ mod tests {
         let _ = crate::primitives::plugins::vst3::AVAILABLE;
         let _ = PluginDescriptor::new(crate::primitives::plugins::PluginFormat::Clap, "id", "name");
         let mut mixer = Mixer::new(2);
-        let mut bridge = crate::session::MixerBridge::new();
+        let mut bridge = crate::session::bridge::MixerBridge::new();
         assert_eq!(bridge.bind(&document, &mut mixer), 0);
         assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 0);
         let _ = TrackSend::new(track);

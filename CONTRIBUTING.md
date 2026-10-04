@@ -115,6 +115,16 @@ exists because its absence cost a rename.
 * **One home per behaviour.** A device listing lives in `devices`, an
   offline render in `export`. When two functions do the same thing,
   delete one rather than alias it.
+* **Sugar is welcome when it is a button.** A verb may be one line over
+  a primitive or another verb (`rewind`, `is_rolling`, `add_bus`,
+  `play_note`, `bounce_session`) if a musician would recognise it as a
+  control on a DAW and its "Made of:" line is the whole implementation.
+  Sugar that exists for the SDK author's convenience, or that holds logic
+  of its own, is not.
+* **Plumbing stays private.** What a verb is made of is public only when
+  someone building their own verb needs it (`session::steps`,
+  `record::steps`, `Wiring`). Side tables and helpers under those are
+  `pub(crate)`; making one public later is cheap, taking it back is not.
 * **No silent obligations.** If a flow only works when the caller also
   remembers to do something later (end a drag, empty a queue), either the
   flow does it itself (a time window, a thread) or the obligation is a

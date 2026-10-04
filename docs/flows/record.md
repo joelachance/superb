@@ -30,10 +30,6 @@ Arming is track state: `track::arm` and `track::armed`.
 | `open_input(&InputConfig, slots)` (feature `devices`) | a capture queue fed by hardware; returns the stream and the consumer |
 | `spawn_collector(CaptureConsumer, channels) -> Collector` | a thread that empties the queue as it fills; `finish` returns the planes |
 | `collect(&mut Capture) -> frames appended` | drain a manual capture's queue into its planes |
-| `append_blocks(&mut CaptureConsumer, &mut [Vec<f32>]) -> frames` | the drain both of the above use |
-| `finish_recording(planes) -> PlanarBuffer` | |
-| `clip_name(session, track)` | the next unused `<track> N` |
-| `place_clip(session, track, audio, start, length)` | `session::add_audio_clip` |
 
 `Recording` is the recording in progress: its `Capture` (`Manual { blocks,
 planes }` or `Threaded(Collector)`), punch-in position, armed tracks,
@@ -73,9 +69,9 @@ let clips = record::stop(&mut session)?;
 collector): `track::armed` → `session::steps::rebuild` if needed →
 `EngineHandle::send(Record)` → `transport::playhead` for the punch-in.
 `stop`: `EngineHandle::send(Stop)` → drop the stream → `collect` or
-`Collector::finish` → `finish_recording` → per track `clip_name` →
-`AudioCache::insert_shared` → `place_clip`, inside one undo group →
-rebuild.
+`Collector::finish` → one buffer from the planes → per track a name no
+cache entry uses → `AudioCache::insert_shared` → `session::add_audio_clip`,
+inside one undo group → rebuild.
 
 ## Notes
 

@@ -172,7 +172,7 @@ saving it as JSON and reloading it.
 ## Mixer bridge
 
 Mirroring a session into a live [`Mixer`](mixer.md) is handled by
-`superb::session::bridge::MixerBridge` (separate `TrackId` namespaces,
+the session's internal mixer bridge (separate `TrackId` namespaces,
 `rebuild` + `apply_routing` + `apply_strip_params`). Playing clips onto those strips is
 `superb::session::Wiring` attaches a node per clip onto those strips, and
 `superb::export::render` runs the result offline; see `docs/flows/play.md`

@@ -7,8 +7,8 @@
 //! glitch. The structural flows call it for you. [`render_blocks`] runs the
 //! engine when no sound card is attached. The pieces are public so a
 //! program can assemble its own: [`build_mixer`], [`attach_inserts`],
-//! [`collect_handles`], [`publish`], with [`super::bridge`] mapping tracks
-//! onto strips and [`super::wiring`] attaching a node per clip.
+//! [`collect_handles`], [`publish`], with [`super::wiring`] mapping tracks
+//! onto strips and attaching a node per clip.
 
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::{Result, SuperbError};

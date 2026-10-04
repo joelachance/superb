@@ -81,10 +81,10 @@ fn main() -> Result<()> {
     println!(
         "{} tracks became {} strips; {} clip node(s); vox send {} is mixer send {:?}",
         document.track_count(),
-        wiring.bridge().entries().len(),
+        wiring.strips().len(),
         wiring.clips().len(),
         send.raw(),
-        wiring.bridge().mixer_send(send).map(|s| s.raw())
+        wiring.send(send).map(|s| s.raw())
     );
     for wired in wiring.clips() {
         println!(

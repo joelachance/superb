@@ -42,6 +42,7 @@ impl MixerBridge {
     /// Document revision last seen by [`bind`](Self::bind) /
     /// [`apply_strip_params`](Self::apply_strip_params) /
     /// [`apply_routing`](Self::apply_routing).
+    #[cfg(test)]
     pub fn document_revision(&self) -> u64 {
         self.document_revision
     }
@@ -55,6 +56,7 @@ impl MixerBridge {
     }
 
     /// Mixer track for a document audio/MIDI track.
+    #[cfg(test)]
     pub fn mixer_track(&self, track: TrackId) -> Option<TrackId> {
         match self.binding(track)? {
             MixerBinding::Track(id) => Some(id),
