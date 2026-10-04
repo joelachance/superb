@@ -33,9 +33,10 @@ pub fn inputs() -> Result<Vec<DeviceInfo>> {
 }
 
 /// An output configuration that matches the session: its sample rate, block
-/// size and channel count, on the named device (or the default).
+/// size and channel count, on the named device (or the default). The verbs
+/// build this themselves so a stream can never mismatch the engine.
 #[cfg(feature = "devices")]
-pub fn output_config(session: &Session, device: Option<&str>) -> OutputConfig {
+pub(crate) fn output_config(session: &Session, device: Option<&str>) -> OutputConfig {
     OutputConfig {
         device_name: device.map(str::to_owned),
         sample_rate: session.document.sample_rate(),
@@ -45,25 +46,28 @@ pub fn output_config(session: &Session, device: Option<&str>) -> OutputConfig {
     }
 }
 
-/// Plays the session through an output device: moves the engine loop into
-/// a real output stream and starts it. From then on the device drives the
-/// engine, structural edits rebuild the mixer at once, and
+/// Plays the session through an output device (`None` for the default,
+/// or a name from [`outputs`]): moves the engine loop into a real output
+/// stream at the session's sample rate, block size and channel count, and
+/// starts it. From then on the device drives the engine, structural edits
+/// rebuild the mixer at once, and
 /// [`session::steps::render_blocks`](crate::session::steps::render_blocks)
-/// is unavailable. Use [`output_config`] for a configuration that matches
-/// the session.
+/// is unavailable.
 ///
-/// Made of: [`session::steps::rebuild`](crate::session::steps::rebuild)
-/// when needed → `EngineLoop::run_on_device`; the stream is kept in
+/// Made of: an `OutputConfig` matching the session →
+/// [`session::steps::rebuild`](crate::session::steps::rebuild) when needed
+/// → `EngineLoop::run_on_device`; the stream is kept in
 /// [`Session::output`] and stops when dropped.
 #[cfg(feature = "devices")]
-pub fn output(session: &mut Session, config: &OutputConfig) -> Result<()> {
+pub fn output(session: &mut Session, device: Option<&str>) -> Result<()> {
+    let config = output_config(session, device);
     if session.needs_rebuild {
         crate::session::steps::rebuild(session)?;
     }
     let engine_loop = session.engine_loop.take().ok_or_else(|| {
         SuperbError::Message("the engine loop is already running on a device stream".into())
     })?;
-    match engine_loop.run_on_device(config) {
+    match engine_loop.run_on_device(&config) {
         Ok(stream) => {
             session.output = Some(stream);
             Ok(())
@@ -75,7 +79,11 @@ pub fn output(session: &mut Session, config: &OutputConfig) -> Result<()> {
 /// An input configuration at the session's sample rate and block size with
 /// `channels` channels, on the named device (or the default).
 #[cfg(feature = "devices")]
-pub fn input_config(session: &Session, device: Option<&str>, channels: usize) -> InputConfig {
+pub(crate) fn input_config(
+    session: &Session,
+    device: Option<&str>,
+    channels: usize,
+) -> InputConfig {
     InputConfig {
         device_name: device.map(str::to_owned),
         sample_rate: session.document.sample_rate(),

@@ -104,8 +104,7 @@ fn main() -> Result<()> {
     {
         use superb::devices;
         transport::set_loop_enabled(&mut session, false)?;
-        let speakers = devices::output_config(&session, None);
-        devices::output(&mut session, &speakers)?;
+        devices::output(&mut session, None)?; // the default output, matched to the session
         transport::start(&mut session)?;
         std::thread::sleep(std::time::Duration::from_millis(1600));
         println!(

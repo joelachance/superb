@@ -154,18 +154,18 @@ pub fn is_recording(session: &Session) -> bool {
     session.recording.is_some()
 }
 
-/// Starts recording from a hardware input onto every armed track, from the
-/// current playhead position. The transport starts rolling, and a collector
-/// thread gathers the audio until [`stop`].
+/// Starts recording `channels` channels from a hardware input (`None` for
+/// the default device, or a name from `devices::inputs`) onto every armed
+/// track, from the current playhead position. The transport starts
+/// rolling, and a collector thread gathers the audio until [`stop`].
 ///
-/// Made of: [`steps::open_input`] with 64 queued blocks →
-/// [`steps::spawn_collector`] → the same beginning as [`start_from`].
+/// Made of: an `InputConfig` matching the session → [`steps::open_input`]
+/// with 64 queued blocks → [`steps::spawn_collector`] → the same beginning
+/// as [`start_from`].
 #[cfg(feature = "devices")]
-pub fn start(
-    session: &mut Session,
-    input: &crate::primitives::io::device::InputConfig,
-) -> Result<()> {
-    let (stream, blocks) = steps::open_input(input, 64)?;
+pub fn start(session: &mut Session, device: Option<&str>, channels: usize) -> Result<()> {
+    let input = crate::devices::input_config(session, device, channels);
+    let (stream, blocks) = steps::open_input(&input, 64)?;
     let channels = stream.channels();
     let collector = steps::spawn_collector(blocks, channels)?;
     begin(session, Capture::Threaded(collector), channels)?;

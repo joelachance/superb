@@ -15,7 +15,7 @@ buffer.
 
 | verb | does |
 |---|---|
-| `start(session, &InputConfig)` (feature `devices`) | open a hardware input, spawn a collector thread, begin at the playhead |
+| `start(session, Option<device name>, channels)` (feature `devices`) | open a hardware input matched to the session, spawn a collector thread, begin at the playhead |
 | `start_from(session, CaptureConsumer, channels)` | begin from a queue you fill yourself; blocks wait for `collect` |
 | `collect(session) -> frames` | move waiting blocks into a manual recording (`session::steps::render_blocks` does this); nothing to do for a threaded one |
 | `stop(session) -> Vec<ClipId>` | stop the transport, finish the recording, place clips ("Record") |
@@ -62,8 +62,7 @@ let clips = record::stop(&mut session)?;                 // one clip per armed t
 From a real input (feature `devices`):
 
 ```rust
-let mic = superb::devices::input_config(&session, None, 1);
-record::start(&mut session, &mic)?;   // a collector thread gathers the audio
+record::start(&mut session, None, 1)?;   // the default input, one channel; a thread gathers the audio
 // ... play ...
 let clips = record::stop(&mut session)?;
 ```

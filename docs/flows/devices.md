@@ -13,9 +13,7 @@ ports. Without them the module is empty and the session renders through
 | verb | feature | does |
 |---|---|---|
 | `outputs()` / `inputs()` | `devices` | device listings with the default marked and the channel count when known |
-| `output_config(session, Option<name>) -> OutputConfig` | `devices` | the session's sample rate, block size and channel count on the named or default device |
-| `input_config(session, Option<name>, channels) -> InputConfig` | `devices` | likewise for an input |
-| `output(session, &OutputConfig)` | `devices` | play the session through that device: the engine loop moves into its stream and structural edits rebuild at once |
+| `output(session, Option<name>)` | `devices` | play the session through that device (`None` = default): the engine loop moves into a stream matched to the session, and structural edits rebuild at once |
 | `midi_inputs()` | `midi-io` | MIDI input ports |
 
 ## Usage
@@ -26,11 +24,9 @@ use superb::{devices, record, transport};
 for d in devices::outputs()? {
     println!("{}{}", d.name, if d.is_default { " *" } else { "" });
 }
-let speakers = devices::output_config(&session, None);
-devices::output(&mut session, &speakers)?;
+devices::output(&mut session, None)?;          // the default output
 
-let mic = devices::input_config(&session, None, 1);
-record::start(&mut session, &mic)?;
+record::start(&mut session, None, 1)?;         // the default input, one channel
 ```
 
 ## Made of
@@ -41,9 +37,10 @@ record::start(&mut session, &mic)?;
 
 ## Notes
 
-* The configurations must match the engine's rate and block size: every
-  published graph is prepared for them, and a stream opened with different
-  values is refused rather than re-prepared on the audio thread. Using
-  these helpers guarantees the match.
+* A stream must match the engine's rate and block size: every published
+  graph is prepared for them, and a stream opened with different values is
+  refused rather than re-prepared on the audio thread. `output` and
+  `record::start` build the configuration from the session, so it cannot
+  mismatch.
 * Device indices and names are a snapshot; re-list after plugging
   something in.

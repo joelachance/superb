@@ -110,8 +110,7 @@ fn main() -> Result<()> {
             println!("no input device to record from");
         } else {
             track::arm(&mut session, vox, true)?;
-            let mic = devices::input_config(&session, None, 1);
-            record::start(&mut session, &mic)?; // a collector thread gathers the recording
+            record::start(&mut session, None, 1)?; // the default input, one channel; a thread gathers the audio
             std::thread::sleep(std::time::Duration::from_millis(500));
             let clips = record::stop(&mut session)?;
             println!("recorded {} clip(s) from the default input", clips.len());

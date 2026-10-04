@@ -19,7 +19,7 @@ One per flow module, in the order you would use them to make a session.
 | `insert_plugin` | `plugins` | scan, insert the first effect, read parameters, turn a knob, bypass; the missing-plugin path when none is installed | `cargo run --example insert_plugin` |
 | `export_session` | `export` | bounce the session, a range, render to memory; resample with `files` | `cargo run --example export_session` |
 | `session_steps` | `session::steps` | build the mixer from a document by hand (`Wiring`, bus, send) and render it through an offline engine | `cargo run --example session_steps` |
-| `list_devices` | `devices` | audio devices and session-matched configurations; MIDI ports with `midi-io` | `cargo run --example list_devices --features devices` |
+| `list_devices` | `devices` | audio devices with the default marked; MIDI ports with `midi-io` | `cargo run --example list_devices --features devices` |
 
 ## Primitives
 

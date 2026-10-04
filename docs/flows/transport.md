@@ -37,8 +37,7 @@ transport::stop(&mut session)?;
 With the `devices` feature the same session plays through the speakers:
 
 ```rust
-let speakers = superb::devices::output_config(&session, None);
-superb::devices::output(&mut session, &speakers)?;   // the device now drives the engine
+superb::devices::output(&mut session, None)?;   // the default output now drives the engine
 transport::start(&mut session)?;
 ```
 

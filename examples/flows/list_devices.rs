@@ -1,9 +1,11 @@
-//! `devices`: what hardware is there, and a configuration that fits the session.
+//! `devices`: what hardware is there.
 //!
 //! What you'll learn:
 //! - Audio device listings mark the system default and its channel count
-//! - `output_config` / `input_config` copy the session's sample rate and block
-//!   size, which the engine's published graphs are prepared for
+//! - A device is chosen by name (or `None` for the default) when you play
+//!   through it (`devices::output`) or record from it (`record::start`);
+//!   the stream is matched to the session's sample rate and block size for
+//!   you
 //! - With feature `midi-io`, MIDI input ports are listed too
 //!
 //! ```text
@@ -11,8 +13,8 @@
 //! cargo run --example list_devices --features hardware   # audio + MIDI
 //! ```
 
+use superb::devices;
 use superb::prelude::*;
-use superb::{devices, session};
 
 /// `max_channels` is 0 when the host does not say.
 fn channels(max: usize) -> String {
@@ -24,8 +26,7 @@ fn channels(max: usize) -> String {
 }
 
 fn main() -> Result<()> {
-    let session = session::create("devices", SampleRate::HZ_48K, 256)?;
-
+    // `*` marks the default device: the one `None` picks.
     println!("outputs:");
     for d in devices::outputs()? {
         println!(
@@ -44,24 +45,6 @@ fn main() -> Result<()> {
             channels(d.max_channels)
         );
     }
-
-    // Configurations that match the session. `None` picks the default device;
-    // pass a listed name to choose another.
-    let out = devices::output_config(&session, None);
-    println!(
-        "output config: {} Hz, {} ch, {}-frame blocks, device {:?}",
-        out.sample_rate.hz(),
-        out.channels,
-        out.max_block_frames,
-        out.device_name
-    );
-    let inp = devices::input_config(&session, None, 1);
-    println!(
-        "input config:  {} Hz, {} ch, {}-frame blocks",
-        inp.sample_rate.hz(),
-        inp.channels,
-        inp.max_block_frames
-    );
 
     #[cfg(feature = "midi-io")]
     {
