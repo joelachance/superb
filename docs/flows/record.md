@@ -75,7 +75,8 @@ collector): `track::armed` → `session::steps::rebuild` if needed →
 `Collector::finish` → one buffer from the planes → per track a name no
 cache entry uses and the channels its `Input` selects (`select_input`; the
 whole capture, shared, when none is set) → `AudioCache::insert_shared` →
-`session::add_audio_clip`, inside one undo group → rebuild.
+`clip::add` (the clip takes the audio's length), inside one undo group →
+rebuild.
 
 ## Notes
 

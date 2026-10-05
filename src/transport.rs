@@ -75,7 +75,7 @@ mod tests {
     use crate::primitives::buffers::PlanarBuffer;
     use crate::primitives::session::TrackKind;
     use crate::primitives::transport::LoopRange;
-    use crate::primitives::{SampleRate, TimeDuration};
+    use crate::primitives::SampleRate;
     use crate::session;
     use crate::track;
 
@@ -88,14 +88,7 @@ mod tests {
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
         session.cache.insert("tone.wav", tone);
-        session::add_audio_clip(
-            &mut session,
-            vox,
-            "tone.wav",
-            TimePosition::ZERO,
-            TimeDuration::from_samples(400),
-        )
-        .unwrap();
+        crate::clip::add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         (session, vox)
     }
 

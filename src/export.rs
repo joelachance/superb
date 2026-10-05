@@ -95,7 +95,7 @@ pub fn bounce_at_rate(
 mod tests {
     use super::*;
     use crate::primitives::session::TrackKind;
-    use crate::primitives::{SampleRate, TimeDuration};
+    use crate::primitives::SampleRate;
     use crate::track;
     use crate::transport;
 
@@ -107,12 +107,11 @@ mod tests {
         let mut tone = PlanarBuffer::new(2, 1_000);
         tone.fill(0.5);
         session.cache.insert("tone.wav", tone);
-        session::add_audio_clip(
+        crate::clip::add(
             &mut session,
             vox,
             "tone.wav",
             TimePosition::from_samples(500),
-            TimeDuration::from_samples(1_000),
         )
         .unwrap();
         session

@@ -97,6 +97,9 @@ pub struct ClipSnapshot {
     pub fade_in: i64,
     /// Fade-out in samples.
     pub fade_out: i64,
+    /// Archived: kept but not rendered (absent in older files).
+    #[serde(default)]
+    pub archived: bool,
 }
 
 /// A send from a track to a bus track.
@@ -232,6 +235,7 @@ impl From<&Clip> for ClipSnapshot {
             muted: i.muted,
             fade_in: i.fade_in.samples(),
             fade_out: i.fade_out.samples(),
+            archived: i.archived,
         }
     }
 }
@@ -435,6 +439,7 @@ impl Document {
                 clip.muted = i.muted;
                 clip.fade_in = TimeDuration::from_samples(i.fade_in);
                 clip.fade_out = TimeDuration::from_samples(i.fade_out);
+                clip.archived = i.archived;
                 track.clips.push(clip);
             }
             for i in &t.inserts {

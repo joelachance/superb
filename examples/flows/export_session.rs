@@ -14,7 +14,7 @@
 
 use superb::prelude::*;
 use superb::primitives::io::wav::{self, WavFormat};
-use superb::{export, session, track, transport};
+use superb::{clip, export, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
@@ -36,14 +36,12 @@ fn main() -> Result<()> {
     }
     session.cache.insert("a.wav", a);
     session.cache.insert("b.wav", b);
-    let one = TimeDuration::from_seconds(1.0, rate);
-    session::add_audio_clip(&mut session, lead, "a.wav", TimePosition::ZERO, one)?;
-    session::add_audio_clip(
+    clip::add(&mut session, lead, "a.wav", TimePosition::ZERO)?;
+    clip::add(
         &mut session,
         pad,
         "b.wav",
         TimePosition::from_seconds(0.5, rate),
-        one,
     )?;
     track::volume(&mut session, pad, -6.0)?;
     track::pan(&mut session, lead, 0.3)?;

@@ -1,10 +1,11 @@
-//! `document`: start a document, put things in it, save it, open it again.
+//! `session`, `track`, `clip`: start a session, put things in it, save it,
+//! open it again.
 //!
 //! What you'll learn:
 //! - A `Session` is the state every flow works on; `session::create` makes one
 //! - Tracks come in three kinds: Audio, Midi, Bus
-//! - Clips point at audio in the `AudioCache` (a real file or, as here, a
-//!   buffer you made) or hold MIDI notes inline
+//! - Clips play audio held in memory (a decoded file or, as here, a buffer
+//!   you made) or MIDI notes; `clip::add` works out which and how long
 //! - Every edit is undoable: `session::undo` / `session::redo`
 //! - Save is JSON; open gives you a fresh Session with the same document
 //!
@@ -14,22 +15,20 @@
 
 use superb::prelude::*;
 use superb::primitives::session::MidiNote;
-use superb::session;
-use superb::track;
+use superb::{clip, session, track};
 
 fn main() -> Result<()> {
     // 48 kHz, 256-frame blocks. Nothing is playing yet; this is just the
     // document plus an idle engine.
-    let mut session = session::create("My first document", SampleRate::HZ_48K, 256)?;
+    let mut session = session::create("My first session", SampleRate::HZ_48K, 256)?;
 
-    // Tracks. `add_track` returns an ID you keep; names are for people.
+    // Tracks. `track::add` returns an ID you keep; names are for people.
     let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
     let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
 
-    // Audio for the vox clip. A real program calls `session::import_audio`
-    // (feature `files`); here we synthesise one second of a soft sine so the
-    // example needs no file on disk. The cache key is the "path" the clip
-    // refers to.
+    // Audio for the vox clip. A real program decodes a file (`AudioCache::load`,
+    // feature `files`); here we synthesise one second of a soft sine so the
+    // example needs no file on disk. The key is the name the clip refers to.
     let rate = session.document.sample_rate();
     let mut take = PlanarBuffer::new(2, rate.hz() as usize);
     for ch in 0..2 {
@@ -39,17 +38,17 @@ fn main() -> Result<()> {
         }
     }
     session.cache.insert("vox-take-1.wav", take);
-    // Put the take on the timeline, starting half a second in.
-    let clip = session::add_audio_clip(
+    // Put it on the timeline, starting half a second in. The clip is as long
+    // as the audio and named after the key ("vox-take-1").
+    let clip = clip::add(
         &mut session,
         vox,
         "vox-take-1.wav",
         TimePosition::from_seconds(0.5, rate),
-        TimeDuration::from_seconds(1.0, rate),
     )?;
 
-    // A MIDI clip: two bars of a C major arpeggio. Notes are in beats
-    // relative to the clip start; the clip's length is in samples.
+    // A MIDI clip: a C major arpeggio. Notes are in beats relative to the
+    // clip start; the clip ends with its last note.
     let notes: Vec<MidiNote> = [60u8, 64, 67, 72]
         .iter()
         .enumerate()
@@ -61,14 +60,7 @@ fn main() -> Result<()> {
             channel: 0,
         })
         .collect();
-    session::add_midi_clip(
-        &mut session,
-        keys,
-        "arpeggio",
-        TimePosition::ZERO,
-        TimeDuration::from_seconds(4.0, rate),
-        notes,
-    )?;
+    clip::add(&mut session, keys, notes, TimePosition::ZERO)?;
 
     // Document-level settings.
     session::set_tempo(&mut session, 100.0)?;
@@ -82,7 +74,7 @@ fn main() -> Result<()> {
     );
 
     // Undo works on everything above. Move the clip, change your mind.
-    session::move_clip(&mut session, clip, TimePosition::from_seconds(2.0, rate))?;
+    clip::move_to(&mut session, clip, TimePosition::from_seconds(2.0, rate))?;
     // Moves of one clip within half a second merge into one undo step, so a
     // drag undoes in one go. Sealing on "mouse up" ends the step at once.
     session.history.seal();

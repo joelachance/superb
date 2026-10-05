@@ -1,6 +1,6 @@
 //! Tracks and the clips they hold.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::insert::Insert;
 use crate::primitives::{
@@ -54,6 +54,40 @@ pub enum ClipSource {
     },
 }
 
+impl From<PathBuf> for ClipSource {
+    /// Audio named by `path`, played from its start.
+    fn from(path: PathBuf) -> Self {
+        ClipSource::Audio {
+            path,
+            offset: TimeDuration::ZERO,
+        }
+    }
+}
+
+impl From<&Path> for ClipSource {
+    fn from(path: &Path) -> Self {
+        path.to_path_buf().into()
+    }
+}
+
+impl From<&str> for ClipSource {
+    fn from(path: &str) -> Self {
+        PathBuf::from(path).into()
+    }
+}
+
+impl From<String> for ClipSource {
+    fn from(path: String) -> Self {
+        PathBuf::from(path).into()
+    }
+}
+
+impl From<Vec<MidiNote>> for ClipSource {
+    fn from(notes: Vec<MidiNote>) -> Self {
+        ClipSource::Midi { notes }
+    }
+}
+
 /// A clip on a track: a placed region of some [`ClipSource`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct Clip {
@@ -72,6 +106,9 @@ pub struct Clip {
     pub fade_in: TimeDuration,
     /// Fade-out length (`0` for none).
     pub fade_out: TimeDuration,
+    /// Archived clips stay in the session with their place and audio but
+    /// are not rendered and do not count toward a track's end.
+    pub archived: bool,
 }
 
 impl Clip {
@@ -107,6 +144,7 @@ impl Clip {
             muted: false,
             fade_in: TimeDuration::ZERO,
             fade_out: TimeDuration::ZERO,
+            archived: false,
         })
     }
 
@@ -387,10 +425,11 @@ impl Track {
         self.clips.iter().filter(move |i| i.contains(position))
     }
 
-    /// End of the last clip, or zero for an empty track.
+    /// End of the last clip that is not archived, or zero for an empty track.
     pub fn end(&self) -> TimePosition {
         self.clips
             .iter()
+            .filter(|c| !c.archived)
             .map(Clip::end)
             .max()
             .unwrap_or(TimePosition::ZERO)

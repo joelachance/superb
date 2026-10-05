@@ -20,7 +20,7 @@ use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
 use crate::primitives::io::live::EngineCommand;
 use crate::primitives::session::Input;
-use crate::primitives::{ClipId, Result, SuperbError, TimeDuration, TimePosition, TrackId};
+use crate::primitives::{ClipId, Result, SuperbError, TimePosition, TrackId};
 use crate::session;
 use crate::session::Session;
 use crate::transport;
@@ -250,8 +250,8 @@ pub fn collect(session: &mut Session) -> usize {
 /// Made of: `EngineHandle::send(Stop)` → drop the input stream →
 /// [`steps::collect`] or `Collector::finish` → the planes become one
 /// buffer → per track, a name no cache entry uses (`vox 1`) →
-/// `AudioCache::insert_shared` → [`session::add_audio_clip`], inside one
-/// undo group; rebuilds the mixer so the clips play back on their strips.
+/// `AudioCache::insert_shared` → [`clip::add`](crate::clip::add), inside
+/// one undo group; rebuilds the mixer so the clips play back on their strips.
 pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     let recording = session
         .recording
@@ -282,7 +282,6 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     if audio.frames() == 0 {
         return Ok(Vec::new());
     }
-    let length = TimeDuration::from_samples(audio.frames() as i64);
     let whole = Arc::new(audio);
     session.history.begin_group("Record");
     let mut clips = Vec::with_capacity(tracks.len());
@@ -299,7 +298,7 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
             Some(input) => Arc::new(steps::select_input(&whole, input)),
         };
         session.cache.insert_shared(&name, audio);
-        match steps::place_clip(session, *track, &name, punch_in, length) {
+        match crate::clip::add(session, *track, name.as_str(), punch_in) {
             Ok(clip) => clips.push(clip),
             Err(e) => {
                 session.history.cancel_group(&mut session.document)?;
@@ -448,19 +447,6 @@ pub mod steps {
             n += 1;
         }
     }
-
-    /// Places a clip of cached audio on `track`.
-    ///
-    /// Made of: [`session::add_audio_clip`].
-    pub(crate) fn place_clip(
-        session: &mut Session,
-        track: TrackId,
-        audio: &str,
-        start: TimePosition,
-        length: TimeDuration,
-    ) -> Result<ClipId> {
-        crate::session::add_audio_clip(session, track, audio, start, length)
-    }
 }
 
 #[cfg(test)]
@@ -468,7 +454,7 @@ mod tests {
     use super::*;
     use crate::primitives::io::capture::capture_queue;
     use crate::primitives::session::TrackKind;
-    use crate::primitives::SampleRate;
+    use crate::primitives::{SampleRate, TimeDuration};
     use crate::track;
     use crate::transport;
 

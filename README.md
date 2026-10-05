@@ -15,8 +15,8 @@ The crate is organised so you always know what a call will do.
 
 **Flows** are top-level modules named after the things you work with and
 the tasks you do. Each one is a set of free functions that take a
-`Session` and do the whole job: `session`, `track`, `transport`, `send`,
-`midi`, `record`, `export`, `devices`. Every flow function
+`Session` and do the whole job: `session`, `track`, `clip`, `transport`,
+`send`, `midi`, `record`, `export`, `devices`. Every flow function
 documents the primitive calls it is *made of*, so when one does not do
 exactly what you want, you call those primitives yourself. Nothing is
 hidden behind an object; the `Session` is a plain struct with public
@@ -42,8 +42,9 @@ They know nothing about flows or the `Session`.
 
 | flow | what it does | doc |
 |---|---|---|
-| `session` | create, open and save a session; clips, markers, tempo and loop; undo and redo; the engine side in `session::steps` | [session.md](docs/flows/session.md) |
+| `session` | create, open and save a session; markers, tempo and loop; undo and redo; the engine side in `session::steps` | [session.md](docs/flows/session.md) |
 | `track` | add, remove, rename; a track's state: mute, solo, arm, monitor, input, volume, pan, route; meters | [track.md](docs/flows/track.md) |
+| `clip` | audio or MIDI on a track: add (length inferred), move, archive, restore | [clip.md](docs/flows/clip.md) |
 | `transport` | start, stop, seek, rewind, loop; where the playhead is | [transport.md](docs/flows/transport.md) |
 | `send` | a copy of a track into a bus: add, remove, level, on/off | [send.md](docs/flows/send.md) |
 | `midi` | send notes, connect a keyboard | [midi.md](docs/flows/midi.md) |
@@ -60,7 +61,7 @@ new to you, start with [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md).
 
 ```rust
 use superb::prelude::*;
-use superb::{session, track, transport};
+use superb::{clip, session, track, transport};
 
 let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
 let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
@@ -69,7 +70,7 @@ let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
 let mut tone = PlanarBuffer::new(2, 48_000);
 tone.fill(0.25);
 session.cache.insert("tone.wav", tone);
-session::add_audio_clip(&mut session, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(48_000))?;
+clip::add(&mut session, lead, "tone.wav", TimePosition::ZERO)?;     // as long as the audio
 track::volume(&mut session, lead, -6.0)?;
 
 transport::start(&mut session)?;                                   // builds the mixer, starts playing
@@ -82,7 +83,7 @@ unless hardware is the point:
 
 ```sh
 cargo test                                     # the whole suite, no audio hardware needed
-cargo run --example new_session                # session and track: clips, undo, save and open
+cargo run --example new_session                # session, track, clip: undo, save and open
 cargo run --example play_session               # transport: start, seek, loop, offline blocks
 cargo run --example mix_session                # track and send: faders, a bus, sends, meters
 cargo run --example midi_keys                  # midi: notes into a monitoring track

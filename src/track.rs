@@ -195,7 +195,7 @@ pub fn peak(session: &Session, track: TrackId) -> Option<[f32; 2]> {
 mod tests {
     use super::*;
     use crate::primitives::buffers::PlanarBuffer;
-    use crate::primitives::{SampleRate, TimeDuration, TimePosition};
+    use crate::primitives::{SampleRate, TimePosition};
     use crate::{session, transport};
 
     #[test]
@@ -205,14 +205,7 @@ mod tests {
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);
         session.cache.insert("tone.wav", tone);
-        session::add_audio_clip(
-            &mut session,
-            vox,
-            "tone.wav",
-            TimePosition::ZERO,
-            TimeDuration::from_samples(4_000),
-        )
-        .unwrap();
+        crate::clip::add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         assert!(peak(&session, vox).is_none(), "no mixer yet");
         transport::start(&mut session).unwrap();
         assert!(peak(&session, TrackId::from_raw(99)).is_none());

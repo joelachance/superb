@@ -79,7 +79,7 @@ mod tests {
     use super::*;
     use crate::primitives::buffers::PlanarBuffer;
     use crate::primitives::session::TrackKind;
-    use crate::primitives::{SampleRate, TimeDuration, TimePosition};
+    use crate::primitives::{SampleRate, TimePosition};
     use crate::session;
     use crate::track;
     use crate::transport;
@@ -93,14 +93,7 @@ mod tests {
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);
         session.cache.insert("tone.wav", tone);
-        session::add_audio_clip(
-            &mut session,
-            vox,
-            "tone.wav",
-            TimePosition::ZERO,
-            TimeDuration::from_samples(4_000),
-        )
-        .unwrap();
+        crate::clip::add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         // Balance pan law on every strip keeps the arithmetic obvious.
         session::steps::rebuild(&mut session).unwrap();
         (session, vox)

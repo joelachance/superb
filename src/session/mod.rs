@@ -14,18 +14,14 @@
 
 pub mod steps;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::primitives::io::live::EngineCommand;
-use crate::primitives::session::commands::{
-    AddClip, AddMarker, MoveClip, RemoveClip, SetLoopRange, SetTempo,
-};
-use crate::primitives::session::{Clip, ClipSource, Document, Marker, MidiNote};
+use crate::primitives::session::commands::{AddMarker, SetLoopRange, SetTempo};
+use crate::primitives::session::{Document, Marker};
 use crate::primitives::transport::LoopRange;
 use crate::primitives::undo::Command;
-use crate::primitives::{
-    BeatPosition, ClipId, MarkerId, Result, SampleRate, TimeDuration, TimePosition, TrackId,
-};
+use crate::primitives::{BeatPosition, MarkerId, Result, SampleRate, TimePosition, TrackId};
 
 use std::sync::Arc;
 
@@ -202,70 +198,6 @@ pub fn is_saved(session: &Session) -> bool {
     session.history.is_clean()
 }
 
-/// Places audio from the cache on a track. `take` is the key the audio was
-/// cached under (see [`Session::cache`]); the clip plays from the start of it.
-///
-/// Made of: `Document::allocate_clip_id` → `Clip::with_id` → push `AddClip`.
-pub fn add_audio_clip(
-    session: &mut Session,
-    track: TrackId,
-    take: impl Into<PathBuf>,
-    start: TimePosition,
-    length: TimeDuration,
-) -> Result<ClipId> {
-    let take = take.into();
-    let name = take
-        .file_stem()
-        .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "clip".into());
-    let id = session.document.allocate_clip_id();
-    let clip = Clip::with_id(
-        id,
-        name,
-        start,
-        length,
-        ClipSource::Audio {
-            path: take,
-            offset: TimeDuration::ZERO,
-        },
-    )?;
-    structural(session, AddClip::new(track, clip))?;
-    Ok(id)
-}
-
-/// Places a MIDI clip holding `notes` (beats relative to the clip start).
-///
-/// Made of: `Document::allocate_clip_id` → `Clip::with_id` → push `AddClip`.
-pub fn add_midi_clip(
-    session: &mut Session,
-    track: TrackId,
-    name: &str,
-    start: TimePosition,
-    length: TimeDuration,
-    notes: Vec<MidiNote>,
-) -> Result<ClipId> {
-    let id = session.document.allocate_clip_id();
-    let clip = Clip::with_id(id, name, start, length, ClipSource::Midi { notes })?;
-    structural(session, AddClip::new(track, clip))?;
-    Ok(id)
-}
-
-/// Moves a clip to start at `start`. Moves of the same clip within
-/// [`Session::COALESCE_WINDOW`] of each other are one undo step, so a drag
-/// undoes in one go.
-///
-/// Made of: push `MoveClip`.
-pub fn move_clip(session: &mut Session, clip: ClipId, start: TimePosition) -> Result<()> {
-    structural(session, MoveClip::new(clip, start))
-}
-
-/// Removes a clip.
-///
-/// Made of: push `RemoveClip`.
-pub fn remove_clip(session: &mut Session, clip: ClipId) -> Result<()> {
-    structural(session, RemoveClip::new(clip))
-}
-
 /// Drops a named marker on the timeline.
 ///
 /// Made of: `Document::allocate_marker_id` → `Marker::with_id` → push `AddMarker`.
@@ -293,7 +225,7 @@ pub fn set_loop(session: &mut Session, range: Option<LoopRange>) -> Result<()> {
 
 /// Reverts the last edit. Returns `false` if there was nothing to undo.
 ///
-/// Made of: `UndoStack::undo`; the console is marked for a rebuild because the
+/// Made of: `UndoStack::undo`; the mixer is marked for a rebuild because the
 /// undone edit may have been structural.
 pub fn undo(session: &mut Session) -> Result<bool> {
     let done = session.history.undo(&mut session.document)?;
@@ -314,24 +246,7 @@ pub fn redo(session: &mut Session) -> Result<bool> {
     Ok(done)
 }
 
-/// Decodes an audio file, converts it to the document's sample rate, caches it
-/// and places a clip of its full length at `at`.
-///
-/// Made of: `AudioCache::load` → [`add_audio_clip`].
-#[cfg(feature = "files")]
-pub fn import_audio(
-    session: &mut Session,
-    track: TrackId,
-    path: impl AsRef<Path>,
-    at: TimePosition,
-) -> Result<ClipId> {
-    let path = path.as_ref();
-    let audio = session.cache.load(path, session.document.sample_rate())?;
-    let length = TimeDuration::from_samples(audio.frames() as i64);
-    add_audio_clip(session, track, path.to_path_buf(), at, length)
-}
-
-/// Pushes an edit that does not change the console's structure.
+/// Pushes an edit that does not change the mixer's structure.
 pub(crate) fn edit(session: &mut Session, command: impl Command<Document>) -> Result<()> {
     session.history.push(&mut session.document, command)
 }
@@ -373,9 +288,11 @@ pub(crate) fn set_state(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::primitives::buffers::PlanarBuffer;
     use crate::primitives::session::commands;
-    use crate::primitives::session::TrackKind;
-    use crate::track;
+    use crate::primitives::session::{ClipSource, MidiNote, TrackKind};
+    use crate::primitives::TimeDuration;
+    use crate::{clip, track};
     use core::time::Duration;
 
     const R: SampleRate = SampleRate::HZ_48K;
@@ -391,17 +308,23 @@ mod tests {
         assert!(session.needs_rebuild);
         track::rename(&mut session, vox, "vocals").unwrap();
         assert_eq!(session.document.track(vox).unwrap().name, "vocals");
-        let clip = add_audio_clip(
+        session
+            .cache
+            .insert("takes/take 1.wav", PlanarBuffer::new(2, 50));
+        let clip = clip::add(
             &mut session,
             vox,
             "takes/take 1.wav",
             TimePosition::from_samples(100),
-            TimeDuration::from_samples(50),
         )
         .unwrap();
         assert_eq!(session.document.clip(clip).unwrap().name, "take 1");
-        move_clip(&mut session, clip, TimePosition::from_samples(200)).unwrap();
-        move_clip(&mut session, clip, TimePosition::from_samples(300)).unwrap();
+        assert_eq!(
+            session.document.clip(clip).unwrap().length(),
+            TimeDuration::from_samples(50)
+        );
+        clip::move_to(&mut session, clip, TimePosition::from_samples(200)).unwrap();
+        clip::move_to(&mut session, clip, TimePosition::from_samples(300)).unwrap();
         session.history.seal(); // "mouse up"; a pause would do the same
         let marker = add_marker(&mut session, "verse", TimePosition::ZERO).unwrap();
         set_tempo(&mut session, 90.0).unwrap();
@@ -419,8 +342,8 @@ mod tests {
         assert_eq!(session.document.clip(clip).unwrap().start().samples(), 100);
         assert!(redo(&mut session).unwrap());
         assert_eq!(session.document.clip(clip).unwrap().start().samples(), 300);
-        remove_clip(&mut session, clip).unwrap();
-        assert!(session.document.clip(clip).is_err());
+        clip::archive(&mut session, clip).unwrap();
+        assert!(session.document.clip(clip).unwrap().archived);
         track::remove(&mut session, vox).unwrap();
         assert!(session.document.track(vox).is_err());
         while undo(&mut session).unwrap() {}
@@ -476,15 +399,7 @@ mod tests {
             velocity: 100,
             channel: 0,
         }];
-        let clip = add_midi_clip(
-            &mut session,
-            keys,
-            "chord",
-            TimePosition::ZERO,
-            TimeDuration::from_samples(48_000),
-            notes,
-        )
-        .unwrap();
+        let clip = clip::add(&mut session, keys, notes.clone(), TimePosition::ZERO).unwrap();
         assert!(matches!(
             session.document.clip(clip).unwrap().source,
             ClipSource::Midi { .. }
@@ -509,15 +424,7 @@ mod tests {
         // Bus tracks refuse clips; the error comes back and nothing is recorded.
         let bus = track::add(&mut session, "bus", TrackKind::Bus).unwrap();
         let before = session.history.undo_len();
-        assert!(add_midi_clip(
-            &mut session,
-            bus,
-            "x",
-            TimePosition::ZERO,
-            TimeDuration::from_samples(1),
-            Vec::new()
-        )
-        .is_err());
+        assert!(clip::add(&mut session, bus, notes, TimePosition::ZERO).is_err());
         assert_eq!(session.history.undo_len(), before);
     }
 

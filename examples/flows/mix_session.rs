@@ -15,7 +15,7 @@
 //! ```
 
 use superb::prelude::*;
-use superb::{send, session, track, transport};
+use superb::{clip, send, session, track, transport};
 
 /// Renders four blocks and returns the peak of the last one, so ramps have
 /// settled: what a meter would show.
@@ -38,13 +38,7 @@ fn main() -> Result<()> {
     tone.fill(0.25);
     session.cache.insert("tone.wav", tone);
     for t in [vox, gtr] {
-        session::add_audio_clip(
-            &mut session,
-            t,
-            "tone.wav",
-            TimePosition::ZERO,
-            TimeDuration::from_seconds(4.0, rate),
-        )?;
+        clip::add(&mut session, t, "tone.wav", TimePosition::ZERO)?;
     }
     transport::start(&mut session)?;
     // Strips default to a -3 dB centre pan law; use the plain "balance" law

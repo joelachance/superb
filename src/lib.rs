@@ -6,8 +6,8 @@
 //! The crate has two tiers, so you always know what a call will do:
 //!
 //! * **Flows** are top-level modules named after everyday tasks:
-//!   [`session`], [`track`], [`transport`], [`send`], [`midi`], [`record`],
-//!   [`export`] and [`devices`]. Each is a set of free functions over a
+//!   [`session`], [`track`], [`clip`], [`transport`], [`send`], [`midi`],
+//!   [`record`], [`export`] and [`devices`]. Each is a set of free functions over a
 //!   [`Session`] (the state of a document in progress), and every function's docs
 //!   end with a "Made of:" list of the primitive calls it performs, so you
 //!   can call those yourself when the flow is not quite what you want.
@@ -26,7 +26,7 @@
 //!
 //! ```
 //! use superb::prelude::*;
-//! use superb::{session, track, transport};
+//! use superb::{clip, session, track, transport};
 //!
 //! let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
 //! let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
@@ -35,7 +35,7 @@
 //! let mut tone = PlanarBuffer::new(2, 4_800);
 //! tone.fill(0.25);
 //! session.cache.insert("tone.wav", tone);
-//! session::add_audio_clip(&mut session, lead, "tone.wav", TimePosition::ZERO, TimeDuration::from_samples(4_800))?;
+//! clip::add(&mut session, lead, "tone.wav", TimePosition::ZERO)?;   // as long as the audio
 //! track::volume(&mut session, lead, -6.0)?;
 //!
 //! transport::start(&mut session)?;                    // builds the mixer, starts playing
@@ -67,6 +67,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![warn(missing_docs)]
 
+pub mod clip;
 pub mod devices;
 pub mod export;
 pub mod midi;

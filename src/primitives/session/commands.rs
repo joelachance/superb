@@ -572,6 +572,49 @@ impl Command<Document> for RemoveClip {
     }
 }
 
+/// Archives a clip (keeps it, silent and off the timeline's end) or
+/// restores it. One undo step each; never coalesces, so two quick flips
+/// stay two steps.
+pub struct ArchiveClip {
+    id: ClipId,
+    archived: bool,
+    previous: Option<bool>,
+}
+
+impl ArchiveClip {
+    /// `archived = true` archives, `false` restores.
+    pub fn new(id: ClipId, archived: bool) -> Self {
+        Self {
+            id,
+            archived,
+            previous: None,
+        }
+    }
+}
+
+impl Command<Document> for ArchiveClip {
+    fn label(&self) -> &str {
+        if self.archived {
+            "Archive clip"
+        } else {
+            "Restore clip"
+        }
+    }
+
+    fn apply(&mut self, document: &mut Document) -> Result<()> {
+        let clip = document.clip_mut(self.id)?;
+        self.previous = Some(clip.archived);
+        clip.archived = self.archived;
+        Ok(())
+    }
+
+    fn revert(&mut self, document: &mut Document) -> Result<()> {
+        let previous = self.previous.ok_or_else(not_applied)?;
+        document.clip_mut(self.id)?.archived = previous;
+        Ok(())
+    }
+}
+
 /// Moves a clip in time and optionally to another track. Coalesces.
 pub struct MoveClip {
     id: ClipId,

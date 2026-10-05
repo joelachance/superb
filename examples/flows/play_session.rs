@@ -16,7 +16,7 @@
 //! ```
 
 use superb::prelude::*;
-use superb::{session, track, transport};
+use superb::{clip, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
@@ -33,14 +33,13 @@ fn main() -> Result<()> {
         }
     }
     session.cache.insert("pluck.wav", pluck);
-    // Three plucks, one per half second.
+    // Three plucks, one per half second; each clip is as long as the audio.
     for n in 0..3 {
-        session::add_audio_clip(
+        clip::add(
             &mut session,
             vox,
             "pluck.wav",
             TimePosition::from_seconds(0.5 * n as f64, rate),
-            TimeDuration::from_samples(frames as i64),
         )?;
     }
 

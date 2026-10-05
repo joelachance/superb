@@ -7,8 +7,9 @@ This page covers what they share; each flow has its own note in
 
 | flow | doc |
 |---|---|
-| `session` — new, open, save; clips, markers, tempo, loop range; undo; the engine side in `session::steps` | [session.md](flows/session.md) |
+| `session` — new, open, save; markers, tempo, loop range; undo; the engine side in `session::steps` | [session.md](flows/session.md) |
 | `track` — add, remove, rename; a track's state: mute, solo, arm, monitor, input, volume, pan, route; meters | [track.md](flows/track.md) |
+| `clip` — audio or MIDI on a track: add, move, archive, restore | [clip.md](flows/clip.md) |
 | `transport` — start, stop, seek, rewind, loop; where the playhead is | [transport.md](flows/transport.md) |
 | `send` — a copy of a track into a bus: add, remove, level, on/off | [send.md](flows/send.md) |
 | `midi` — send notes, connect a keyboard | [midi.md](flows/midi.md) |

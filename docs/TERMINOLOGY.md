@@ -25,8 +25,9 @@ a musician would use.
 
 | Prefer saying | Module | What it is in a DAW |
 |---|---|---|
-| The session | `session` | New, open, save; clips, markers, tempo; undo; the engine side in `session::steps` |
+| The session | `session` | New, open, save; markers, tempo; undo; the engine side in `session::steps` |
 | A track and its state | `track` | Add, remove, rename; mute, solo, arm, monitor, input, volume, pan, route; meters |
+| A clip | `clip` | Audio or MIDI on a track: add, move, archive, restore |
 | The transport | `transport` | Start, stop, locate, loop; where the playhead is |
 | A send | `send` | A copy of a track into a bus: add, remove, level, on/off |
 | MIDI, the keyboard | `midi` | Playing notes, connecting a controller |
@@ -50,6 +51,7 @@ column is what not to say in code, docs or UI text.
 | sync (reserved: aligning to a clock) | anything else |
 | recording (in progress) and clip (the result) | take |
 | clip | item, region, event |
+| archive (a clip; it stays, silent) | delete, remove (clips are never deleted) |
 | strip | channel (a strip's channel count is something else) |
 | insert | effect slot, plugin slot |
 | state (mute, solo, arm, monitor, bypass, send on/off) | switch, toggle, flag |

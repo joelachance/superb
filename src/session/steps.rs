@@ -211,7 +211,7 @@ fn add_sends(
 /// One source node per clip that can sound: a [`BufferPlayerNode`] for
 /// audio the cache holds (a clip whose audio is missing plays as silence),
 /// a [`ScheduledSynthNode`] for MIDI notes converted through the tempo map.
-/// Muted and empty clips get nothing.
+/// Muted, archived and empty clips get nothing.
 fn add_clip_players(
     document: &Document,
     mixer: &mut Mixer,
@@ -225,7 +225,7 @@ fn add_clip_players(
             continue;
         };
         for clip in track.clips() {
-            if clip.muted {
+            if clip.muted || clip.archived {
                 continue;
             }
             let node = match &clip.source {
@@ -353,14 +353,7 @@ mod tests {
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
         session.cache.insert("tone.wav", tone);
-        session::add_audio_clip(
-            &mut session,
-            vox,
-            "tone.wav",
-            TimePosition::ZERO,
-            TimeDuration::from_samples(400),
-        )
-        .unwrap();
+        crate::clip::add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         (session, vox)
     }
 
