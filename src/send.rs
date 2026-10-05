@@ -1,36 +1,28 @@
-//! Shaping the sound: faders, pan, mute and solo, buses and sends, meters.
+//! Sends: a copy of a track into a bus.
 //!
-//! A level change takes two paths at once: into the document through the
-//! undo history, so it is saved and reversible, and onto the live strip's
-//! atomics, so it is heard on the next block without a rebuild. Switches
-//! (mute, solo, send on/off) take the same two paths but skip the history:
-//! they are saved with the document, not undone. Changing the console's
-//! shape (a new bus, a new send, a new route) is a structural edit like any
-//! other and marks the session for a [`session::steps::rebuild`](crate::session::steps::rebuild).
+//! A send taps a track's signal before or after its fader and feeds a bus
+//! (a track of kind `Bus`, added with [`track::add`](crate::track::add);
+//! route a whole track into one with [`track::route`](crate::track::route)).
+//! Adding or removing a send changes the mixer's shape, so it rebuilds. A
+//! send's level is an edit: into the document through the undo history,
+//! coalescing, and onto the live send at once. Whether a send is on is
+//! state: saved, heard at the next block, never an undo step.
 //!
 //! Made of `superb::primitives::session::commands` (the document side) and
-//! `superb::primitives::mixer` (`StripParams`, `SendParams`: the live side).
+//! `superb::primitives::mixer::SendParams` (the live side).
 
 use crate::primitives::mixer::SendTap;
 use crate::primitives::session::commands::{self, AddSend, RemoveSend};
-use crate::primitives::session::{TrackKind, TrackSend};
+use crate::primitives::session::TrackSend;
 use crate::primitives::{Result, SendId, TrackId};
 use crate::session::Session;
-
-/// Adds a bus. Route tracks into it with [`track::route`](crate::track::route)
-/// and feed it with [`add_send`].
-///
-/// Made of: [`track::add`](crate::track::add) with `TrackKind::Bus`.
-pub fn add_bus(session: &mut Session, name: &str) -> Result<TrackId> {
-    crate::track::add(session, name, TrackKind::Bus)
-}
 
 /// Adds a send from a track into a bus at `level_db`, tapped before or
 /// after the fader (`SendTap::PreFader` / `SendTap::PostFader`).
 ///
-/// Made of: `Document::allocate_send_id` → `TrackSend::with_id` → push
-/// `AddSend`; marks the session for a rebuild.
-pub fn add_send(
+/// Made of: `Document::allocate_send_id` → `TrackSend::with_id` → `AddSend`
+/// through `session::structural`; rebuilds the mixer.
+pub fn add(
     session: &mut Session,
     track: TrackId,
     bus: TrackId,
@@ -42,33 +34,24 @@ pub fn add_send(
     if tap == SendTap::PreFader {
         send = send.pre_fader();
     }
-    session
-        .history
-        .push(&mut session.document, AddSend::new(track, send))?;
-    session.needs_rebuild = true;
+    crate::session::structural(session, AddSend::new(track, send))?;
     Ok(id)
 }
 
 /// Removes a send.
 ///
-/// Made of: push `RemoveSend`; marks the session for a rebuild.
-pub fn remove_send(session: &mut Session, send: SendId) -> Result<()> {
-    session
-        .history
-        .push(&mut session.document, RemoveSend::new(send))?;
-    session.needs_rebuild = true;
-    Ok(())
+/// Made of: `RemoveSend` through `session::structural`; rebuilds the mixer.
+pub fn remove(session: &mut Session, send: SendId) -> Result<()> {
+    crate::session::structural(session, RemoveSend::new(send))
 }
 
 /// Sets a send's level in dB. Moves within [`Session::COALESCE_WINDOW`] of
 /// each other are one undo step.
 ///
-/// Made of: push `set_send_level_db` → `SendParams::set_level_db` on the
-/// live send.
+/// Made of: `set_send_level_db` through `session::edit` →
+/// `SendParams::set_level_db` on the live send.
 pub fn level(session: &mut Session, send: SendId, db: f32) -> Result<()> {
-    session
-        .history
-        .push(&mut session.document, commands::set_send_level_db(send, db))?;
+    crate::session::edit(session, commands::set_send_level_db(send, db))?;
     if let Some(live) = session.mixer.send(send) {
         live.set_level_db(db);
     }
@@ -91,19 +74,11 @@ pub fn enable(session: &mut Session, send: SendId, on: bool) -> Result<()> {
     Ok(())
 }
 
-/// Reads and resets a strip's peak meter: the loudest sample per channel
-/// since the last call, as linear amplitude. `None` before the first rebuild.
-///
-/// Made of: `StripParams::take_peak` for channels 0 and 1.
-pub fn peak(session: &Session, track: TrackId) -> Option<[f32; 2]> {
-    let strip = session.mixer.strip(track)?;
-    Some([strip.take_peak(0), strip.take_peak(1)])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::primitives::buffers::PlanarBuffer;
+    use crate::primitives::session::TrackKind;
     use crate::primitives::{SampleRate, TimeDuration, TimePosition};
     use crate::session;
     use crate::track;
@@ -203,9 +178,9 @@ mod tests {
         balance_all(&session);
         let direct = settled(&mut session);
 
-        let room = add_bus(&mut session, "room").unwrap();
+        let room = track::add(&mut session, "room", TrackKind::Bus).unwrap();
         assert!(session.needs_rebuild);
-        let send = add_send(&mut session, vox, room, 0.0, SendTap::PostFader).unwrap();
+        let send = add(&mut session, vox, room, 0.0, SendTap::PostFader).unwrap();
         assert_eq!(session.document.send(send).unwrap().bus(), room);
         assert!(!session.document.send(send).unwrap().pre_fader);
         session::steps::rebuild(&mut session).unwrap();
@@ -238,23 +213,11 @@ mod tests {
             "a bus cannot feed itself"
         );
 
-        remove_send(&mut session, send).unwrap();
+        remove(&mut session, send).unwrap();
         assert!(session.document.send(send).is_err());
         track::route(&mut session, vox, None).unwrap();
         session::steps::rebuild(&mut session).unwrap();
         balance_all(&session);
         assert!((settled(&mut session) - direct).abs() < 1e-3);
-    }
-
-    #[test]
-    fn meters_report_and_reset() {
-        let (mut session, vox) = tone_rig();
-        assert!(peak(&session, TrackId::from_raw(99)).is_none());
-        transport::start(&mut session).unwrap();
-        session::steps::render_blocks(&mut session, 4).unwrap();
-        let [l, r] = peak(&session, vox).unwrap();
-        assert!(l > 0.3 && r > 0.3, "{l} {r}");
-        // Reading resets the hold; nothing rendered since, so zero.
-        assert_eq!(peak(&session, vox).unwrap(), [0.0, 0.0]);
     }
 }

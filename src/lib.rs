@@ -6,7 +6,7 @@
 //! The crate has two tiers, so you always know what a call will do:
 //!
 //! * **Flows** are top-level modules named after everyday tasks:
-//!   [`session`], [`track`], [`transport`], [`mix`], [`midi`], [`record`],
+//!   [`session`], [`track`], [`transport`], [`send`], [`midi`], [`record`],
 //!   [`export`] and [`devices`]. Each is a set of free functions over a
 //!   [`Session`] (the state of a document in progress), and every function's docs
 //!   end with a "Made of:" list of the primitive calls it performs, so you
@@ -70,9 +70,9 @@
 pub mod devices;
 pub mod export;
 pub mod midi;
-pub mod mix;
 pub mod primitives;
 pub mod record;
+pub mod send;
 pub mod session;
 pub mod track;
 pub mod transport;

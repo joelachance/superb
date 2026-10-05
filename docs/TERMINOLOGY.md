@@ -26,12 +26,11 @@ a musician would use.
 | Prefer saying | Module | What it is in a DAW |
 |---|---|---|
 | The session | `session` | New, open, save; clips, markers, tempo; undo; the engine side in `session::steps` |
-| A track and its state | `track` | Add, remove, rename; mute, solo, arm, monitor, volume, pan, route |
+| A track and its state | `track` | Add, remove, rename; mute, solo, arm, monitor, input, volume, pan, route; meters |
 | The transport | `transport` | Start, stop, locate, loop; where the playhead is |
-| The mix | `mix` | Buses, sends, meters |
+| A send | `send` | A copy of a track into a bus: add, remove, level, on/off |
 | MIDI, the keyboard | `midi` | Playing notes, connecting a controller |
 | Recording | `record` | Start, stop; a clip on every armed track |
-| Effects and instruments | `plugins` | Insert a plugin, turn its knobs, bypass it |
 | Bounce, export, mixdown | `export` | Rendering the session to a file |
 | Hardware, audio interface | `devices` | Which speakers, mics and MIDI ports exist |
 | The session (the thing you open) | `Session` | The document plus its history, audio in memory and the running engine |

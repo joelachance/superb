@@ -1,4 +1,5 @@
-//! `mix`: faders, pan, mute and solo, a reverb-style bus with sends, meters.
+//! `track` and `send`: faders, pan, mute and solo, a reverb-style bus with
+//! sends, meters.
 //!
 //! What you'll learn:
 //! - Level changes go two places at once: the document (undoable) and the live
@@ -14,7 +15,7 @@
 //! ```
 
 use superb::prelude::*;
-use superb::{mix, session, track, transport};
+use superb::{send, session, track, transport};
 
 /// Renders four blocks and returns the peak of the last one, so ramps have
 /// settled: what a meter would show.
@@ -91,12 +92,13 @@ fn main() -> Result<()> {
     track::solo(&mut session, gtr, false)?;
 
     // A bus fed by sends: the classic reverb return, minus the reverb.
-    // Adding the bus and the sends changes the console's shape, so these
-    // mark the session for a rebuild; `start`/`drive` rebuild for you, or call
-    // `session::steps::rebuild` yourself to control when the swap happens.
-    let room = mix::add_bus(&mut session, "room")?;
-    let vox_send = mix::add_send(&mut session, vox, room, -6.0206, SendTap::PostFader)?;
-    let _gtr_send = mix::add_send(&mut session, gtr, room, -6.0206, SendTap::PostFader)?;
+    // Adding the bus and the sends changes the mixer's shape, so these
+    // mark the session for a rebuild; `transport::start` and `render_blocks`
+    // rebuild for you, or call `session::steps::rebuild` yourself to control
+    // when the swap happens.
+    let room = track::add(&mut session, "room", TrackKind::Bus)?;
+    let vox_send = send::add(&mut session, vox, room, -6.0206, SendTap::PostFader)?;
+    let _gtr_send = send::add(&mut session, gtr, room, -6.0206, SendTap::PostFader)?;
     println!("needs rebuild: {}", session.needs_rebuild);
     session::steps::rebuild(&mut session)?;
     for (_, strip) in &session.mixer.strips {
@@ -106,9 +108,9 @@ fn main() -> Result<()> {
         "plus bus with two sends: {:.3}  (tracks + half of each)",
         level(&mut session)?
     );
-    mix::level(&mut session, vox_send, -12.04)?;
+    send::level(&mut session, vox_send, -12.04)?;
     println!("vox send at -12 dB:      {:.3}", level(&mut session)?);
-    mix::enable(&mut session, vox_send, false)?;
+    send::enable(&mut session, vox_send, false)?;
     println!("vox send off:            {:.3}", level(&mut session)?);
 
     // Route gtr *through* the bus instead of sending a copy, and turn the
@@ -122,12 +124,12 @@ fn main() -> Result<()> {
     println!("gtr via bus at -6 dB:    {:.3}", level(&mut session)?);
 
     // Meters: loudest sample per channel since the last read.
-    if let Some([l, r]) = mix::peak(&session, room) {
+    if let Some([l, r]) = track::peak(&session, room) {
         println!("room bus meter:          L {l:.3}  R {r:.3}");
     }
 
     // Everything above is in the document. Undo it all and the document is back
-    // to two tracks at 0 dB; the console follows on the next rebuild.
+    // to two tracks at 0 dB; the mixer follows on the next rebuild.
     while session.history.undo_len() > 4 {
         // 4 = the two tracks and two clips we started with
         session::undo(&mut session)?;

@@ -1,7 +1,7 @@
-//! Tracks: add them, name them, and set their state.
+//! Tracks: add them, name them, set their state, read their meters.
 //!
-//! A track's *state* (mute, solo, arm, monitor, volume, pan, where its
-//! output goes) is what the strip shows. Switches (mute, solo, arm,
+//! A track's *state* (mute, solo, arm, monitor, input, volume, pan, where
+//! its output goes) is what the strip shows. Switches (mute, solo, arm,
 //! monitor) are saved with the session, heard at the next block and never
 //! undo steps. Volume and pan are edits: they coalesce in the undo history
 //! and reach the live strip at once. Adding, removing and routing change
@@ -179,4 +179,47 @@ pub fn input(session: &mut Session, track: TrackId, input: Option<Input>) -> Res
 /// Made of: push `SetTrackOutput`; rebuilds the mixer.
 pub fn route(session: &mut Session, track: TrackId, bus: Option<TrackId>) -> Result<()> {
     crate::session::structural(session, SetTrackOutput::new(track, bus))
+}
+
+/// Reads and resets a track's or bus's peak meter: the loudest sample per
+/// channel since the last call, as linear amplitude. `None` before the
+/// first rebuild.
+///
+/// Made of: `StripParams::take_peak` for channels 0 and 1 on the live strip.
+pub fn peak(session: &Session, track: TrackId) -> Option<[f32; 2]> {
+    let strip = session.mixer.strip(track)?;
+    Some([strip.take_peak(0), strip.take_peak(1)])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::primitives::buffers::PlanarBuffer;
+    use crate::primitives::{SampleRate, TimeDuration, TimePosition};
+    use crate::{session, transport};
+
+    #[test]
+    fn meters_report_and_reset() {
+        let mut session = session::create("meters", SampleRate::HZ_48K, 64).unwrap();
+        let vox = add(&mut session, "vox", TrackKind::Audio).unwrap();
+        let mut tone = PlanarBuffer::new(2, 4_000);
+        tone.fill(0.5);
+        session.cache.insert("tone.wav", tone);
+        session::add_audio_clip(
+            &mut session,
+            vox,
+            "tone.wav",
+            TimePosition::ZERO,
+            TimeDuration::from_samples(4_000),
+        )
+        .unwrap();
+        assert!(peak(&session, vox).is_none(), "no mixer yet");
+        transport::start(&mut session).unwrap();
+        assert!(peak(&session, TrackId::from_raw(99)).is_none());
+        session::steps::render_blocks(&mut session, 4).unwrap();
+        let [l, r] = peak(&session, vox).unwrap();
+        assert!(l > 0.3 && r > 0.3, "{l} {r}");
+        // Reading resets the hold; nothing rendered since, so zero.
+        assert_eq!(peak(&session, vox).unwrap(), [0.0, 0.0]);
+    }
 }

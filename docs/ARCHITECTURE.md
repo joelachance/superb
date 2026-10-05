@@ -15,7 +15,7 @@ and connects them deliberately.
 
 ```text
  flows (free functions over a Session)
- session · track · transport · mix · midi · record · export · devices
+ session · track · transport · send · midi · record · export · devices
  ─────────────────────────────────────────────────────────────────────
  primitives
    document side (UI thread)           engine side (audio thread)

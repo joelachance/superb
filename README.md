@@ -15,8 +15,8 @@ The crate is organised so you always know what a call will do.
 
 **Flows** are top-level modules named after the things you work with and
 the tasks you do. Each one is a set of free functions that take a
-`Session` and do the whole job: `session`, `track`, `transport`, `mix`,
-`midi`, `record`, `plugins`, `export`, `devices`. Every flow function
+`Session` and do the whole job: `session`, `track`, `transport`, `send`,
+`midi`, `record`, `export`, `devices`. Every flow function
 documents the primitive calls it is *made of*, so when one does not do
 exactly what you want, you call those primitives yourself. Nothing is
 hidden behind an object; the `Session` is a plain struct with public
@@ -43,9 +43,9 @@ They know nothing about flows or the `Session`.
 | flow | what it does | doc |
 |---|---|---|
 | `session` | create, open and save a session; clips, markers, tempo and loop; undo and redo; the engine side in `session::steps` | [session.md](docs/flows/session.md) |
-| `track` | add, remove, rename; a track's state: mute, solo, arm, monitor, volume, pan, route | [track.md](docs/flows/track.md) |
+| `track` | add, remove, rename; a track's state: mute, solo, arm, monitor, input, volume, pan, route; meters | [track.md](docs/flows/track.md) |
 | `transport` | start, stop, seek, rewind, loop; where the playhead is | [transport.md](docs/flows/transport.md) |
-| `mix` | buses, sends, meters | [mix.md](docs/flows/mix.md) |
+| `send` | a copy of a track into a bus: add, remove, level, on/off | [send.md](docs/flows/send.md) |
 | `midi` | send notes, connect a keyboard | [midi.md](docs/flows/midi.md) |
 | `record` | start a recording, stop it, get a clip on every armed track | [record.md](docs/flows/record.md) |
 | `export` | render a range or the whole session to WAV, optionally resampled | [export.md](docs/flows/export.md) |
@@ -84,7 +84,7 @@ unless hardware is the point:
 cargo test                                     # the whole suite, no audio hardware needed
 cargo run --example new_session                # session and track: clips, undo, save and open
 cargo run --example play_session               # transport: start, seek, loop, offline blocks
-cargo run --example mix_session                # track state and mix: faders, bus, sends, meters
+cargo run --example mix_session                # track and send: faders, a bus, sends, meters
 cargo run --example midi_keys                  # midi: notes into a monitoring track
 cargo run --example record_take                # record: a recording from a synthetic microphone
 cargo run --example export_session             # export: bounce to WAV

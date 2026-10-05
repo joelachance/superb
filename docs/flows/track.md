@@ -1,6 +1,6 @@
 # track
 
-Tracks: add them, name them, set their state.
+Tracks: add them, name them, set their state, read their meters.
 
 ## Purpose
 
@@ -29,6 +29,7 @@ shape, so they rebuild it.
 | `is_monitoring(session, track)` | | |
 | `input(session, track, Option<Input>)` | state; audio tracks only; which input channel(s) feed the track when it records: `Input::Mono(0)`, `Input::Stereo(0, 1)`, or `None` for everything captured | — |
 | `route(session, track, Some(bus) or None)` | output into a bus or the master; loops refused | one |
+| `peak(session, track) -> Option<[f32; 2]>` | the strip's peak meter, read and reset; `None` before the first rebuild | |
 
 ## Usage
 
@@ -58,9 +59,11 @@ through `session::structural`. `volume` / `pan`: `set_track_volume_db` /
 `TrackState::{mute, solo, arm, monitor, input}` through `session::set_state`,
 then `StripParams::set_mute` / `set_solo` for the first two and a rebuild
 for `monitor`. `route`: `SetTrackOutput` through `session::structural`.
+`peak`: `StripParams::take_peak` for channels 0 and 1.
 
 ## Notes
 
+* Meters hold the peak since the last read on the first two channels.
 * Pan law is a live-strip setting (`StripParams::set_pan_law`), not in the
   document; tracks default to constant power (−3 dB centre), buses to
   balance.

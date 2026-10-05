@@ -88,16 +88,16 @@ exists because its absence cost a rename.
   *advance* moves the playhead, *gain* is a multiplier, *bounce* renders
   to a file. Do not borrow one for something else; TERMINOLOGY lists them.
 * **A flow is named for the thing or the task.** `session`, `track`,
-  `transport`, `midi` and `plugins` are things and share a primitive's
-  name; `mix`, `record`, `export` and `devices` are tasks. State lives
-  with its thing: mute and arm are `track::mute` and `track::arm`, not
-  `mix::` or `record::`. No invented areas.
+  `transport`, `send` and `midi` are things (the first four share a
+  primitive's name); `record`, `export` and `devices` are tasks. State
+  lives with its thing: mute and arm are `track::mute` and `track::arm`,
+  not `record::`. No invented areas.
 * **Verbs are imperative and say what happens.** `start`, `stop`,
   `rebuild`, `bounce`. One verb per action: no `begin` next to `start`. A
   variant gets a suffix on the same verb: `start_from`, `bounce_at_rate`,
   `bounce_session`.
 * **A setter is the noun of what it sets.** `track::volume(s, t, db)`,
-  `track::input(s, t, ch)`, `mix::level(s, send, db)`: no `set_` prefix. Units go in the doc, not the name, when only
+  `track::input(s, t, ch)`, `send::level(s, send, db)`: no `set_` prefix. Units go in the doc, not the name, when only
   one unit exists at that tier (dB everywhere in the flows).
 * **Queries read as what they return.** `is_x` for a bool, a noun for data
   (`info`, `failures`, `params`, `position`). Never a past participle for
@@ -115,8 +115,8 @@ exists because its absence cost a rename.
   offline render in `export`. When two functions do the same thing,
   delete one rather than alias it.
 * **Sugar is welcome when it is a button.** A verb may be one line over
-  a primitive or another verb (`rewind`, `is_rolling`, `add_bus`,
-  `play_note`, `bounce_session`) if a musician would recognise it as a
+  a primitive or another verb (`rewind`, `is_rolling`, `play_note`,
+  `bounce_session`) if a musician would recognise it as a
   control on a DAW and its "Made of:" line is the whole implementation.
   Sugar that exists for the SDK author's convenience, or that holds logic
   of its own, is not.
