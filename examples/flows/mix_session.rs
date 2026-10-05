@@ -93,7 +93,6 @@ fn main() -> Result<()> {
     let room = track::add(&mut session, "room", TrackKind::Bus)?;
     let vox_send = send::add(&mut session, vox, room, -6.0206, SendTap::PostFader)?;
     let _gtr_send = send::add(&mut session, gtr, room, -6.0206, SendTap::PostFader)?;
-    println!("needs rebuild: {}", session.needs_rebuild);
     session::steps::rebuild(&mut session)?;
     for (_, strip) in &session.mixer.strips {
         strip.set_pan_law(PanLaw::Balance);

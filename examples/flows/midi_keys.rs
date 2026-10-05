@@ -1,7 +1,7 @@
 //! `midi`: play notes into a monitoring track; connect a keyboard.
 //!
 //! What you'll learn:
-//! - A MIDI track that *monitors* carries a live instrument in the console
+//! - A MIDI track that *monitors* carries a live instrument in the mixer
 //! - `midi::play_note` / `release_note` queue notes for the next block
 //! - Any `MidiMessage` goes through `midi::send`
 //! - With feature `midi-io`, hardware ports are listed and connected to the
@@ -20,11 +20,14 @@ fn main() -> Result<()> {
     let mut session = session::create("keys", rate, 128)?;
     let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
 
-    // Monitoring is part of the document (undoable) and changes the console:
-    // the instrument is a node on the track's strip.
+    // Monitoring is track state (saved, not an undo step) and changes the
+    // mixer: the instrument is a node on the track's strip.
     track::monitor(&mut session, keys, true)?;
     transport::start(&mut session)?;
-    println!("monitoring: {}", track::is_monitoring(&session, keys));
+    println!(
+        "monitoring: {}",
+        session.document.track(keys)?.state.monitor
+    );
     println!(
         "silence before any note: {}",
         session::steps::render_blocks(&mut session, 2)?.is_silent()
@@ -80,7 +83,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // Monitoring off: the instrument leaves the console at the next rebuild.
+    // Monitoring off: the instrument leaves the mixer at the next rebuild.
     track::monitor(&mut session, keys, false)?;
     midi::play_note(&mut session, 0, 60, 100)?;
     println!(

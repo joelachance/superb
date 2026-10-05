@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     // steps. A track with no input set records everything captured.
     track::arm(&mut session, vox, true)?;
     track::input(&mut session, vox, Some(Input::Mono(0)))?;
-    println!("armed: {:?}", track::armed(&session));
+    println!("vox armed: {}", session.document.track(vox)?.state.arm);
 
     // Roll the transport a second in, then punch in there.
     transport::start(&mut session)?;

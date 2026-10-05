@@ -46,7 +46,6 @@ pub struct Session {
     pub mixer: MixerHandles,         // live strip and send controls from the last rebuild
     pub recording: Option<Recording>,
     pub channels: usize,             // 2 = stereo
-    pub needs_rebuild: bool,
     pub output: Option<OutputStream>,          // feature devices
     pub midi_inputs: Vec<MidiInputBridge>,      // feature midi-io
 }
@@ -72,7 +71,8 @@ groups the clips it places into one step called "Record".
 is not an edit. It is saved with the session and heard at
 the next block, but it never enters the undo history: nobody expects Undo
 to un-mute a track. Flows set it through `session::set_state`, which also
-tells the history its saved point is gone, so `is_saved` turns false.
+tells the history its saved point is gone, so `session.history.is_clean()`
+turns false.
 
 Volume and pan are state too (they live in `TrackState`), but they are
 continuous, so they are edits in the history sense: they coalesce and
@@ -85,9 +85,8 @@ The engine runs a mixer built from the document. Edits that change its
 track) rebuild it: at once while a device is playing (so the
 change is heard within a block), otherwise at the next `transport::start`
 or `session::steps::render_blocks`, which is cheaper when many edits
-arrive together (opening a file). `session.needs_rebuild` is the flag in
-between. You never call `rebuild` yourself unless you want to choose the
-moment; it is a step, `session::steps::rebuild`.
+arrive together (opening a file). You never call `rebuild` yourself unless
+you want to choose the moment; it is a step, `session::steps::rebuild`.
 
 Edits to a level (volume, pan, send level) and state changes (mute, solo,
 send on/off) do not rebuild: the flow writes them to the document and to

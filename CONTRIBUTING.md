@@ -59,8 +59,8 @@ replacing at least three primitive calls or by hiding an ordering hazard
   body; it is the contract that lets a reader bypass the verb.
 * Edits that change the mixer's shape (tracks, clips, sends, routing,
   inserts, monitoring) go through `session::structural`, which rebuilds at
-  once while a device drives the engine and otherwise flags
-  `needs_rebuild`. Edits to a level go to the document *and* the live
+  once while a device drives the engine and otherwise marks the session
+  for a rebuild at the next start. Edits to a level go to the document *and* the live
   handle at once and do not rebuild.
 * A continuous edit (fader, knob, clip drag) pushes through the undo stack
   and coalesces by time (`Session::COALESCE_WINDOW`), so a drag is one step
@@ -101,8 +101,10 @@ exists because its absence cost a rename.
   `track::input(s, t, ch)`, `send::level(s, send, db)`: no `set_` prefix. Units go in the doc, not the name, when only
   one unit exists at that tier (dB everywhere in the flows).
 * **Queries read as what they return.** `is_x` for a bool, a noun for data
-  (`info`, `failures`, `params`, `position`). Never a past participle for
-  a getter: `loaded` reads as a question and returned a descriptor.
+  (`playhead`, `state`, `peak`). Never a past participle for a getter:
+  `loaded` reads as a question and returned a descriptor. A query that
+  only reads a public field (`is_saved` for `history.is_clean()`,
+  `is_recording` for `recording.is_some()`) is noise: leave it out.
 * **Prefer the primitive's enum to a bool parameter.** `SendTap::PreFader`,
   not `pre_fader: true`.
 * **Types and fields are named for their role, not their mechanism.**
@@ -116,7 +118,7 @@ exists because its absence cost a rename.
   offline render in `export`. When two functions do the same thing,
   delete one rather than alias it.
 * **Sugar is welcome when it is a button.** A verb may be one line over
-  a primitive or another verb (`rewind`, `is_rolling`, `play_note`) if a musician would recognise it as a
+  a primitive or another verb (`rewind`, `play_note`) if a musician would recognise it as a
   control on a DAW and its "Made of:" line is the whole implementation.
   Sugar that exists for the SDK author's convenience, or that holds logic
   of its own, is not.

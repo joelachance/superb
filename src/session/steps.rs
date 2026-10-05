@@ -27,14 +27,15 @@ use crate::session::{MixerHandles, Session};
 
 /// Rebuilds the mixer from the document and swaps it into the engine.
 ///
-/// The structural flows call this for you (see
-/// [`Session::needs_rebuild`]); call it yourself only to pick the moment.
+/// The structural flows call this for you, at once while a device drives
+/// the engine and otherwise at the next start or render; call it yourself
+/// only to pick the moment.
 ///
 /// Made of: `EngineHandle::reclaim` (frees graphs the engine has retired, on
 /// this thread) → [`build_mixer`] → [`publish`], and while the engine loop
 /// is still in the session, `LiveGraph::apply_pending` so the swap does not
 /// wait for a [`render_blocks`]. Afterwards [`Session::mixer`] holds the new
-/// strip and send controls and [`Session::needs_rebuild`] is clear.
+/// strip and send controls.
 pub fn rebuild(session: &mut Session) -> Result<()> {
     session.engine.reclaim();
     let (mixer, handles) = build_mixer(&session.document, &session.cache, session.channels)?;

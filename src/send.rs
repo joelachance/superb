@@ -193,7 +193,7 @@ mod tests {
         assert!((settled(&mut session) - direct).abs() < 1e-3);
         assert!(!session.document.send(send).unwrap().state.enabled);
         assert_eq!(session.history.undo_len(), steps, "a switch, not an edit");
-        assert!(!session::is_saved(&session), "but it does count as unsaved");
+        assert!(!session.history.is_clean(), "but it does count as unsaved");
 
         // Route the track through the bus and turn the bus down.
         track::route(&mut session, vox, Some(room)).unwrap();

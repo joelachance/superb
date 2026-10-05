@@ -97,11 +97,11 @@ fn main() -> Result<()> {
     // still refers to "vox-take-1.wav", which you re-cache on open (a real
     // program decodes the file; we reuse the buffer).
     let path = std::env::temp_dir().join("new_session.superb.json");
-    println!("saved? {}", session::is_saved(&session));
+    println!("saved? {}", session.history.is_clean());
     session::save(&mut session, &path)?;
     println!(
         "saved? {} -> {}",
-        session::is_saved(&session),
+        session.history.is_clean(),
         path.display()
     );
 

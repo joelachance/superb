@@ -115,7 +115,7 @@ pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 }
 
 /// The audio tracks currently armed, in track order.
-pub fn armed(session: &Session) -> Vec<TrackId> {
+pub(crate) fn armed(session: &Session) -> Vec<TrackId> {
     session
         .document
         .tracks()
@@ -143,15 +143,6 @@ pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
         Ok(())
     })?;
     crate::session::changed_structure(session)
-}
-
-/// `true` if the MIDI track is monitoring.
-pub fn is_monitoring(session: &Session, track: TrackId) -> bool {
-    session
-        .document
-        .track(track)
-        .map(|t| t.kind == TrackKind::Midi && t.state.monitor)
-        .unwrap_or(false)
 }
 
 /// Chooses which channel(s) of the audio input feed an audio track when it

@@ -19,7 +19,6 @@ its last block. Nothing here touches the document.
 | `set_loop_enabled(session, on)` | loop the range set with `session::set_loop` |
 | `playhead(session) -> TimePosition` | where the playhead is |
 | `state(session) -> TransportState` | Stopped, Playing or Recording |
-| `is_rolling(session)` | playing or recording |
 
 ## Usage
 
@@ -44,8 +43,8 @@ transport::start(&mut session)?;
 ## Made of
 
 `EngineHandle::send(EngineCommand::{Play, Stop, Seek, SetLoopEnabled})`;
-`start` runs `session::steps::rebuild` first when `needs_rebuild` is set.
-`playhead`, `state` and `is_rolling` read the engine's atomics.
+`start` runs `session::steps::rebuild` first when the document changed
+since the last build. `playhead` and `state` read the engine's atomics.
 
 ## Notes
 

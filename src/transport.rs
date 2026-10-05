@@ -64,11 +64,6 @@ pub fn state(session: &Session) -> TransportState {
     session.engine.state()
 }
 
-/// `true` if the engine was playing or recording at its last block.
-pub fn is_rolling(session: &Session) -> bool {
-    session.engine.is_rolling()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,7 +104,6 @@ mod tests {
             "silent after the clip"
         );
         assert_eq!(playhead(&session), TimePosition::from_samples(640));
-        assert!(is_rolling(&session));
         assert_eq!(state(&session), TransportState::Playing);
     }
 

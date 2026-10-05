@@ -3,8 +3,9 @@
 //! A [`Session`] holds the [`Document`] (tracks, clips, routing, tempo), its
 //! undo history, the audio in memory and the running engine. The functions
 //! here create, open and save it and edit its document with undo. Every
-//! edit goes through the history, so [`undo`] and [`redo`] always work and a
-//! save can tell whether anything changed. Edits that change what the mixer
+//! edit goes through the history, so [`undo`] and [`redo`] always work and
+//! `session.history.is_clean()` tells whether anything changed since the
+//! last save. Edits that change what the mixer
 //! has to look like (tracks, clips, routing) rebuild it for you: at once
 //! while a device is playing, otherwise at the next start.
 //!
@@ -59,14 +60,14 @@ pub struct Session {
     pub mixer: MixerHandles,
     /// A take being recorded, if any.
     pub recording: Option<crate::record::Recording>,
-    /// Channels per strip and at the output (2 = stereo).
+    /// Channels per strip and at the output: 2, stereo. Change it before
+    /// the first rebuild if you need another width.
     pub channels: usize,
-    /// Set by every edit that changes the mixer's structure (a new track, a
-    /// moved clip, a send) while no device is driving the engine; the next
-    /// [`transport::start`](crate::transport::start) or
-    /// [`steps::render_blocks`] rebuilds and clears it. With a device
-    /// attached the edit rebuilds at once instead.
-    pub needs_rebuild: bool,
+    /// Set by every edit that changes the mixer's structure while no device
+    /// is driving the engine; the next `transport::start` or
+    /// `steps::render_blocks` rebuilds and clears it. With a device attached
+    /// the edit rebuilds at once instead.
+    pub(crate) needs_rebuild: bool,
     /// The running output stream, once started.
     #[cfg(feature = "devices")]
     pub output: Option<crate::primitives::io::device::OutputStream>,
@@ -83,15 +84,6 @@ impl Session {
     /// A stereo session around `document`, with an engine that renders blocks of
     /// at most `block_size` frames at the document's sample rate.
     pub fn new(document: Document, block_size: usize) -> Result<Session> {
-        Self::with_channels(document, block_size, 2)
-    }
-
-    /// Like [`new`](Self::new) with an explicit channel count.
-    pub fn with_channels(
-        document: Document,
-        block_size: usize,
-        channels: usize,
-    ) -> Result<Session> {
         let bpm = document
             .tempo_map()
             .tempo_at(crate::primitives::BeatPosition::ZERO);
@@ -106,7 +98,7 @@ impl Session {
             engine_loop: Some(engine_loop),
             mixer: MixerHandles::default(),
             recording: None,
-            channels,
+            channels: 2,
             needs_rebuild: true,
             #[cfg(feature = "devices")]
             output: None,
@@ -182,20 +174,14 @@ pub fn open(path: impl AsRef<Path>, block_size: usize) -> Result<Session> {
     Session::new(Document::load(path)?, block_size)
 }
 
-/// Writes the document as JSON and remembers this state as saved.
+/// Writes the document as JSON and remembers this state as saved, so
+/// `session.history.is_clean()` says whether anything changed since.
 ///
 /// Made of: `Document::save` → `UndoStack::mark_clean`.
 pub fn save(session: &mut Session, path: impl AsRef<Path>) -> Result<()> {
     session.document.save(path)?;
     session.history.mark_clean();
     Ok(())
-}
-
-/// `true` if nothing changed since the last [`save`] (or since opening).
-/// Switches flipped since (mute, arm, bypass...) count as changes even
-/// though they are not undo steps.
-pub fn is_saved(session: &Session) -> bool {
-    session.history.is_clean()
 }
 
 /// Drops a named marker on the timeline.
@@ -272,10 +258,10 @@ pub(crate) fn changed_structure(session: &mut Session) -> Result<()> {
     Ok(())
 }
 
-/// Changes state (mute, solo, arm, monitor, bypass, send on/off) on the
+/// Changes state (mute, solo, arm, monitor, input, send on/off) on the
 /// document. State is saved with the session but is not an edit: it never
 /// enters the undo history, so the history is told its saved point is gone
-/// and [`is_saved`] turns false.
+/// and `history.is_clean()` turns false.
 pub(crate) fn set_state(
     session: &mut Session,
     flip: impl FnOnce(&mut Document) -> Result<()>,
@@ -300,7 +286,7 @@ mod tests {
     #[test]
     fn create_edit_undo_redo() {
         let mut session = create("demo", R, 64).unwrap();
-        assert!(is_saved(&session));
+        assert!(session.history.is_clean());
         assert!(session.needs_rebuild, "a fresh session has no console yet");
         session.needs_rebuild = false;
 
@@ -333,7 +319,7 @@ mod tests {
             6,
             "the drag coalesced into one step"
         );
-        assert!(!is_saved(&session));
+        assert!(!session.history.is_clean());
 
         assert!(undo(&mut session).unwrap()); // tempo
         assert!(undo(&mut session).unwrap()); // marker
@@ -352,7 +338,7 @@ mod tests {
             "back to the empty document"
         );
         assert!(!undo(&mut session).unwrap());
-        assert!(is_saved(&session));
+        assert!(session.history.is_clean());
     }
 
     #[test]
@@ -437,15 +423,15 @@ mod tests {
         let t = track::add(&mut session, "t", TrackKind::Audio).unwrap();
         add_marker(&mut session, "m", TimePosition::from_samples(7)).unwrap();
         save(&mut session, &path).unwrap();
-        assert!(is_saved(&session));
+        assert!(session.history.is_clean());
         track::add(&mut session, "later", TrackKind::Audio).unwrap();
-        assert!(!is_saved(&session));
+        assert!(!session.history.is_clean());
 
         let reopened = open(&path, 128).unwrap();
         assert_eq!(reopened.document.name(), "saved");
         assert!(reopened.document.track(t).is_ok());
         assert_eq!(reopened.document.markers().len(), 1);
-        assert!(is_saved(&reopened));
+        assert!(reopened.history.is_clean());
         assert_eq!(reopened.engine.sample_rate(), R);
         assert_eq!(reopened.engine.max_frames(), 128);
         assert!(open(dir.join("missing.json"), 128).is_err());

@@ -24,9 +24,7 @@ shape, so they rebuild it.
 | `pan(session, track, pan)` | `-1.0` left to `1.0` right | drag |
 | `mute(session, track, on)` / `solo(session, track, on)` | state; document + live strip | — |
 | `arm(session, track, on)` | state; audio tracks only; armed tracks get a clip when a recording stops | — |
-| `armed(session) -> Vec<TrackId>` | the armed audio tracks | |
 | `monitor(session, track, on)` | state; MIDI tracks only; the track carries a live instrument; rebuilds | — |
-| `is_monitoring(session, track)` | | |
 | `input(session, track, Option<Input>)` | state; audio tracks only; which input channel(s) feed the track when it records: `Input::Mono(0)`, `Input::Stereo(0, 1)`, or `None` for everything captured | — |
 | `route(session, track, Some(bus) or None)` | output into a bus or the master; loops refused | one |
 | `peak(session, track) -> Option<[f32; 2]>` | the strip's peak meter, read and reset; `None` before the first rebuild | |

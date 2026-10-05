@@ -1,10 +1,10 @@
-//! `play`: hear the document, move the playhead, loop a section.
+//! `transport`: hear the session, move the playhead, loop a section.
 //!
 //! What you'll learn:
-//! - `transport::start` rebuilds the console from the document and starts the transport
+//! - `transport::start` rebuilds the mixer from the document and starts the transport
 //! - Without an audio device, `session::steps::render_blocks` renders blocks and hands you
 //!   the audio (tests and headless tools work this way)
-//! - The playhead is read from atomics: `position`, `state`, `is_rolling`
+//! - The playhead is read from atomics: `playhead`, `state`
 //! - A loop range lives in the document (`session::set_loop`); `set_loop_enabled`
 //!   turns it on and off while rolling
 //! - With feature `devices`, `devices::output` moves the engine onto a
@@ -43,19 +43,14 @@ fn main() -> Result<()> {
         )?;
     }
 
-    // Start. `needs_rebuild` is set by every structural edit above; `start`
-    // notices and builds the console first.
-    println!("needs rebuild before start: {}", session.needs_rebuild);
+    // Start. Every structural edit above marked the mixer for a rebuild;
+    // `start` notices and builds it first.
     transport::start(&mut session)?;
 
     // Render 0.25 s (47 blocks of 256) and look at what came out. Commands
     // reach the engine at its next block, so state is read after driving.
     let audio = session::steps::render_blocks(&mut session, 47)?;
-    println!(
-        "state: {:?}, rolling: {}",
-        transport::state(&session),
-        transport::is_rolling(&session)
-    );
+    println!("state: {:?}", transport::state(&session));
     println!(
         "rendered {} frames, peak {:.3}, playhead now {:.3} s",
         audio.frames(),
@@ -98,7 +93,7 @@ fn main() -> Result<()> {
     );
 
     // On a real device the same session plays through the speakers. From here
-    // the device pulls blocks, so `drive` is no longer available.
+    // the device pulls blocks, so `render_blocks` is no longer available.
     #[cfg(feature = "devices")]
     {
         use superb::devices;
