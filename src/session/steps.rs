@@ -18,7 +18,7 @@ use crate::primitives::graph::nodes::{
 };
 use crate::primitives::graph::MidiPort;
 use crate::primitives::io::cache::AudioCache;
-use crate::primitives::io::live::EngineHandle;
+use crate::primitives::io::EngineHandle;
 use crate::primitives::mixer::{Mixer, SendParams, SendTap, StripId, StripParams};
 use crate::primitives::session::{Clip, ClipSource, Document, MidiNote, TrackKind};
 use crate::primitives::transport::TempoMap;
@@ -32,31 +32,31 @@ use crate::session::{MixerHandles, Session};
 /// only to pick the moment.
 ///
 /// Made of: `EngineHandle::reclaim` (frees graphs the engine has retired, on
-/// this thread) → [`build_mixer`] → [`publish`], and while the engine loop
+/// this thread) → [`build_mixer`] → [`publish`], and while the audio thread
 /// is still in the session, `LiveGraph::apply_pending` so the swap does not
 /// wait for a [`render_blocks`]. Afterwards [`Session::mixer`] holds the new
 /// strip and send controls.
 pub fn rebuild(session: &mut Session) -> Result<()> {
     session.engine.reclaim();
-    let (mixer, handles) = build_mixer(&session.document, &session.cache, session.channels)?;
+    let (mixer, handles) = build_mixer(&session.document, &session.audio, session.channels)?;
     publish(&mut session.engine, mixer)?;
-    if let Some(engine_loop) = session.engine_loop.as_mut() {
+    if let Some(audio_thread) = session.audio_thread.as_mut() {
         // Nothing is pulling audio yet, so nobody would swap the graph in
         // before the next `render_blocks`; do it now so rebuilds never back up.
-        engine_loop.engine_mut().processor_mut().apply_pending();
+        audio_thread.engine_mut().processor_mut().apply_pending();
     }
     session.mixer = handles;
     session.needs_rebuild = false;
     Ok(())
 }
 
-/// Renders the next `blocks` blocks of audio by running the engine loop
+/// Renders the next `blocks` blocks of audio by ticking the audio thread
 /// directly, standing in for the sound card. This is how a program with no
 /// audio device (a test, a headless renderer) hears the session; once a
-/// device has taken the loop (`devices::output`)
+/// device has taken the thread (`devices::output`)
 /// it fails with a message saying so.
 ///
-/// Made of: [`rebuild`] when needed → `EngineLoop::tick` per block, with
+/// Made of: [`rebuild`] when needed → `AudioThread::tick` per block, with
 /// [`record::collect`](crate::record::collect) after each while a
 /// recording is running.
 pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffer> {
@@ -64,13 +64,13 @@ pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffe
         rebuild(session)?;
     }
     let block = session.engine.max_frames();
-    let engine_loop = session.engine_loop.as_mut().ok_or_else(|| {
-        SuperbError::Message("the engine loop is running on a device stream".into())
+    let audio_thread = session.audio_thread.as_mut().ok_or_else(|| {
+        SuperbError::Message("the audio thread is running on a device stream".into())
     })?;
     let mut out = PlanarBuffer::new(session.channels, blocks * block);
     let mut scratch = PlanarBuffer::new(session.channels, block);
     for i in 0..blocks {
-        engine_loop.tick(&mut scratch)?;
+        audio_thread.tick(&mut scratch)?;
         out.copy_block_from(i * block, &scratch, block)?;
         if let Some(recording) = session.recording.as_mut() {
             recording.collect();
@@ -93,7 +93,7 @@ pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffe
 /// track, with `StripParams::set_volume_db` / `set_pan` / `set_mute` /
 /// `set_solo` from its state → `Mixer::set_track_output` / `set_bus_output`
 /// → `Mixer::add_send` per document send → a [`BufferPlayerNode`] (audio
-/// the cache holds) or [`ScheduledSynthNode`] (MIDI notes through the tempo
+/// held in memory) or [`ScheduledSynthNode`] (MIDI notes through the tempo
 /// map) per unmuted clip → a [`MonoSynthNode`] with a MIDI edge per
 /// monitoring MIDI track.
 pub fn build_mixer(
@@ -210,7 +210,7 @@ fn add_sends(
 }
 
 /// One source node per clip that can sound: a [`BufferPlayerNode`] for
-/// audio the cache holds (a clip whose audio is missing plays as silence),
+/// audio held in memory (a clip whose audio is missing plays as silence),
 /// a [`ScheduledSynthNode`] for MIDI notes converted through the tempo map.
 /// Muted, archived and empty clips get nothing.
 fn add_clip_players(
@@ -353,7 +353,7 @@ mod tests {
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
-        session.cache.insert("tone.wav", tone);
+        session.audio.insert("tone.wav", tone);
         crate::clip::add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         (session, vox)
     }
@@ -620,14 +620,14 @@ mod tests {
         let mut session = session::create("keys", R, 64).unwrap();
         let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         transport::start(&mut session).unwrap();
-        let (mixer, _) = build_mixer(&session.document, &session.cache, 2).unwrap();
+        let (mixer, _) = build_mixer(&session.document, &session.audio, 2).unwrap();
         assert_eq!(
             mixer.graph().node_count(),
             4,
             "master pair + track pair, no instrument"
         );
         session.document.track_mut(keys).unwrap().state.monitor = true;
-        let (mixer, _) = build_mixer(&session.document, &session.cache, 2).unwrap();
+        let (mixer, _) = build_mixer(&session.document, &session.audio, 2).unwrap();
         assert_eq!(mixer.graph().node_count(), 5, "plus the live synth");
         assert_eq!(mixer.graph().midi_edges().len(), 1);
     }
@@ -661,7 +661,7 @@ mod tests {
     #[test]
     fn render_blocks_fails_once_the_loop_has_left() {
         let (mut session, _) = tone_rig();
-        session.engine_loop = None;
+        session.audio_thread = None;
         assert!(matches!(
             render_blocks(&mut session, 1),
             Err(SuperbError::Message(_))

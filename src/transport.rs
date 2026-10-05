@@ -4,10 +4,10 @@
 //! at the start of its next block, or reads what the engine published after
 //! its last block. Nothing here touches the document.
 //!
-//! Made of `superb::primitives::io::live` (`EngineHandle::send`, the
+//! Made of `superb::primitives::io` (`Engine::live`) (`EngineHandle::send`, the
 //! position and state atomics).
 
-use crate::primitives::io::live::EngineCommand;
+use crate::primitives::io::EngineCommand;
 use crate::primitives::transport::TransportState;
 use crate::primitives::{Result, TimePosition};
 use crate::session::Session;
@@ -82,7 +82,7 @@ mod tests {
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
-        session.cache.insert("tone.wav", tone);
+        session.audio.insert("tone.wav", tone);
         crate::clip::add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         (session, vox)
     }

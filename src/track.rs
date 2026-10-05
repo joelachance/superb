@@ -195,7 +195,7 @@ mod tests {
         let vox = add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);
-        session.cache.insert("tone.wav", tone);
+        session.audio.insert("tone.wav", tone);
         crate::clip::add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         assert!(peak(&session, vox).is_none(), "no mixer yet");
         transport::start(&mut session).unwrap();

@@ -47,7 +47,7 @@ pub(crate) fn output_config(session: &Session, device: Option<&str>) -> OutputCo
 }
 
 /// Plays the session through an output device (`None` for the default,
-/// or a name from [`outputs`]): moves the engine loop into a real output
+/// or a name from [`outputs`]): moves the audio thread into a real output
 /// stream at the session's sample rate, block size and channel count, and
 /// starts it. From then on the device drives the engine, structural edits
 /// rebuild the mixer at once, and
@@ -56,7 +56,7 @@ pub(crate) fn output_config(session: &Session, device: Option<&str>) -> OutputCo
 ///
 /// Made of: an `OutputConfig` matching the session →
 /// [`session::steps::rebuild`](crate::session::steps::rebuild) when needed
-/// → `EngineLoop::run_on_device`; the stream is kept in
+/// → `AudioThread::run_on_device`; the stream is kept in
 /// [`Session::output`] and stops when dropped.
 #[cfg(feature = "devices")]
 pub fn output(session: &mut Session, device: Option<&str>) -> Result<()> {
@@ -64,10 +64,10 @@ pub fn output(session: &mut Session, device: Option<&str>) -> Result<()> {
     if session.needs_rebuild {
         crate::session::steps::rebuild(session)?;
     }
-    let engine_loop = session.engine_loop.take().ok_or_else(|| {
-        SuperbError::Message("the engine loop is already running on a device stream".into())
+    let audio_thread = session.audio_thread.take().ok_or_else(|| {
+        SuperbError::Message("the audio thread is already running on a device stream".into())
     })?;
-    match engine_loop.run_on_device(&config) {
+    match audio_thread.run_on_device(&config) {
         Ok(stream) => {
             session.output = Some(stream);
             Ok(())

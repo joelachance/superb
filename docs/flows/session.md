@@ -29,7 +29,7 @@ Tracks are added and set up in [`track`](track.md); clips are placed in
 | step | does |
 |---|---|
 | `rebuild(session)` | build a fresh mixer from the document and swap it into the engine; the structural flows call it for you |
-| `render_blocks(session, blocks) -> PlanarBuffer` | run the engine loop for `blocks` blocks when no sound card is attached, and return the audio |
+| `render_blocks(session, blocks) -> PlanarBuffer` | tick the audio thread for `blocks` blocks when no sound card is attached, and return the audio |
 | `build_mixer(&document, &cache, channels) -> (Mixer, MixerHandles)` | strips carrying each track's state, routing, sends, a node per clip, a live instrument per monitoring MIDI track; and the live controls, keyed by document id |
 | `publish(&mut EngineHandle, Mixer)` | prepare the graph and hand it to the engine |
 
@@ -57,7 +57,7 @@ let again = session::open("demo.superb.json", 256)?;
 
 Audio is not embedded in the file: clips name keys into the session's
 audio, and a program that opens a session puts the audio back under those
-keys (`AudioCache::load` with the `files` feature, or `session.cache.insert`).
+keys (`AudioCache::load` with the `files` feature, or `session.audio.insert`).
 
 ## Made of
 
@@ -66,8 +66,8 @@ in `primitives::session::commands` pushed through `UndoStack::push`; `DocumentSn
 `set_loop` additionally sends
 `EngineCommand::SetLoop`. `rebuild`: `EngineHandle::reclaim` →
 `build_mixer` → `publish`, then
-`LiveGraph::apply_pending` while the loop is still in the session.
-`render_blocks`: `EngineLoop::tick` per block, plus
+`LiveGraph::apply_pending` while the audio thread is still in the session.
+`render_blocks`: `AudioThread::tick` per block, plus
 `record::collect` while a recording runs.
 
 The crate-private helpers `edit`, `structural`, `changed_structure` and

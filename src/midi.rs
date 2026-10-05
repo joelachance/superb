@@ -7,7 +7,7 @@
 //! `devices::midi_inputs` lists them).
 //!
 //! Made of `superb::primitives::midi` (messages), the engine's MIDI queue
-//! in `superb::primitives::io::live`, and the live instrument
+//! in `superb::primitives::io` (`Engine::live`), and the live instrument
 //! [`session::steps::build_mixer`](crate::session::steps::build_mixer) adds.
 
 use crate::primitives::midi::{MidiChannel, MidiMessage, TimestampedMessage};
@@ -55,9 +55,7 @@ pub fn connect_input(session: &mut Session, port_index: usize) -> Result<()> {
         crate::primitives::midi::input::MidiInputBridge::connect(port_index, 256)?;
     session
         .engine
-        .send(crate::primitives::io::live::EngineCommand::AddMidiInput(
-            consumer,
-        ))?;
+        .send(crate::primitives::io::EngineCommand::AddMidiInput(consumer))?;
     session.midi_inputs.push(bridge);
     Ok(())
 }

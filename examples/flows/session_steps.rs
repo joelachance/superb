@@ -30,12 +30,12 @@ fn main() -> Result<()> {
     // The document: tracks, clips, tempo, routing.
     let mut document = Document::new("session-steps", rate);
 
-    // An audio track with half a second of a soft tone from the cache.
+    // An audio track with half a second of a soft tone held in memory.
     let vox = document.add_track("vox", TrackKind::Audio);
     let mut tone = PlanarBuffer::new(2, 24_000);
     tone.fill(0.2);
     let mut cache = AudioCache::new();
-    cache.insert("tone.wav", tone); // the key the clip refers to
+    cache.insert("tone.wav", tone); // the name the clip refers to
     document.add_clip(
         vox,
         Clip::new(

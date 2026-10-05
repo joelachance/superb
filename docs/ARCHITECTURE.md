@@ -20,7 +20,7 @@ and connects them deliberately.
  primitives
    document side (UI thread)           engine side (audio thread)
 
-   session ── Document: tracks, clips  io::live   EngineHandle ◄─queues─► EngineLoop
+   session ── Document: tracks, clips  io         EngineHandle ◄─queues─► AudioThread
    undo    ── history                  io         Engine, offline render, WAV, devices
                   session::steps::rebuild ───► mixer      strips, buses, sends, inserts
    automation ─► Arc<AtomicF32> ─────► graph      nodes, schedule, live swap
@@ -39,7 +39,7 @@ primitives and each other, and all of them work on the `Session`.
 
 `Session` (`src/session/mod.rs`) is the one thing a program works on: a
 plain record of the `Document` (what gets saved), its `UndoStack`, the
-`AudioCache`, the `EngineHandle` control handle, the `EngineLoop` (until a
+`AudioCache`, the `EngineHandle` control handle, the `AudioThread` (until a
 device takes it), the live controls of the last mixer that was built
 (`MixerHandles`: one strip handle per track and bus, one per send, keyed
 by document id) and the recording in progress. It has constructors and
@@ -93,7 +93,7 @@ Data crosses the thread boundary in exactly three ways:
    * `build_mixer` makes a strip per track and a bus per bus track with
      the track's volume, pan, mute and solo, routes each output where the
      document says, adds a send per document send, and attaches one source
-     node per audible clip: `BufferPlayerNode` for audio in the cache,
+     node per audible clip: `BufferPlayerNode` for audio held in memory,
      `ScheduledSynthNode` for MIDI notes converted through the tempo map,
      plus a live instrument for every monitoring MIDI track. It returns
      the `MixerHandles` the control side keeps, keyed by document id (the
@@ -107,12 +107,13 @@ Data crosses the thread boundary in exactly three ways:
    propagates silence so idle branches cost nothing, delays shorter parallel
    paths so everything stays time-aligned, and routes MIDI to the nodes
    that asked for it.
-5. **`primitives::io::live`** is the running engine: `EngineHandle` on the
-   control side (commands, graph publishing, software MIDI, position and
-   state atomics) and `EngineLoop` on the audio side, which applies
-   commands, drains MIDI, renders a block through `Engine` and publishes
-   the position. `session::steps::render_blocks` ticks the loop by hand; `devices::output`
-   moves it into a device callback.
+5. **`Engine::live`** (`primitives::io`) is the running engine: an
+   `EngineHandle` on the control side (commands, graph publishing, software
+   MIDI, position and state atomics) and an `AudioThread` on the audio
+   side, which applies commands, drains MIDI, renders a block through
+   `Engine` and publishes the position. `session::steps::render_blocks`
+   ticks the thread by hand; `devices::output` moves it into a device
+   callback.
 6. **`primitives::io::Engine`** owns a `Transport` and a processor. Each
    block it advances the playhead, splits the block at loop wraps, delivers
    queued MIDI at sample-accurate frames, runs the processor and copies the
@@ -168,8 +169,9 @@ state come
 back as atomics. A published graph must be prepared for the engine's
 sample rate and block size or it is rejected, never re-prepared on the
 audio thread. The swap queue holds two graphs; `session::steps::rebuild` reclaims
-retired graphs before building and, while the loop is still owned by the
-`Session`, applies the swap itself so repeated rebuilds never back up.
+retired graphs before building and, while the audio thread is still owned
+by the `Session`, applies the swap itself so repeated rebuilds never back
+up.
 
 **Automation.** Envelope edits allocate and belong on the control thread.
 The read path evaluates into atomics or a caller's scratch buffer without

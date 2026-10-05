@@ -31,7 +31,7 @@ let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 
 let mut audio = PlanarBuffer::new(2, 48_000);
 audio.fill(0.2);
-session.cache.insert("vox 1", audio);
+session.audio.insert("vox 1", audio);
 let take = clip::add(&mut session, vox, "vox 1", TimePosition::ZERO)?;   // one second long
 clip::move_to(&mut session, take, TimePosition::from_samples(24_000))?;
 clip::archive(&mut session, take)?;      // silent, still in the session

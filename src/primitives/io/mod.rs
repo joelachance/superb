@@ -13,8 +13,10 @@
 //! * [`capture`] — a pre-allocated queue of planar blocks for handing
 //!   captured audio from a callback to another thread. Pure Rust; the
 //!   device layer fills it, tests and offline code can too.
-//! * [`live`] — split an engine into a control handle and an audio-side
-//!   loop so play/stop/seek and graph swaps can come from another thread.
+//! * [`Engine::live`] — a running engine split into an [`EngineHandle`] (the
+//!   control side: play, stop, seek, graph swaps, from a UI thread) and an
+//!   [`AudioThread`] (the audio side, ticked by a device callback or a loop
+//!   of your own).
 //! * [`offline`] — drive an [`Engine`] as fast as possible into a buffer
 //!   (bounce / test rendering).
 //! * [`wav`] — minimal RIFF/WAVE writer and reader (PCM16 and float32).
@@ -56,11 +58,13 @@ pub mod device;
 mod engine;
 #[cfg(feature = "files")]
 pub mod files;
-pub mod live;
 pub mod offline;
 pub mod wav;
 
-pub use engine::{Engine, EngineStats, MidiTiming};
+pub use engine::{
+    AudioThread, Engine, EngineCommand, EngineHandle, EngineStats, MidiTiming, COMMAND_CAPACITY,
+    MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY, SWAP_CAPACITY,
+};
 
 /// Whether this build includes the `files` module.
 ///

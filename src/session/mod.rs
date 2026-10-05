@@ -17,7 +17,7 @@ pub mod steps;
 
 use std::path::Path;
 
-use crate::primitives::io::live::EngineCommand;
+use crate::primitives::io::EngineCommand;
 use crate::primitives::session::commands::{AddMarker, SetLoopRange, SetTempo};
 use crate::primitives::session::{Document, Marker};
 use crate::primitives::transport::LoopRange;
@@ -27,7 +27,7 @@ use crate::primitives::{BeatPosition, MarkerId, Result, SampleRate, TimePosition
 use std::sync::Arc;
 
 use crate::primitives::io::cache::AudioCache;
-use crate::primitives::io::live::{engine_pair, EngineHandle, EngineLoop};
+use crate::primitives::io::{AudioThread, Engine, EngineHandle};
 use crate::primitives::mixer::{SendParams, StripParams};
 use crate::primitives::undo::UndoStack;
 use crate::primitives::SendId;
@@ -47,14 +47,14 @@ pub struct Session {
     /// pause starts a new step. Call `history.seal()` to end a step sooner
     /// (on mouse up, say).
     pub history: UndoStack<Document>,
-    /// Audio held in memory, keyed by the path clips refer to.
-    pub cache: AudioCache,
+    /// Audio held in memory, keyed by the name clips refer to.
+    pub audio: AudioCache,
     /// Control handle to the engine: commands, graph swaps, position.
     pub engine: EngineHandle,
     /// The engine's audio side. Present until a device takes it
-    /// (`devices::output`, feature `devices`);
-    /// while present, [`steps::render_blocks`] runs it by hand.
-    pub engine_loop: Option<EngineLoop>,
+    /// (`devices::output`, feature `devices`); while present,
+    /// [`steps::render_blocks`] ticks it by hand.
+    pub audio_thread: Option<AudioThread>,
     /// The live controls of the mixer built by the last [`steps::rebuild`]:
     /// one per strip and send, keyed by document id.
     pub mixer: MixerHandles,
@@ -87,15 +87,15 @@ impl Session {
         let bpm = document
             .tempo_map()
             .tempo_at(crate::primitives::BeatPosition::ZERO);
-        let (engine, engine_loop) = engine_pair(document.sample_rate(), block_size, bpm)?;
+        let (engine, audio_thread) = Engine::live(document.sample_rate(), block_size, bpm)?;
         let mut history = UndoStack::new();
         history.set_coalesce_window(Some(Self::COALESCE_WINDOW));
         Ok(Session {
             document,
             history,
-            cache: AudioCache::new(),
+            audio: AudioCache::new(),
             engine,
-            engine_loop: Some(engine_loop),
+            audio_thread: Some(audio_thread),
             mixer: MixerHandles::default(),
             recording: None,
             channels: 2,
@@ -114,9 +114,9 @@ impl core::fmt::Debug for Session {
             .field("document", &self.document.name())
             .field("tracks", &self.document.track_count())
             .field("undo_steps", &self.history.undo_len())
-            .field("cached_files", &self.cache.len())
+            .field("audio", &self.audio.len())
             .field("engine", &self.engine)
-            .field("engine_loop_attached", &self.engine_loop.is_some())
+            .field("audio_thread", &self.audio_thread.is_some())
             .field("recording", &self.recording.is_some())
             .field("channels", &self.channels)
             .field("needs_rebuild", &self.needs_rebuild)
@@ -295,7 +295,7 @@ mod tests {
         track::rename(&mut session, vox, "vocals").unwrap();
         assert_eq!(session.document.track(vox).unwrap().name, "vocals");
         session
-            .cache
+            .audio
             .insert("takes/take 1.wav", PlanarBuffer::new(2, 50));
         let clip = clip::add(
             &mut session,
@@ -393,11 +393,11 @@ mod tests {
         let range = LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(1_000)).unwrap();
         set_loop(&mut session, Some(range)).unwrap();
         assert_eq!(session.document.loop_range(), Some(range));
-        // The engine received the range too: apply it on the loop side.
-        session.engine_loop.as_mut().unwrap().apply_commands();
+        // The engine received the range too: apply it on the audio side.
+        session.audio_thread.as_mut().unwrap().apply_commands();
         assert_eq!(
             session
-                .engine_loop
+                .audio_thread
                 .as_ref()
                 .unwrap()
                 .engine()

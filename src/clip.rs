@@ -20,7 +20,7 @@ use crate::primitives::{
 use crate::session::Session;
 
 /// Places a clip on `track` starting at `at`. `content` is the name audio
-/// was stored under in [`Session::cache`] (`&str`, `String` or a path) or
+/// was stored under in [`Session::audio`] (`&str`, `String` or a path) or
 /// the notes of a MIDI clip (`Vec<MidiNote>`, beats relative to `at`). An
 /// audio clip is as long as its audio and named after the key's file stem;
 /// a MIDI clip ends with its last note and is named after the track.
@@ -40,7 +40,7 @@ pub fn add(
     let source = content.into();
     let (name, length) = match &source {
         ClipSource::Audio { path, offset } => {
-            let audio = session.cache.get(path).ok_or_else(|| {
+            let audio = session.audio.get(path).ok_or_else(|| {
                 SuperbError::Message(format!("no audio named {:?} is in memory", path.display()))
             })?;
             let name = path
@@ -131,7 +131,7 @@ mod tests {
         let mut session = session::create("clips", R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         session
-            .cache
+            .audio
             .insert("takes/take 1.wav", PlanarBuffer::new(2, 480));
         let clip = add(
             &mut session,
@@ -191,7 +191,7 @@ mod tests {
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
-        session.cache.insert("tone.wav", tone);
+        session.audio.insert("tone.wav", tone);
         let clip = add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         let steps = session.history.undo_len();
         move_to(&mut session, clip, TimePosition::from_samples(100)).unwrap();

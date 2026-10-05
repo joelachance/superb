@@ -40,9 +40,9 @@ Two kinds of function appear in a flow:
 pub struct Session {
     pub document: Document,          // tracks, clips, routing, tempo: what gets saved
     pub history: UndoStack<Document>,// every edit goes through here
-    pub cache: AudioCache,           // audio in memory, keyed by the path clips use
+    pub audio: AudioCache,           // audio in memory, keyed by the name clips use
     pub engine: EngineHandle,        // control side of the running engine
-    pub engine_loop: Option<EngineLoop>, // the audio side, until a device takes it
+    pub audio_thread: Option<AudioThread>, // the audio side, until a device takes it
     pub mixer: MixerHandles,         // live strip and send controls from the last rebuild
     pub recording: Option<Recording>,
     pub channels: usize,             // 2 = stereo
@@ -107,13 +107,13 @@ a few milliseconds away.
 ## Without hardware
 
 Everything runs without an audio device.
-`session::steps::render_blocks(&mut session, blocks)` runs the engine loop
-by hand and hands you the audio, standing in for the sound card: that is
+`session::steps::render_blocks(&mut session, blocks)` ticks the audio
+thread by hand and hands you the audio, standing in for the sound card: that is
 how the tests and most examples hear the session. `export` renders through
 its own offline engine. `record::start` with a `Source::Queue` records
 from any capture producer, so a recording can come from a file or a
-generator. With the `devices` feature, `devices::output` moves the engine
-loop into a real output stream and `Source::Device` opens a real input.
+generator. With the `devices` feature, `devices::output` moves the audio
+thread into a real output stream and `Source::Device` opens a real input.
 
 ## Writing a new flow
 

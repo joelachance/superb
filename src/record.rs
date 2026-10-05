@@ -18,7 +18,7 @@ use std::thread::JoinHandle;
 
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
-use crate::primitives::io::live::EngineCommand;
+use crate::primitives::io::EngineCommand;
 use crate::primitives::session::Input;
 use crate::primitives::{ClipId, Result, SuperbError, TimePosition, TrackId};
 use crate::session;
@@ -323,7 +323,7 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
             None => Arc::clone(&whole),
             Some(input) => Arc::new(steps::select_input(&whole, input)),
         };
-        session.cache.insert_shared(&name, audio);
+        session.audio.insert_shared(&name, audio);
         match crate::clip::add(session, *track, name.as_str(), punch_in) {
             Ok(clip) => clips.push(clip),
             Err(e) => {
@@ -469,7 +469,7 @@ pub(crate) mod steps {
         let mut n = 1;
         loop {
             let name = format!("{base} {n}");
-            if session.cache.get(std::path::Path::new(&name)).is_none() {
+            if session.audio.get(std::path::Path::new(&name)).is_none() {
                 return Ok(name);
             }
             n += 1;
@@ -547,11 +547,11 @@ mod tests {
         }
         assert_eq!(session.document.clip_track(clips[0]).unwrap(), vox);
         assert_eq!(session.document.clip_track(clips[1]).unwrap(), gtr);
-        assert_eq!(session.cache.len(), 2, "one entry per clip");
+        assert_eq!(session.audio.len(), 2, "one entry per clip");
         assert!(
             Arc::ptr_eq(
-                &session.cache.get("vox 1".as_ref()).unwrap(),
-                &session.cache.get("gtr 1".as_ref()).unwrap()
+                &session.audio.get("vox 1".as_ref()).unwrap(),
+                &session.audio.get("gtr 1".as_ref()).unwrap()
             ),
             "sharing one buffer"
         );
@@ -600,7 +600,7 @@ mod tests {
                 format!("vox {i}")
             );
         }
-        assert_eq!(session.cache.len(), 2);
+        assert_eq!(session.audio.len(), 2);
         let (_mic, blocks) = capture_queue(2, 64, 4).unwrap();
         start(
             &mut session,
@@ -658,7 +658,7 @@ mod tests {
         }
         let clips = stop(&mut session).unwrap();
         assert_eq!(clips.len(), 3);
-        let audio = |name: &str| session.cache.get(name.as_ref()).unwrap();
+        let audio = |name: &str| session.audio.get(name.as_ref()).unwrap();
         assert_eq!(audio("vox 1").channels(), 1);
         assert!(audio("vox 1").channel(0).iter().all(|&s| s == 0.25));
         assert_eq!(audio("gtr 1").channels(), 1);
@@ -759,7 +759,7 @@ mod tests {
             dropped < 100,
             "the collector fell far behind: {dropped} dropped"
         );
-        let audio = session.cache.get("vox 1".as_ref()).unwrap();
+        let audio = session.audio.get("vox 1".as_ref()).unwrap();
         assert!(audio.channel(0).iter().all(|&s| s == 0.5));
 
         // An unfinished collector just lets its thread go.

@@ -36,7 +36,7 @@ fn main() -> Result<()> {
     // Two steady tones so levels are easy to read: 0.25 on each track.
     let mut tone = PlanarBuffer::new(2, rate.hz() as usize * 4);
     tone.fill(0.25);
-    session.cache.insert("tone.wav", tone);
+    session.audio.insert("tone.wav", tone);
     for t in [vox, gtr] {
         clip::add(&mut session, t, "tone.wav", TimePosition::ZERO)?;
     }

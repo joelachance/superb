@@ -66,10 +66,10 @@ use superb::{clip, session, track, transport};
 let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
 let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
 
-// Audio comes from the cache: a decoded file, or a buffer you made.
+// Audio lives in memory: a decoded file, or a buffer you made.
 let mut tone = PlanarBuffer::new(2, 48_000);
 tone.fill(0.25);
-session.cache.insert("tone.wav", tone);
+session.audio.insert("tone.wav", tone);
 clip::add(&mut session, lead, "tone.wav", TimePosition::ZERO)?;     // as long as the audio
 track::volume(&mut session, lead, -6.0)?;
 

@@ -77,7 +77,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // Stop: the recording is drained into the cache and placed on every armed
+    // Stop: the recording is drained into memory and placed on every armed
     // track, starting at the punch-in point.
     let clips = record::stop(&mut session)?;
     for id in &clips {
@@ -102,12 +102,12 @@ fn main() -> Result<()> {
     let heard = session::steps::render_blocks(&mut session, 8)?;
     println!("playback of the clip, peak {:.3}", heard.peak());
 
-    // Undo removes the clip (the audio stays in the cache).
+    // Undo removes the clip (the audio stays in memory).
     session::undo(&mut session)?;
     println!(
-        "after undo: {} clips, cache holds {} recording(s)",
+        "after undo: {} clips, {} recording(s) in memory",
         session.document.clip_count(),
-        session.cache.len()
+        session.audio.len()
     );
 
     // With a real interface:

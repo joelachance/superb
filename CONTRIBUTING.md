@@ -108,7 +108,7 @@ exists because its absence cost a rename.
 * **Prefer the primitive's enum to a bool parameter.** `SendTap::PreFader`,
   not `pre_fader: true`.
 * **Types and fields are named for their role, not their mechanism.**
-  `EngineHandle` and `EngineLoop` say which side you hold; `MixerHandles`
+  `EngineHandle` and `AudioThread` say which side you hold; `MixerHandles`
   are the live controls of the mixer the engine runs. A type called
   `Player` must play.
 * **State is a field called `state`.** Every document object keeps its

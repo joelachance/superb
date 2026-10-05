@@ -87,7 +87,7 @@ pub(crate) fn render(
     frames: usize,
 ) -> Result<PlanarBuffer> {
     let (mixer, _handles) =
-        session::steps::build_mixer(&session.document, &session.cache, session.channels)?;
+        session::steps::build_mixer(&session.document, &session.audio, session.channels)?;
     let mut transport = Transport::with_tempo_map(session.document.tempo_map().clone());
     transport.seek(start);
     transport.play();
@@ -125,7 +125,7 @@ mod tests {
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 1_000);
         tone.fill(0.5);
-        session.cache.insert("tone.wav", tone);
+        session.audio.insert("tone.wav", tone);
         clip::add(
             &mut session,
             vox,

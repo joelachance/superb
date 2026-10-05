@@ -92,7 +92,7 @@ mod tests {
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);
-        session.cache.insert("tone.wav", tone);
+        session.audio.insert("tone.wav", tone);
         crate::clip::add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         // Balance pan law on every strip keeps the arithmetic obvious.
         session::steps::rebuild(&mut session).unwrap();

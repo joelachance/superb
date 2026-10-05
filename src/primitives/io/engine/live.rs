@@ -1,19 +1,19 @@
-//! Controlling a running engine from another thread.
+//! A running engine split in two: a control handle and an audio thread.
 //!
 //! [`Engine::render`] has to be driven from exactly one thread: a device
 //! callback, or an offline loop. Play, stop, seek and "swap in this new
-//! graph" come from somewhere else, usually a UI. [`engine_pair`] splits the
-//! two roles:
+//! graph" come from somewhere else, usually a UI. [`Engine::live`] makes
+//! the two sides:
 //!
-//! * [`EngineLoop`] is the audio side. It owns the [`Engine`] (wrapping a
-//!   [`LiveGraph`]) and exposes one method, [`EngineLoop::tick`], which
+//! * [`AudioThread`] is the audio side. It owns the [`Engine`] (wrapping a
+//!   [`LiveGraph`]) and exposes one method, [`AudioThread::tick`], which
 //!   applies pending commands, renders a block and publishes the transport
-//!   position. Hand it to a device stream with `EngineLoop::run_on_device`
-//!   (feature `devices`) or call `tick` from your own loop.
+//!   position. Hand it to a device stream with `AudioThread::run_on_device`
+//!   (feature `devices`) or call `tick` from a loop of your own.
 //! * [`EngineHandle`] is the control side. It sends [`EngineCommand`]s over a
 //!   wait-free queue, publishes prepared graphs through a [`GraphEditor`],
-//!   queues software MIDI, and reads the position and state the loop
-//!   publishes through atomics.
+//!   queues software MIDI, and reads the position and state the audio
+//!   thread publishes through atomics.
 //!
 //! Nothing here blocks or allocates on the audio side: commands are `Copy`
 //! or move a queue handle, graph swaps are pointer exchanges, and retired
@@ -22,11 +22,11 @@
 //! ```
 //! use superb::primitives::graph::nodes::ConstantNode;
 //! use superb::primitives::graph::AudioGraph;
-//! use superb::primitives::io::live::{engine_pair, EngineCommand};
+//! use superb::primitives::io::{Engine, EngineCommand};
 //! use superb::primitives::buffers::PlanarBuffer;
 //! use superb::primitives::{SampleRate, TimePosition};
 //!
-//! let (mut control, mut audio) = engine_pair(SampleRate::HZ_48K, 64, 120.0).unwrap();
+//! let (mut control, mut audio) = Engine::live(SampleRate::HZ_48K, 64, 120.0).unwrap();
 //!
 //! // Control thread: build a graph and publish it.
 //! let mut graph = AudioGraph::new();
@@ -59,14 +59,14 @@ use super::{Engine, MidiTiming};
 pub const COMMAND_CAPACITY: usize = 64;
 /// How many software MIDI messages may wait between two blocks.
 pub const MIDI_CAPACITY: usize = 256;
-/// How many extra MIDI sources ([`EngineCommand::AddMidiInput`]) a loop accepts.
+/// How many extra MIDI sources ([`EngineCommand::AddMidiInput`]) an audio thread accepts.
 pub const MAX_EXTRA_MIDI_INPUTS: usize = 4;
 /// How many published graphs may wait to be swapped in.
 pub const SWAP_CAPACITY: usize = 2;
 
-/// A request from the control thread to the engine loop.
+/// A request from the control thread to the audio thread.
 ///
-/// Applied at the start of the next [`EngineLoop::tick`], in the order sent.
+/// Applied at the start of the next [`AudioThread::tick`], in the order sent.
 pub enum EngineCommand {
     /// Start the transport (recording stays recording).
     Play,
@@ -76,7 +76,7 @@ pub enum EngineCommand {
     Stop,
     /// Move the playhead.
     Seek(TimePosition),
-    /// Set or clear the loop range (does not enable looping).
+    /// Set or clear the audio thread range (does not enable looping).
     SetLoop(Option<LoopRange>),
     /// Enable or disable looping.
     SetLoopEnabled(bool),
@@ -104,7 +104,7 @@ impl core::fmt::Debug for EngineCommand {
     }
 }
 
-/// What the loop publishes after every block.
+/// What the audio thread publishes after every block.
 struct Shared {
     position: AtomicI64,
     /// 0 stopped, 1 playing, 2 recording.
@@ -128,7 +128,8 @@ fn state_from_u8(v: u8) -> TransportState {
     }
 }
 
-/// Control-side handle to a running [`EngineLoop`].
+/// The control side of a live engine: what a UI holds to drive an
+/// [`AudioThread`].
 ///
 /// Every method is safe to call from a UI thread. Nothing here waits for
 /// the audio thread; commands and graphs are queued and applied at the next
@@ -156,7 +157,7 @@ impl EngineHandle {
     }
 
     /// Prepares `graph` for this engine's sample rate and block size and
-    /// hands it to the loop, which swaps it in at its next block. Retired
+    /// hands it to the audio thread, which swaps it in at its next block. Retired
     /// graphs that have come back are dropped here first.
     ///
     /// Fails if `graph` cannot be prepared (for example a cycle) or if
@@ -172,7 +173,7 @@ impl EngineHandle {
         &mut self.editor
     }
 
-    /// Drops retired graphs the loop has handed back. Returns how many.
+    /// Drops retired graphs the audio thread has handed back. Returns how many.
     pub fn reclaim(&mut self) -> usize {
         self.editor.try_reclaim()
     }
@@ -189,12 +190,12 @@ impl EngineHandle {
             })
     }
 
-    /// Playhead position after the last block the loop rendered.
+    /// Playhead position after the last block the audio thread rendered.
     pub fn position(&self) -> TimePosition {
         TimePosition::from_samples(self.shared.position.load(Ordering::Acquire))
     }
 
-    /// Transport state after the last block the loop rendered.
+    /// Transport state after the last block the audio thread rendered.
     pub fn state(&self) -> TransportState {
         state_from_u8(self.shared.state.load(Ordering::Acquire))
     }
@@ -204,12 +205,12 @@ impl EngineHandle {
         self.state().is_rolling()
     }
 
-    /// Blocks the loop has rendered so far.
+    /// Blocks the audio thread has rendered so far.
     pub fn blocks_rendered(&self) -> u64 {
         self.shared.blocks.load(Ordering::Acquire)
     }
 
-    /// DSP load meter shared with the loop.
+    /// DSP load meter shared with the audio thread.
     pub fn load(&self) -> Arc<LoadMeter> {
         Arc::clone(&self.load)
     }
@@ -219,12 +220,12 @@ impl EngineHandle {
         self.sample_rate
     }
 
-    /// Largest block the loop will render, and the size graphs are prepared for.
+    /// Largest block the audio thread will render, and the size graphs are prepared for.
     pub fn max_frames(&self) -> usize {
         self.max_frames
     }
 
-    /// `true` if the loop has been dropped.
+    /// `true` if the audio thread has been dropped.
     pub fn is_detached(&self) -> bool {
         self.commands.is_abandoned()
     }
@@ -242,15 +243,16 @@ impl core::fmt::Debug for EngineHandle {
     }
 }
 
-/// Audio-side half: owns the engine and renders blocks on demand.
-pub struct EngineLoop {
+/// The audio side of a live engine: owns the [`Engine`] and renders blocks
+/// on demand, from a device callback or a loop of your own.
+pub struct AudioThread {
     engine: Engine<LiveGraph>,
     commands: Consumer<EngineCommand>,
     extra_midi: [Option<Consumer<TimestampedMessage>>; MAX_EXTRA_MIDI_INPUTS],
     shared: Arc<Shared>,
 }
 
-impl EngineLoop {
+impl AudioThread {
     /// Applies every waiting command to the transport and engine. Called by
     /// [`tick`](Self::tick); call it directly only if you drive
     /// [`Engine::render`] yourself. Allocation-free.
@@ -318,18 +320,18 @@ impl EngineLoop {
         self.commands.is_abandoned()
     }
 
-    /// Moves the loop into a device output stream and starts it.
+    /// Moves the audio thread into a device output stream and starts it.
     ///
     /// `config.sample_rate` and `config.max_block_frames` must equal the
-    /// values the loop was created with, because every published graph is
+    /// values the audio thread was created with, because every published graph is
     /// prepared for them; a mismatch is rejected rather than silently
     /// re-prepared. The callback sets the MIDI block start from the device
     /// clock, then calls [`tick`](Self::tick).
     #[cfg(feature = "devices")]
     pub fn run_on_device(
         mut self,
-        config: &super::device::OutputConfig,
-    ) -> Result<super::device::OutputStream> {
+        config: &crate::primitives::io::device::OutputConfig,
+    ) -> Result<crate::primitives::io::device::OutputStream> {
         let (rate, frames) = self
             .engine
             .prepared_config()
@@ -340,7 +342,7 @@ impl EngineLoop {
             });
         }
         let load = self.engine.load();
-        super::device::OutputStream::open_with_meter(
+        crate::primitives::io::device::OutputStream::open_with_meter(
             config,
             move |block: &mut PlanarBuffer, block_start_us: u64| {
                 self.engine.set_midi_block_start_us(Some(block_start_us));
@@ -353,9 +355,9 @@ impl EngineLoop {
     }
 }
 
-impl core::fmt::Debug for EngineLoop {
+impl core::fmt::Debug for AudioThread {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("EngineLoop")
+        f.debug_struct("AudioThread")
             .field("transport", &self.engine.transport().state())
             .field("position", &self.engine.transport().position())
             .field("extra_midi", &self.extra_midi.iter().flatten().count())
@@ -363,17 +365,27 @@ impl core::fmt::Debug for EngineLoop {
     }
 }
 
-/// Creates a connected control handle and engine loop.
-///
-/// The loop starts with an empty, prepared graph at `sample_rate` and
-/// `max_frames`, a stopped transport at `bpm`, and the built-in software
-/// MIDI queue attached. Publish a graph with [`EngineHandle::publish`], then
-/// drive [`EngineLoop::tick`].
-pub fn engine_pair(
+impl Engine<LiveGraph> {
+    /// Creates a live engine: a connected control handle and audio thread.
+    ///
+    /// The audio thread starts with an empty, prepared graph at `sample_rate`
+    /// and `max_frames`, a stopped transport at `bpm`, and the built-in
+    /// software MIDI queue attached. Publish a graph with
+    /// [`EngineHandle::publish`], then drive [`AudioThread::tick`].
+    pub fn live(
+        sample_rate: SampleRate,
+        max_frames: usize,
+        bpm: f64,
+    ) -> Result<(EngineHandle, AudioThread)> {
+        pair(sample_rate, max_frames, bpm)
+    }
+}
+
+fn pair(
     sample_rate: SampleRate,
     max_frames: usize,
     bpm: f64,
-) -> Result<(EngineHandle, EngineLoop)> {
+) -> Result<(EngineHandle, AudioThread)> {
     let (mut editor, live) = live_pair_with_capacity(SWAP_CAPACITY);
     editor.configure(sample_rate, max_frames);
     let mut engine = Engine::new(live, Transport::new(sample_rate, bpm));
@@ -397,7 +409,7 @@ pub fn engine_pair(
             sample_rate,
             max_frames,
         },
-        EngineLoop {
+        AudioThread {
             engine,
             commands: cmd_rx,
             extra_midi: [None, None, None, None],
@@ -434,7 +446,7 @@ mod tests {
 
     #[test]
     fn empty_loop_renders_silence_and_does_not_move_while_stopped() {
-        let (control, mut audio) = engine_pair(R, 32, 120.0).unwrap();
+        let (control, mut audio) = Engine::live(R, 32, 120.0).unwrap();
         let mut out = PlanarBuffer::new(2, 32);
         out.fill(1.0);
         audio.tick(&mut out).unwrap();
@@ -450,7 +462,7 @@ mod tests {
 
     #[test]
     fn commands_drive_the_transport_in_order() {
-        let (mut control, mut audio) = engine_pair(R, 64, 120.0).unwrap();
+        let (mut control, mut audio) = Engine::live(R, 64, 120.0).unwrap();
         control.publish(constant_graph(0.25)).unwrap();
         control
             .send(EngineCommand::Seek(TimePosition::from_samples(1_000)))
@@ -480,7 +492,7 @@ mod tests {
 
     #[test]
     fn loop_range_wraps_the_playhead() {
-        let (mut control, mut audio) = engine_pair(R, 100, 120.0).unwrap();
+        let (mut control, mut audio) = Engine::live(R, 100, 120.0).unwrap();
         control.publish(constant_graph(0.1)).unwrap();
         let range = LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(150)).unwrap();
         control.send(EngineCommand::SetLoop(Some(range))).unwrap();
@@ -495,7 +507,7 @@ mod tests {
 
     #[test]
     fn published_graphs_swap_between_blocks_and_retire_to_the_control_side() {
-        let (mut control, mut audio) = engine_pair(R, 16, 120.0).unwrap();
+        let (mut control, mut audio) = Engine::live(R, 16, 120.0).unwrap();
         control.publish(constant_graph(0.2)).unwrap();
         let mut out = PlanarBuffer::new(1, 16);
         audio.tick(&mut out).unwrap();
@@ -520,7 +532,7 @@ mod tests {
 
     #[test]
     fn software_midi_reaches_the_graph_sample_accurately() {
-        let (mut control, mut audio) = engine_pair(R, 480, 120.0).unwrap();
+        let (mut control, mut audio) = Engine::live(R, 480, 120.0).unwrap();
         let mut graph = AudioGraph::new();
         let synth = graph.add_node(Box::new(MonoSynthNode::new(1)));
         graph.set_output(synth).unwrap();
@@ -536,7 +548,7 @@ mod tests {
 
     #[test]
     fn extra_midi_inputs_land_at_the_block_start() {
-        let (mut control, mut audio) = engine_pair(R, 64, 120.0).unwrap();
+        let (mut control, mut audio) = Engine::live(R, 64, 120.0).unwrap();
         let mut graph = AudioGraph::new();
         let synth = graph.add_node(Box::new(MonoSynthNode::new(1)));
         graph.set_output(synth).unwrap();
@@ -564,7 +576,7 @@ mod tests {
 
     #[test]
     fn full_queues_report_capacity_errors() {
-        let (mut control, _audio) = engine_pair(R, 64, 120.0).unwrap();
+        let (mut control, _audio) = Engine::live(R, 64, 120.0).unwrap();
         for _ in 0..COMMAND_CAPACITY {
             control.send(EngineCommand::Play).unwrap();
         }
@@ -579,7 +591,7 @@ mod tests {
             control.push_midi(note_on(0)),
             Err(SuperbError::CapacityExceeded { .. })
         ));
-        // Two publishes may wait; a third is refused until the loop applies them.
+        // Two publishes may wait; a third is refused until the audio thread applies them.
         control.publish(constant_graph(0.1)).unwrap();
         control.publish(constant_graph(0.2)).unwrap();
         assert!(matches!(
@@ -590,17 +602,17 @@ mod tests {
 
     #[test]
     fn dropping_one_side_is_visible_to_the_other() {
-        let (control, audio) = engine_pair(R, 64, 120.0).unwrap();
+        let (control, audio) = Engine::live(R, 64, 120.0).unwrap();
         assert!(!audio.is_detached());
         drop(control);
         assert!(audio.is_detached());
-        let (control, audio) = engine_pair(R, 64, 120.0).unwrap();
+        let (control, audio) = Engine::live(R, 64, 120.0).unwrap();
         drop(audio);
         assert!(control.is_detached());
     }
 
     #[test]
     fn invalid_configuration_is_rejected() {
-        assert!(engine_pair(R, 0, 120.0).is_err());
+        assert!(Engine::live(R, 0, 120.0).is_err());
     }
 }

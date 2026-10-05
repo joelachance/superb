@@ -13,7 +13,7 @@ ports. Without them the module is empty and the session renders through
 | verb | feature | does |
 |---|---|---|
 | `outputs()` / `inputs()` | `devices` | device listings with the default marked and the channel count when known |
-| `output(session, Option<name>)` | `devices` | play the session through that device (`None` = default): the engine loop moves into a stream matched to the session, and structural edits rebuild at once |
+| `output(session, Option<name>)` | `devices` | play the session through that device (`None` = default): the audio thread moves into a stream matched to the session, and structural edits rebuild at once |
 | `midi_inputs()` | `midi-io` | MIDI input ports |
 
 ## Usage

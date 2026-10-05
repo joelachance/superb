@@ -37,7 +37,7 @@ fn main() -> Result<()> {
             *s = 0.3 * (t * 220.0 * core::f32::consts::TAU).sin();
         }
     }
-    session.cache.insert("vox-take-1.wav", take);
+    session.audio.insert("vox-take-1.wav", take);
     // Put it on the timeline, starting half a second in. The clip is as long
     // as the audio and named after the key ("vox-take-1").
     let clip = clip::add(
@@ -106,9 +106,9 @@ fn main() -> Result<()> {
     );
 
     let mut again = session::open(&path, 256)?;
-    again.cache.insert(
+    again.audio.insert(
         "vox-take-1.wav",
-        (*session.cache.get("vox-take-1.wav".as_ref()).unwrap()).clone(),
+        (*session.audio.get("vox-take-1.wav".as_ref()).unwrap()).clone(),
     );
     println!(
         "reopened {:?}: {} tracks, {} clips, marker {:?} at {:.2} s",

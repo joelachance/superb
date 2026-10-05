@@ -28,13 +28,13 @@ resampling and bounce/export helpers.
 * `MidiTiming` — `Stream` (default: timestamps → frames via
   `FrameMapper`) or `BlockStart` (everything at frame 0).
 * `EngineStats` — `blocks`, `segments`, `midi_dropped` counters from `render`.
-* `live::{engine_pair, EngineHandle, EngineLoop, EngineCommand}` — a running
-  engine split in two: `EngineHandle` is the control handle (transport
-  commands over a queue, `publish` of prepared graphs, software MIDI,
-  position and state atomics, `reclaim` of retired graphs) and
-  `EngineLoop` is the audio side (`tick` renders one block; with `devices`,
-  `run_on_device` moves it into an output callback). This is what the
-  `play` flow drives.
+* `Engine::live` → `(EngineHandle, AudioThread)`, with `EngineCommand` — a
+  running engine split in two: `EngineHandle` is the control side
+  (transport commands over a queue, `publish` of prepared graphs, software
+  MIDI, position and state atomics, `reclaim` of retired graphs) and
+  `AudioThread` is the audio side (`tick` renders one block; with
+  `devices`, `run_on_device` moves it into an output callback). This is
+  what the `transport` flow drives.
 * `capture::{capture_queue, CaptureProducer, CaptureConsumer, CaptureBlock}`
   — a recycle queue of pre-allocated planar blocks for recording; always
   compiled, fed by `device::run_capture` or any producer.

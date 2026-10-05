@@ -32,7 +32,7 @@ fn main() -> Result<()> {
             *s = 0.5 * (-6.0 * t).exp() * (t * 330.0 * core::f32::consts::TAU).sin();
         }
     }
-    session.cache.insert("pluck.wav", pluck);
+    session.audio.insert("pluck.wav", pluck);
     // Three plucks, one per half second; each clip is as long as the audio.
     for n in 0..3 {
         clip::add(

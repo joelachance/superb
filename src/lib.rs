@@ -31,10 +31,10 @@
 //! let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
 //! let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
 //!
-//! // Clips point at audio in the cache: a decoded file, or a buffer you made.
+//! // Clips name audio held in memory: a decoded file, or a buffer you made.
 //! let mut tone = PlanarBuffer::new(2, 4_800);
 //! tone.fill(0.25);
-//! session.cache.insert("tone.wav", tone);
+//! session.audio.insert("tone.wav", tone);
 //! clip::add(&mut session, lead, "tone.wav", TimePosition::ZERO)?;   // as long as the audio
 //! track::volume(&mut session, lead, -6.0)?;
 //!

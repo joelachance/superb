@@ -36,8 +36,8 @@ fn main() -> Result<()> {
             b.channel_mut(ch)[i] = sb;
         }
     }
-    session.cache.insert("a.wav", a);
-    session.cache.insert("b.wav", b);
+    session.audio.insert("a.wav", a);
+    session.audio.insert("b.wav", b);
     clip::add(&mut session, lead, "a.wav", TimePosition::ZERO)?;
     clip::add(
         &mut session,
