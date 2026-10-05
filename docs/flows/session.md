@@ -34,7 +34,6 @@ Tracks are added and set up in [`track`](track.md).
 | `rebuild(session)` | build a fresh mixer from the document and swap it into the engine; the structural flows call it for you |
 | `render_blocks(session, blocks) -> PlanarBuffer` | run the engine loop for `blocks` blocks when no sound card is attached, and return the audio |
 | `build_mixer(&document, &cache, channels) -> (Mixer, Wiring)` | strips, buses, sends, clip nodes, a live instrument per monitoring MIDI track |
-| `attach_inserts(&document, &mut PluginLoader, &mut Mixer, &Wiring) -> (Vec<LiveInsert>, failures)` | instantiate each insert into its strip's chain; failures are returned, not fatal |
 | `collect_handles(&Mixer, &Wiring) -> (StripHandles, SendHandles)` | the atomics the control side keeps |
 | `publish(&mut EngineHandle, Mixer)` | prepare the graph and hand it to the engine |
 
@@ -75,7 +74,7 @@ matching command in `primitives::session::commands` pushed through
 `UndoStack::push`; `DocumentSnapshot` and `serde_json` for files;
 `AudioCache::load` for import. `set_loop` additionally sends
 `EngineCommand::SetLoop`. `rebuild`: `EngineHandle::reclaim` →
-`build_mixer` → `attach_inserts` → `collect_handles` → `publish`, then
+`build_mixer` → `collect_handles` → `publish`, then
 `LiveGraph::apply_pending` while the loop is still in the session.
 `render_blocks`: `EngineLoop::tick` per block, plus
 `record::steps::collect` while a recording runs.

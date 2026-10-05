@@ -29,8 +29,7 @@ println!("{} frames, peak {:.2}", audio.frames(), audio.peak());
 
 ## Made of
 
-`render`: `session::steps::build_mixer` → `session::steps::attach_inserts`
-(fails if an insert cannot load) → `Transport::with_tempo_map(session
+`render`: `session::steps::build_mixer` → `Transport::with_tempo_map(session
 tempo map)`, `seek`, `play` → `Engine::new` → `io::offline::render`.
 `bounce`: `render` → `wav::write`. `bounce_at_rate`: `render` →
 `io::files::resample` → `wav::write`.

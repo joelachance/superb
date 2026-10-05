@@ -67,6 +67,5 @@ for `monitor`. `route`: `SetTrackOutput` through `session::structural`.
 * Solo is a shared counter across strips: soloing one track silences every
   other track; buses ignore solo.
 * The instrument a monitoring MIDI track gets is `MonoSynthNode`, a simple
-  synth for hearing that MIDI arrives; an instrument plugin on the track
-  (`plugins::insert`) is the real thing.
+  synth for hearing that MIDI arrives; instrument plugins come later.
 * Not yet: hearing a track's input through its strip while recording.

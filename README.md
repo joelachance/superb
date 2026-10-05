@@ -48,7 +48,6 @@ They know nothing about flows or the `Session`.
 | `mix` | buses, sends, meters | [mix.md](docs/flows/mix.md) |
 | `midi` | send notes, connect a keyboard | [midi.md](docs/flows/midi.md) |
 | `record` | start a recording, stop it, get a clip on every armed track | [record.md](docs/flows/record.md) |
-| `plugins` | find plugins, insert one on a track, set parameters, bypass | [plugins.md](docs/flows/plugins.md) |
 | `export` | render a range or the whole session to WAV, optionally resampled | [export.md](docs/flows/export.md) |
 | `devices` | list audio and MIDI hardware; play through an output; configurations that match the session | [devices.md](docs/flows/devices.md) |
 
@@ -88,7 +87,6 @@ cargo run --example play_session               # transport: start, seek, loop, o
 cargo run --example mix_session                # track state and mix: faders, bus, sends, meters
 cargo run --example midi_keys                  # midi: notes into a monitoring track
 cargo run --example record_take                # record: a recording from a synthetic microphone
-cargo run --example insert_plugin              # plugins: scan, insert, set a parameter
 cargo run --example export_session             # export: bounce to WAV
 cargo run --example list_devices --features devices
 ```

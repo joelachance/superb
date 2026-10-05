@@ -107,11 +107,6 @@ name = "record_take"
 path = "examples/flows/record_take.rs"
 
 [[example]]
-name = "insert_plugin"
-path = "examples/flows/insert_plugin.rs"
-required-features = ["clap"]
-
-[[example]]
 name = "export_session"
 path = "examples/flows/export_session.rs"
 

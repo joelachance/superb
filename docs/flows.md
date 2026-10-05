@@ -13,7 +13,6 @@ This page covers what they share; each flow has its own note in
 | `mix` — buses, sends, meters | [mix.md](flows/mix.md) |
 | `midi` — send notes, connect a keyboard | [midi.md](flows/midi.md) |
 | `record` — start a recording, stop it, get clips | [record.md](flows/record.md) |
-| `plugins` — scan, insert, parameters, bypass | [plugins.md](flows/plugins.md) |
 | `export` — bounce a range or the session to WAV | [export.md](flows/export.md) |
 | `devices` — audio and MIDI hardware; play through an output | [devices.md](flows/devices.md) |
 
@@ -49,7 +48,6 @@ pub struct Session {
     pub needs_rebuild: bool,
     pub output: Option<OutputStream>,          // feature devices
     pub midi_inputs: Vec<MidiInputBridge>,      // feature midi-io
-    pub plugins: PluginLoader,
 }
 ```
 

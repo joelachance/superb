@@ -1,6 +1,6 @@
 //! Getting the document out: render a range or the whole document to a file.
 //!
-//! Export builds its own copy of the console (inserts included) and drives
+//! Export builds its own copy of the mixer and drives
 //! it offline, as fast as the machine allows. The running engine is not
 //! touched, so you can bounce while listening.
 //!
@@ -20,23 +20,12 @@ use crate::session::Session;
 
 /// Renders `frames` frames of the document starting at `start` into memory.
 ///
-/// Made of: [`session::steps::build_mixer`] → [`session::steps::attach_inserts`]
+/// Made of: [`session::steps::build_mixer`]
 /// → a `Transport` on the document's tempo map, sought to `start` and playing →
 /// `Engine::new` → `offline::render`.
 pub fn render(session: &mut Session, start: TimePosition, frames: usize) -> Result<PlanarBuffer> {
-    let (mut mixer, player) =
+    let (mixer, _wiring) =
         session::steps::build_mixer(&session.document, &session.cache, session.channels)?;
-    let (_live, failed) = session::steps::attach_inserts(
-        &session.document,
-        &mut session.plugins,
-        &mut mixer,
-        &player,
-    );
-    if let Some((id, why)) = failed.first() {
-        return Err(SuperbError::Message(format!(
-            "cannot export: insert {id} did not load ({why})"
-        )));
-    }
     let mut transport = Transport::with_tempo_map(session.document.tempo_map().clone());
     transport.seek(start);
     transport.play();

@@ -2,11 +2,11 @@
 //! engine runs, and how to run that engine by hand.
 //!
 //! [`rebuild`] turns the [`Document`] into a [`Mixer`] (strips, buses,
-//! sends, clip players, live instruments, plugin inserts) and publishes its
+//! sends, clip players, live instruments) and publishes its
 //! graph to the engine, which swaps it in between two blocks without a
 //! glitch. The structural flows call it for you. [`render_blocks`] runs the
 //! engine when no sound card is attached. The pieces are public so a
-//! program can assemble its own: [`build_mixer`], [`attach_inserts`],
+//! program can assemble its own: [`build_mixer`],
 //! [`collect_handles`], [`publish`], with [`super::wiring`] mapping tracks
 //! onto strips and attaching a node per clip.
 
@@ -20,18 +20,14 @@ use crate::session::{LiveHandles, Session};
 /// [`Session::needs_rebuild`]); call it yourself only to pick the moment.
 ///
 /// Made of: `EngineHandle::reclaim` (frees graphs the engine has retired, on
-/// this thread) → [`build_mixer`] → [`attach_inserts`] → [`collect_handles`]
+/// this thread) → [`build_mixer`] → [`collect_handles`]
 /// → [`publish`], and while the engine loop is still in the session,
 /// `LiveGraph::apply_pending` so the swap does not wait for a
 /// [`render_blocks`]. Afterwards [`Session::live`] points at the new strips,
-/// sends and plugins, and [`Session::needs_rebuild`] is clear. Inserts whose
-/// plugin failed to load are listed in `live.failed_inserts`; the rest of
-/// the mixer runs.
+/// sends, and [`Session::needs_rebuild`] is clear.
 pub fn rebuild(session: &mut Session) -> Result<()> {
     session.engine.reclaim();
-    let (mut mixer, wiring) = build_mixer(&session.document, &session.cache, session.channels)?;
-    let (inserts, failed_inserts) =
-        attach_inserts(&session.document, &mut session.plugins, &mut mixer, &wiring);
+    let (mixer, wiring) = build_mixer(&session.document, &session.cache, session.channels)?;
     let (strips, sends) = collect_handles(&mixer, &wiring);
     publish(&mut session.engine, mixer)?;
     if let Some(engine_loop) = session.engine_loop.as_mut() {
@@ -42,9 +38,7 @@ pub fn rebuild(session: &mut Session) -> Result<()> {
     session.live = LiveHandles {
         strips,
         sends,
-        inserts,
         wiring: Some(wiring),
-        failed_inserts,
     };
     session.needs_rebuild = false;
     Ok(())
@@ -84,12 +78,10 @@ use crate::primitives::graph::nodes::MonoSynthNode;
 use crate::primitives::graph::MidiPort;
 use crate::primitives::io::cache::AudioCache;
 use crate::primitives::io::live::EngineHandle;
-use crate::primitives::mixer::{Mixer, StripId};
-use crate::primitives::plugins::PluginNode;
+use crate::primitives::mixer::Mixer;
 use crate::primitives::session::{Document, TrackKind};
-use crate::primitives::InsertId;
-use crate::session::{LiveInsert, PluginLoader, SendHandles, StripHandles};
 use crate::session::{MixerBinding, Wiring};
+use crate::session::{SendHandles, StripHandles};
 
 /// Builds a fresh mixer for the document: a strip per track and bus,
 /// routing and sends, a node per audible clip, and a live instrument
@@ -118,57 +110,6 @@ pub fn build_mixer(
         mixer.graph_mut().connect_midi(MidiPort::External, synth)?;
     }
     Ok((mixer, wiring))
-}
-
-/// Loads every insert in the document and splices it into its strip's chain,
-/// with the node's bypass switch set from the insert's state. Failures
-/// are collected, not fatal.
-///
-/// Made of: `PluginLoader::instantiate` → `PluginNode::new` →
-/// `Mixer::add_insert`, per insert.
-pub fn attach_inserts(
-    document: &Document,
-    loader: &mut PluginLoader,
-    mixer: &mut Mixer,
-    wiring: &Wiring,
-) -> (Vec<LiveInsert>, Vec<(InsertId, String)>) {
-    let mut live = Vec::new();
-    let mut failed = Vec::new();
-    for track in document.tracks() {
-        let strip: StripId = match wiring.bridge().binding(track.id()) {
-            Some(MixerBinding::Track(id)) => id.into(),
-            Some(MixerBinding::Bus(id)) => id.into(),
-            None => continue,
-        };
-        for insert in track.inserts() {
-            let instance = match loader.instantiate(insert) {
-                Ok(instance) => instance,
-                Err(e) => {
-                    failed.push((insert.id(), e.to_string()));
-                    continue;
-                }
-            };
-            let descriptor = instance.descriptor().clone();
-            let params = instance.params().to_vec();
-            let mut node = PluginNode::new(instance);
-            let param_queue = node
-                .take_param_sender()
-                .expect("a fresh node has its sender");
-            let bypass = node.bypass_handle();
-            bypass.store(insert.state.bypass, core::sync::atomic::Ordering::Relaxed);
-            match mixer.add_insert(strip, Box::new(node)) {
-                Ok(_) => live.push(LiveInsert {
-                    id: insert.id(),
-                    descriptor,
-                    params,
-                    param_queue,
-                    bypass,
-                }),
-                Err(e) => failed.push((insert.id(), e.to_string())),
-            }
-        }
-    }
-    (live, failed)
 }
 
 /// Collects the atomics the control side keeps after the mixer's graph

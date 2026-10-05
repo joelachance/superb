@@ -97,8 +97,7 @@ exists because its absence cost a rename.
   variant gets a suffix on the same verb: `start_from`, `bounce_at_rate`,
   `bounce_session`.
 * **A setter is the noun of what it sets.** `track::volume(s, t, db)`,
-  `track::input(s, t, ch)`, `mix::level(s, send, db)`, `plugins::bypass(s,
-  i, on)`: no `set_` prefix. Units go in the doc, not the name, when only
+  `track::input(s, t, ch)`, `mix::level(s, send, db)`: no `set_` prefix. Units go in the doc, not the name, when only
   one unit exists at that tier (dB everywhere in the flows).
 * **Queries read as what they return.** `is_x` for a bool, a noun for data
   (`info`, `failures`, `params`, `position`). Never a past participle for

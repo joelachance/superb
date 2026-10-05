@@ -96,9 +96,6 @@ Data crosses the thread boundary in exactly three ways:
      `BufferPlayerNode` for audio in the cache, `ScheduledSynthNode` for
      MIDI notes converted through the tempo map, plus a live instrument
      for every monitoring MIDI track.
-   * `attach_inserts` instantiates each track's plugins and adds them to
-     the strip's insert chain; a plugin that fails to load is reported,
-     not fatal.
    * `collect_handles` gathers the strip, send and plugin handles the
      control side keeps.
    * `publish` prepares the mixer's graph and sends it to the engine.
