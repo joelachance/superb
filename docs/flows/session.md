@@ -19,7 +19,7 @@ memory becomes the mixer the engine runs. A saved session is a folder:
 | `open(folder, block_size)` / `save(session, folder)` | a session folder in and out: `memory.json` plus the WAV files clips refer to; `save` writes any audio not on disk yet and makes the folder `session.folder`; `session.history.is_clean()` says whether anything changed since (state changes count) | — |
 | `add_marker(session, name, at)` | | one |
 | `set_tempo(session, bpm)` | initial tempo of the tempo map | one |
-| `set_loop(session, Option<LoopRange>)` | the loop range; also told to the engine | one |
+| `set_loop(session, Option<LoopRange>)` | the loop range; also told to the engine; `transport::looping` turns it on | one |
 | `undo(session)` / `redo(session)` | return `false` when there is nothing to do; rebuild the mixer | |
 
 Tracks are added and set up in [`track`](track.md); clips are placed in

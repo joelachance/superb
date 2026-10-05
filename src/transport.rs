@@ -2,7 +2,8 @@
 //!
 //! Every function sends a command to the running engine, which applies it
 //! at the start of its next block, or reads what the engine published after
-//! its last block. Nothing here touches the memory.
+//! its last block. Only [`looping`] touches the memory: whether playback
+//! loops is saved with the session, like a track's mute.
 //!
 //! Made of `superb::primitives::io` (`Engine::live`) (`EngineHandle::send`, the
 //! position and state atomics).
@@ -46,10 +47,17 @@ pub fn rewind(session: &mut Session) -> Result<()> {
 }
 
 /// Turns looping over the session's loop range on or off (set the range
-/// with [`session::set_loop`](crate::session::set_loop)).
+/// with [`session::set_loop`](crate::session::set_loop)). State, like
+/// mute: saved with the session, applied at the engine's next block, not
+/// an undo step.
 ///
-/// Made of: `EngineHandle::send(SetLoopEnabled)`.
-pub fn set_loop_enabled(session: &mut Session, on: bool) -> Result<()> {
+/// Made of: `Memory::set_looping` through `session::set_state` →
+/// `EngineHandle::send(SetLoopEnabled)`.
+pub fn looping(session: &mut Session, on: bool) -> Result<()> {
+    crate::session::set_state(session, |m| {
+        m.set_looping(on);
+        Ok(())
+    })?;
     session.engine.send(EngineCommand::SetLoopEnabled(on))
 }
 
@@ -129,9 +137,48 @@ mod tests {
 
         let range = LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(100)).unwrap();
         session::set_loop(&mut session, Some(range)).unwrap();
-        set_loop_enabled(&mut session, true).unwrap();
+        looping(&mut session, true).unwrap();
         start(&mut session).unwrap();
         session::steps::render_blocks(&mut session, 3).unwrap(); // 192 frames through a 100-frame loop
         assert_eq!(playhead(&session), TimePosition::from_samples(92));
+    }
+
+    #[test]
+    fn looping_is_saved_state_and_reaches_the_engine_on_open() {
+        let dir = std::env::temp_dir().join(format!("superb-looping-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (mut session, _) = tone_rig();
+        let range = LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(100)).unwrap();
+        session::set_loop(&mut session, Some(range)).unwrap();
+        let steps = session.history.undo_len();
+        looping(&mut session, true).unwrap();
+        assert!(session.memory.looping());
+        assert_eq!(session.history.undo_len(), steps, "state, not an edit");
+        assert!(!session.history.is_clean());
+        session::save(&mut session, &dir).unwrap();
+
+        // Reopened: the memory remembers, and the first start tells the engine.
+        let mut again = session::open(&dir, 64).unwrap();
+        assert!(again.memory.looping());
+        assert_eq!(again.memory.loop_range(), Some(range));
+        start(&mut again).unwrap();
+        session::steps::render_blocks(&mut again, 3).unwrap(); // 192 frames through a 100-frame loop
+        assert_eq!(playhead(&again), TimePosition::from_samples(92));
+
+        // Back in the original session, undoing the range edit reaches the
+        // engine at the next rebuild, which the next render runs.
+        assert!(session::undo(&mut session).unwrap());
+        assert_eq!(session.memory.loop_range(), None);
+        start(&mut session).unwrap();
+        rewind(&mut session).unwrap();
+        session::steps::render_blocks(&mut session, 3).unwrap();
+        assert_eq!(
+            playhead(&session),
+            TimePosition::from_samples(192),
+            "no loop any more"
+        );
+        looping(&mut session, false).unwrap();
+        assert!(!session.memory.looping());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

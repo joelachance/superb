@@ -30,6 +30,7 @@ pub struct Memory {
     sample_rate: SampleRate,
     tempo_map: TempoMap,
     loop_range: Option<LoopRange>,
+    looping: bool,
     tracks: Vec<Track>,
     markers: Vec<Marker>,
     next_id: RawId,
@@ -44,6 +45,7 @@ impl Memory {
             sample_rate,
             tempo_map: TempoMap::new(sample_rate, 120.0),
             loop_range: None,
+            looping: false,
             tracks: Vec::new(),
             markers: Vec::new(),
             next_id: 1,
@@ -98,6 +100,18 @@ impl Memory {
     /// Sets or clears the loop range.
     pub fn set_loop_range(&mut self, range: Option<LoopRange>) {
         self.loop_range = range;
+        self.touch();
+    }
+
+    /// Whether playback loops over the loop range. Saved state, like a
+    /// track's mute: the flows set it outside the undo history.
+    pub fn looping(&self) -> bool {
+        self.looping
+    }
+
+    /// Turns looping on or off.
+    pub fn set_looping(&mut self, on: bool) {
+        self.looping = on;
         self.touch();
     }
 

@@ -65,7 +65,7 @@ replacing at least three primitive calls or by hiding an ordering hazard
 * A continuous edit (fader, knob, clip drag) pushes through the undo stack
   and coalesces by time (`Session::COALESCE_WINDOW`), so a drag is one step
   without the UI having to say when it ended. State (mute, solo, arm,
-  monitor, input, send on/off) is not an edit: it goes through
+  monitor, input, send on/off, looping) is not an edit: it goes through
   `session::set_state`, which changes the memory directly and marks the
   history dirty, and never enters the undo history.
 * No behaviour on the `Session` itself beyond constructors; it is a record.

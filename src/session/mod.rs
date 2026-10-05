@@ -233,7 +233,7 @@ pub fn set_tempo(session: &mut Session, bpm: f64) -> Result<()> {
 }
 
 /// Sets or clears the loop range in the memory and on the running engine.
-/// Enable looping with [`transport::set_loop_enabled`](crate::transport::set_loop_enabled).
+/// Turn looping on with [`transport::looping`](crate::transport::looping).
 ///
 /// Made of: push `SetLoopRange` → `EngineHandle::send(SetLoop)`.
 pub fn set_loop(session: &mut Session, range: Option<LoopRange>) -> Result<()> {
@@ -290,8 +290,8 @@ pub(crate) fn changed_structure(session: &mut Session) -> Result<()> {
     Ok(())
 }
 
-/// Changes state (mute, solo, arm, monitor, input, send on/off) on the
-/// memory. State is saved with the session but is not an edit: it never
+/// Changes state (mute, solo, arm, monitor, input, send on/off, looping)
+/// on the memory. State is saved with the session but is not an edit: it never
 /// enters the undo history, so the history is told its saved point is gone
 /// and `history.is_clean()` turns false.
 pub(crate) fn set_state(

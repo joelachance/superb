@@ -5,8 +5,8 @@
 //! - Without an audio device, `session::steps::render_blocks` renders blocks and hands you
 //!   the audio (tests and headless tools work this way)
 //! - The playhead is read from atomics: `playhead`, `state`
-//! - A loop range lives in the memory (`session::set_loop`); `set_loop_enabled`
-//!   turns it on and off while rolling
+//! - A loop range lives in the memory (`session::set_loop`); `transport::looping`
+//!   turns it on and off, saved state like a track's mute
 //! - With feature `devices`, `devices::output` moves the engine onto a
 //!   real output stream and the device drives it from then on
 //!
@@ -66,14 +66,14 @@ fn main() -> Result<()> {
         transport::playhead(&session).to_seconds(rate)
     );
 
-    // Loop the middle pluck. The range is part of the memory (undoable,
-    // saved); enabling is a transport switch.
+    // Loop the middle pluck. The range is an edit (undoable, saved); looping
+    // on or off is state (saved, not an undo step), like mute.
     let range = LoopRange::new(
         TimePosition::from_seconds(0.5, rate),
         TimePosition::from_seconds(1.0, rate),
     )?;
     session::set_loop(&mut session, Some(range))?;
-    transport::set_loop_enabled(&mut session, true)?;
+    transport::looping(&mut session, true)?;
     transport::seek(&mut session, range.start())?;
     // 0.75 s of playback inside a 0.5 s loop: the playhead wraps once.
     session::steps::render_blocks(&mut session, 141)?;
@@ -97,7 +97,7 @@ fn main() -> Result<()> {
     #[cfg(feature = "devices")]
     {
         use superb::devices;
-        transport::set_loop_enabled(&mut session, false)?;
+        transport::looping(&mut session, false)?;
         devices::output(&mut session, None)?; // the default output, matched to the session
         transport::start(&mut session)?;
         std::thread::sleep(std::time::Duration::from_millis(1600));

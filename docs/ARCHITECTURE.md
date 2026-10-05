@@ -187,7 +187,7 @@ is still correct. A failed revert clears the whole history because the
 memory state is unknown. The clean (saved) state is a depth index that
 becomes unreachable if the saved step is coalesced onto or discarded.
 Flows add one convention on top: state (mute, solo, arm, monitor, input,
-send on/off) is not an edit. It changes the memory directly and tells
+send on/off, looping) is not an edit. It changes the memory directly and tells
 the history its saved point is gone (`UndoStack::mark_dirty`), so it is
 saved but never undone. Volume and pan are state in the memory but
 continuous, so they go through the history and coalesce.

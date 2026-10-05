@@ -55,7 +55,7 @@ column is what not to say in code, docs or UI text.
 | archive (a clip; it stays, silent) | delete, remove (clips are never deleted) |
 | strip | channel (a strip's channel count is something else) |
 | insert | effect slot, plugin slot |
-| state (mute, solo, arm, monitor, input, send on/off) | switch, toggle, flag |
+| state (mute, solo, arm, monitor, input, send on/off, looping) | switch, toggle, flag |
 | edit | change, gesture (for anything the undo history records) |
 | volume (a strip's fader, dB) | gain (that is the engine's linear multiplier) |
 | level (a send, dB) | gain, amount |
@@ -71,7 +71,7 @@ column is what not to say in code, docs or UI text.
 - **Rebuild** — In Superb, rebuilding the mixer from the memory and swapping it into the running engine. Happens for you: at once while a device is playing, otherwise when you next start.
 - **Recording** — A recording in progress. When it stops, every armed track gets a clip named after it (`vox 1`); the clips share the audio.
 - **Insert** — An effect or instrument sitting in a track's signal path, in order. A primitive today (the memory stores it); the flow for it comes back with plugins.
-- **State vs. edit** — A track's mute, solo, arm, monitor and input and a send's on/off are state: saved with the session, heard at once, never undo steps. Volume and pan are state too but continuous, so they are undoable edits that coalesce. Everything else you change is an edit.
+- **State vs. edit** — A track's mute, solo, arm, monitor and input, a send's on/off and whether playback loops are state: saved with the session, heard at once, never undo steps. Volume and pan are state too but continuous, so they are undoable edits that coalesce. Everything else you change is an edit.
 
 ## Plugin formats (short map)
 

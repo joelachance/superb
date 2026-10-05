@@ -18,7 +18,7 @@ use crate::primitives::graph::nodes::{
 };
 use crate::primitives::graph::MidiPort;
 use crate::primitives::io::cache::AudioCache;
-use crate::primitives::io::EngineHandle;
+use crate::primitives::io::{EngineCommand, EngineHandle};
 use crate::primitives::mixer::{Mixer, SendParams, SendTap, StripId, StripParams};
 use crate::primitives::session::{Clip, ClipSource, Memory, MidiNote, TrackKind};
 use crate::primitives::transport::TempoMap;
@@ -31,15 +31,26 @@ use crate::session::{MixerHandles, Session};
 /// the engine and otherwise at the next start or render; call it yourself
 /// only to pick the moment.
 ///
+/// The engine's loop range and looping switch are set from the memory at
+/// the same time, so an opened session and an undone loop edit reach the
+/// transport.
+///
 /// Made of: `EngineHandle::reclaim` (frees graphs the engine has retired, on
-/// this thread) → [`build_mixer`] → [`publish`], and while the audio thread
-/// is still in the session, `LiveGraph::apply_pending` so the swap does not
-/// wait for a [`render_blocks`]. Afterwards [`Session::mixer`] holds the new
-/// strip and send controls.
+/// this thread) → [`build_mixer`] → [`publish`] →
+/// `EngineHandle::send(SetLoop, SetLoopEnabled)` from the memory, and
+/// while the audio thread is still in the session, `LiveGraph::apply_pending`
+/// so the swap does not wait for a [`render_blocks`]. Afterwards
+/// [`Session::mixer`] holds the new strip and send controls.
 pub fn rebuild(session: &mut Session) -> Result<()> {
     session.engine.reclaim();
     let (mixer, handles) = build_mixer(&session.memory, &session.audio, session.channels)?;
     publish(&mut session.engine, mixer)?;
+    session
+        .engine
+        .send(EngineCommand::SetLoop(session.memory.loop_range()))?;
+    session
+        .engine
+        .send(EngineCommand::SetLoopEnabled(session.memory.looping()))?;
     if let Some(audio_thread) = session.audio_thread.as_mut() {
         // Nothing is pulling audio yet, so nobody would swap the graph in
         // before the next `render_blocks`; do it now so rebuilds never back up.

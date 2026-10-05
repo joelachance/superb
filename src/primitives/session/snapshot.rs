@@ -215,6 +215,9 @@ pub struct MemorySnapshot {
     pub tempo: TempoSnapshot,
     /// Loop range as `[start, end)` samples.
     pub loop_range: Option<(i64, i64)>,
+    /// Whether playback loops over it (absent in older files: off).
+    #[serde(default)]
+    pub looping: bool,
     /// Tracks in order.
     pub tracks: Vec<TrackSnapshot>,
     /// Markers in position order.
@@ -342,6 +345,7 @@ impl Memory {
             name: self.name().to_owned(),
             sample_rate_hz: self.sample_rate().hz(),
             tempo: TempoSnapshot::from(self.tempo_map()),
+            looping: self.looping(),
             loop_range: self
                 .loop_range()
                 .map(|r| (r.start().samples(), r.end().samples())),
@@ -392,6 +396,7 @@ impl Memory {
             }
         }
 
+        memory.set_looping(snap.looping);
         if let Some((start, end)) = snap.loop_range {
             memory.set_loop_range(Some(LoopRange::new(
                 TimePosition::from_samples(start),

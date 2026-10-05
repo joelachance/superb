@@ -72,8 +72,8 @@ not a hundred, and a pause starts the next. A UI that wants mouse-up
 precision calls the primitive `session.history.seal()`. `record::stop`
 groups the clips it places into one step called "Record".
 
-*State* (a track's mute, solo, arm, monitor and input; a send's on/off)
-is not an edit. It is saved with the session and heard at the next block,
+*State* (a track's mute, solo, arm, monitor and input; a send's on/off;
+whether playback loops) is not an edit. It is saved with the session and heard at the next block,
 but it never enters the undo history: nobody expects Undo to un-mute a
 track. Flows set it through `session::set_state`, which also
 tells the history its saved point is gone, so `session.history.is_clean()`

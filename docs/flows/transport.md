@@ -6,7 +6,8 @@ The transport bar: start, stop, seek, loop, and where the playhead is.
 
 Every function here sends a command to the running engine, which applies
 it at the start of its next block, or reads what the engine published after
-its last block. Nothing here touches the memory.
+its last block. Only `looping` touches the memory: whether playback loops
+is saved with the session, like a track's mute.
 
 ## Verbs
 
@@ -16,7 +17,7 @@ its last block. Nothing here touches the memory.
 | `stop(session)` | |
 | `seek(session, to)` | move the playhead, stopped or rolling |
 | `rewind(session)` | seek to zero |
-| `set_loop_enabled(session, on)` | loop the range set with `session::set_loop` |
+| `looping(session, on)` | loop over the range set with `session::set_loop`; state: saved, not an undo step |
 | `playhead(session) -> TimePosition` | where the playhead is |
 | `state(session) -> TransportState` | Stopped, Playing or Recording |
 
@@ -42,9 +43,13 @@ transport::start(&mut session)?;
 
 ## Made of
 
-`EngineHandle::send(EngineCommand::{Play, Stop, Seek, SetLoopEnabled})`;
-`start` runs `session::steps::rebuild` first when the memory changed
-since the last build. `playhead` and `state` read the engine's atomics.
+`EngineHandle::send(EngineCommand::{Play, Stop, Seek})`; `looping`:
+`Memory::set_looping` through `session::set_state`, then
+`EngineHandle::send(SetLoopEnabled)`. `start` runs `session::steps::rebuild`
+first when the memory changed since the last build; a rebuild also sends
+the memory's loop range and looping switch to the engine, so an opened
+session loops the way it was saved. `playhead` and `state` read the
+engine's atomics.
 
 ## Notes
 
