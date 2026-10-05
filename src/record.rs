@@ -1,8 +1,10 @@
 //! Recording: arm tracks, capture input, get a clip on each of them.
 //!
 //! [`start`] records from a [`Source`] onto every armed track from the
-//! playhead; [`stop`] puts the audio in memory and places a clip on each
-//! of those tracks, as one undo step. The audio arrives through a capture
+//! playhead; [`stop`] writes each track's audio as a WAV file into the
+//! session folder (`audio/vox 1.wav`), keeps it in memory, and places a
+//! clip on each of those tracks, as one undo step. A session that has no
+//! folder yet keeps the audio in memory until `session::save`. The audio arrives through a capture
 //! queue that holds only a fraction of a second, so something has to empty
 //! it as it fills: a hardware source gets a thread that does so; a queue
 //! you fill yourself waits for [`collect`], which
@@ -13,6 +15,7 @@
 //! the audio held on the `Session`, and [`clip::add`](crate::clip::add).
 
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 
@@ -265,18 +268,21 @@ pub fn collect(session: &mut Session) -> usize {
     }
 }
 
-/// Stops the recording and the transport, stores the audio, and places one
-/// clip per armed track starting at the punch-in point, each named after
-/// its track (`vox 1`, `vox 2`, ...) and holding the channels its
-/// [`Input`] selects (tracks without
-/// one share the whole capture). Returns the new clips (none if nothing was
-/// captured). The whole placement is one undo step called "Record".
+/// Stops the recording and the transport and places one clip per armed
+/// track starting at the punch-in point. Each clip holds the channels its
+/// track's [`Input`] selects (tracks without one share the whole capture)
+/// and refers to `audio/<track> <n>.wav` (`audio/vox 1.wav`), so it is
+/// named `vox 1`. The file is written at once when the session has a
+/// folder ([`Session::folder`]); otherwise the audio waits in memory for
+/// `session::save`. Returns the new clips (none if nothing was captured).
+/// The whole placement is one undo step called "Record"; undo removes the
+/// clips, never the files.
 ///
 /// Made of: `EngineHandle::send(Stop)` → drop the input stream → drain the
 /// queue or `Collector::finish` → the planes become one buffer → per
-/// track, a name no audio in memory uses (`vox 1`) and the channels its
-/// `Input` selects → `AudioCache::insert_shared` →
-/// [`clip::add`](crate::clip::add), inside one undo group; rebuilds the
+/// track, a file name nothing uses yet and the channels its `Input`
+/// selects → `wav::write` into the session folder → `AudioCache::insert_shared`
+/// → [`clip::add`](crate::clip::add), inside one undo group; rebuilds the
 /// mixer so the clips play back on their strips.
 pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     let recording = session
@@ -309,11 +315,12 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         return Ok(Vec::new());
     }
     let whole = Arc::new(audio);
+    let rate = session.memory.sample_rate();
     session.history.begin_group("Record");
     let mut clips = Vec::with_capacity(tracks.len());
     for track in &tracks {
-        let (name, input) = match steps::clip_name(session, *track) {
-            Ok(name) => (name, session.memory.track(*track)?.state.input),
+        let (key, input) = match steps::audio_key(session, *track) {
+            Ok(key) => (key, session.memory.track(*track)?.state.input),
             Err(e) => {
                 session.history.cancel_group(&mut session.memory)?;
                 return Err(e);
@@ -323,8 +330,14 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
             None => Arc::clone(&whole),
             Some(input) => Arc::new(steps::select_input(&whole, input)),
         };
-        session.audio.insert_shared(&name, audio);
-        match crate::clip::add(session, *track, name.as_str(), punch_in) {
+        if let Some(folder) = session.folder.as_deref() {
+            if let Err(e) = crate::session::folder::write_audio(folder, &key, &audio, rate) {
+                session.history.cancel_group(&mut session.memory)?;
+                return Err(e);
+            }
+        }
+        session.audio.insert_shared(key.clone(), audio);
+        match crate::clip::add(session, *track, key.as_path(), punch_in) {
             Ok(clip) => clips.push(clip),
             Err(e) => {
                 session.history.cancel_group(&mut session.memory)?;
@@ -462,15 +475,26 @@ pub(crate) mod steps {
         PlanarBuffer::from_planes(&refs).unwrap_or_else(|_| PlanarBuffer::new(channels, 0))
     }
 
-    /// A name for a new clip on `track` that no cache entry uses yet:
-    /// `vox 1`, `vox 2`, ... The clip and the audio it plays share it.
-    pub(crate) fn clip_name(session: &Session, track: TrackId) -> Result<String> {
+    /// A file for a new recording on `track` that nothing uses yet, as a
+    /// path relative to the session folder: `audio/vox 1.wav`,
+    /// `audio/vox 2.wav`, ... The clip takes its stem as its name. Taken
+    /// names are those in memory and, when the session has a folder, the
+    /// files already in it.
+    pub(crate) fn audio_key(session: &Session, track: TrackId) -> Result<PathBuf> {
         let base = session.memory.track(track)?.name.clone();
         let mut n = 1;
         loop {
-            let name = format!("{base} {n}");
-            if session.audio.get(std::path::Path::new(&name)).is_none() {
-                return Ok(name);
+            let key = PathBuf::from(format!(
+                "{}/{base} {n}.wav",
+                crate::session::folder::AUDIO_DIR
+            ));
+            let in_memory = session.audio.get(&key).is_some();
+            let on_disk = session
+                .folder
+                .as_ref()
+                .is_some_and(|folder| folder.join(&key).exists());
+            if !in_memory && !on_disk {
+                return Ok(key);
             }
             n += 1;
         }
@@ -550,8 +574,8 @@ mod tests {
         assert_eq!(session.audio.len(), 2, "one entry per clip");
         assert!(
             Arc::ptr_eq(
-                &session.audio.get("vox 1".as_ref()).unwrap(),
-                &session.audio.get("gtr 1".as_ref()).unwrap()
+                &session.audio.get("audio/vox 1.wav".as_ref()).unwrap(),
+                &session.audio.get("audio/gtr 1.wav".as_ref()).unwrap()
             ),
             "sharing one buffer"
         );
@@ -656,7 +680,12 @@ mod tests {
         }
         let clips = stop(&mut session).unwrap();
         assert_eq!(clips.len(), 3);
-        let audio = |name: &str| session.audio.get(name.as_ref()).unwrap();
+        let audio = |name: &str| {
+            session
+                .audio
+                .get(format!("audio/{name}.wav").as_ref())
+                .unwrap()
+        };
         assert_eq!(audio("vox 1").channels(), 1);
         assert!(audio("vox 1").channel(0).iter().all(|&s| s == 0.25));
         assert_eq!(audio("gtr 1").channels(), 1);
@@ -757,7 +786,7 @@ mod tests {
             dropped < 100,
             "the collector fell far behind: {dropped} dropped"
         );
-        let audio = session.audio.get("vox 1".as_ref()).unwrap();
+        let audio = session.audio.get("audio/vox 1.wav".as_ref()).unwrap();
         assert!(audio.channel(0).iter().all(|&s| s == 0.5));
 
         // An unfinished collector just lets its thread go.
@@ -846,5 +875,80 @@ mod tests {
         for i in 0..blocks {
             let _ = producer.push(&block, i as u64);
         }
+    }
+
+    #[test]
+    fn a_recording_is_written_into_the_session_folder_as_it_stops() {
+        let dir = std::env::temp_dir().join(format!("superb-rec-folder-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut session = session::create("rec", R, 64).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        track::arm(&mut session, vox, true).unwrap();
+        session::save(&mut session, &dir).unwrap();
+
+        let (mut mic, blocks) = capture_queue(1, 64, 16).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
+        feed(&mut mic, 5, 0.25);
+        let clips = stop(&mut session).unwrap();
+        let file = dir.join("audio/vox 1.wav");
+        assert!(file.is_file(), "written before any save");
+        let (read, rate) = crate::primitives::io::wav::read(&file).unwrap();
+        assert_eq!(rate, R);
+        assert_eq!(read.frames(), 320);
+        assert_eq!(read.channels(), 1);
+        assert!(read.channel(0).iter().all(|&s| s == 0.25));
+        let clip = session.memory.clip(clips[0]).unwrap();
+        assert_eq!(clip.name, "vox 1");
+        assert!(matches!(
+            &clip.source,
+            crate::primitives::session::ClipSource::Audio { path, .. }
+                if path == std::path::Path::new("audio/vox 1.wav")
+        ));
+
+        // Undo removes the clip and keeps the file; the next recording
+        // takes the next name even after a reopen that knows nothing of it.
+        session::undo(&mut session).unwrap();
+        assert!(file.is_file());
+        session::save(&mut session, &dir).unwrap();
+        let mut again = session::open(&dir, 64).unwrap();
+        assert!(
+            again.audio.get("audio/vox 1.wav".as_ref()).is_none(),
+            "unreferenced"
+        );
+        track::arm(&mut again, vox, true).unwrap();
+        let (mut mic, blocks) = capture_queue(1, 64, 16).unwrap();
+        start(
+            &mut again,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
+        feed(&mut mic, 2, 0.5);
+        let clips = stop(&mut again).unwrap();
+        assert_eq!(again.memory.clip(clips[0]).unwrap().name, "vox 2");
+        assert!(dir.join("audio/vox 2.wav").is_file());
+
+        // Reopening loads the recording and it plays.
+        session::save(&mut again, &dir).unwrap();
+        let mut played = session::open(&dir, 64).unwrap();
+        assert_eq!(played.audio.len(), 1);
+        transport::seek(&mut played, TimePosition::ZERO).unwrap();
+        transport::start(&mut played).unwrap();
+        assert!(
+            session::steps::render_blocks(&mut played, 4)
+                .unwrap()
+                .peak()
+                > 0.2
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

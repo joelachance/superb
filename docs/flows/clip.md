@@ -51,9 +51,10 @@ through `session::structural`. `move_to`: `MoveClip` through
 * `ClipSource` is the primitive behind `content`: `&str`, `String`, a path
   and `Vec<MidiNote>` convert into it. Pass a `ClipSource::Audio` with an
   `offset` yourself to start partway into the audio.
-* Audio is not embedded in the saved file: a clip names a key, and a
-  program that opens a session puts the audio back in memory under that
-  key (`AudioCache::load` with the `files` feature, or `insert`).
+* A key is a path relative to the session folder (`audio/vox 1.wav`).
+  `session::save` writes any audio a clip refers to that is not on disk
+  yet, and `session::open` reads the WAV files back; audio you insert
+  under a key yourself travels with the session the same way.
 * Not yet in the flow: trimming, splitting, fades and moving a clip to
   another track (the primitives have `ResizeClip`, fades and
   `MoveClip::to_track`).

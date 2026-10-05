@@ -123,8 +123,9 @@ Data crosses the thread boundary in exactly three ways:
 Recording runs the other way: a device (or any producer) fills a capture
 queue, a collector thread (or `record::collect`, for a queue you fill
 yourself) moves blocks into memory on the control thread, and
-`record::stop` stores the audio in memory and places one clip per armed
-track as a single undo step.
+`record::stop` writes each track's audio as a WAV file into the session
+folder, keeps it in memory, and places one clip per armed track as a
+single undo step.
 
 ## Rules of the house
 
@@ -199,7 +200,10 @@ not the in-memory types, and old fields load with defaults. Routing is
 validated in the memory (targets must be buses, bus chains may not form
 a cycle), and removing a bus detaches what fed it instead of failing.
 
-**Files.** The MPL-2.0 decoder is imported from exactly one source file and
+**Files.** A saved session is a folder: `memory.json` beside `audio/`,
+where recordings land as 32-bit float WAV at the session's rate, named
+`<track> <n>.wav`; clips refer to them by relative path, and nothing is
+ever deleted. The MPL-2.0 decoder is imported from exactly one source file and
 returns Superb types only; a default-feature test scans the crate for stray
 mentions. Decoding is whole-file and lenient: a truncated file yields the
 frames it has, a corrupt packet is skipped, an unrecognised container is
@@ -242,8 +246,7 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 ## Not there yet
 
 Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
-Recordings written to disk (recorded audio lives in memory). A plugins
-flow (the host is a primitive). Incremental edits to a running mixer (a
+A plugins flow (the host is a primitive). Incremental edits to a running mixer (a
 rebuild replaces it). Monitoring a live input through a strip. Punch-in/out
 and loop recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
 Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes

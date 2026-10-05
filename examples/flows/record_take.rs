@@ -6,8 +6,8 @@
 //! - `record::start` takes a `Source`: a hardware input (feature `devices`),
 //!   gathered on a thread, or a capture queue you fill yourself, which is
 //!   what this example does
-//! - `record::stop` stores the audio, places the clips as one undo step and
-//!   stops the transport
+//! - `record::stop` writes the audio as a WAV file into the session folder,
+//!   places the clips as one undo step and stops the transport
 //!
 //! ```text
 //! cargo run --example record_take
@@ -30,6 +30,12 @@ fn main() -> Result<()> {
     track::arm(&mut session, vox, true)?;
     track::input(&mut session, vox, Some(Input::Mono(0)))?;
     println!("vox armed: {}", session.memory.track(vox)?.state.arm);
+
+    // Give the session a folder: from now on a recording is written there
+    // as it stops (audio/vox 1.wav). Without one it would wait in memory
+    // until the first save.
+    let folder = std::env::temp_dir().join("record_take.superb");
+    session::save(&mut session, &folder)?;
 
     // Roll the transport a second in, then punch in there.
     transport::start(&mut session)?;
@@ -77,9 +83,15 @@ fn main() -> Result<()> {
         }
     }
 
-    // Stop: the recording is drained into memory and placed on every armed
-    // track, starting at the punch-in point.
+    // Stop: the recording is drained, written to the folder and placed on
+    // every armed track, starting at the punch-in point.
     let clips = record::stop(&mut session)?;
+    if let Ok(entries) = std::fs::read_dir(folder.join("audio")) {
+        for entry in entries.flatten() {
+            let bytes = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            println!("written {} ({bytes} bytes)", entry.path().display());
+        }
+    }
     for id in &clips {
         let clip = session.memory.clip(*id)?;
         println!(
@@ -99,7 +111,7 @@ fn main() -> Result<()> {
     let heard = session::steps::render_blocks(&mut session, 8)?;
     println!("playback of the clip, peak {:.3}", heard.peak());
 
-    // Undo removes the clip (the audio stays in memory).
+    // Undo removes the clip; the file and the audio in memory stay.
     session::undo(&mut session)?;
     println!(
         "after undo: {} clips, {} recording(s) in memory",

@@ -7,7 +7,8 @@
 //! - Clips play audio held in memory (a decoded file or, as here, a buffer
 //!   you made) or MIDI notes; `clip::add` works out which and how long
 //! - Every edit is undoable: `session::undo` / `session::redo`
-//! - Save is JSON; open gives you a fresh Session with the same memory
+//! - A saved session is a folder: `memory.json` plus the audio clips refer to
+//!   as WAV files; open reads both back
 //!
 //! ```text
 //! cargo run --example new_session
@@ -37,13 +38,13 @@ fn main() -> Result<()> {
             *s = 0.3 * (t * 220.0 * core::f32::consts::TAU).sin();
         }
     }
-    session.audio.insert("vox-take-1.wav", take);
+    session.audio.insert("audio/vox-take-1.wav", take);
     // Put it on the timeline, starting half a second in. The clip is as long
-    // as the audio and named after the key ("vox-take-1").
+    // as the audio and named after the key's stem ("vox-take-1").
     let clip = clip::add(
         &mut session,
         vox,
-        "vox-take-1.wav",
+        "audio/vox-take-1.wav",
         TimePosition::from_seconds(0.5, rate),
     )?;
 
@@ -93,28 +94,25 @@ fn main() -> Result<()> {
         session.memory.clip(clip)?.start().to_seconds(rate)
     );
 
-    // Save, then open into a second session. Audio is not embedded: the clip
-    // still refers to "vox-take-1.wav", which you re-cache on open (a real
-    // program decodes the file; we reuse the buffer).
-    let path = std::env::temp_dir().join("new_session.superb.json");
+    // Save into a session folder, then open it again. The folder gets
+    // memory.json and, because a clip refers to it, audio/vox-take-1.wav;
+    // open reads both back, so the clip plays without any help.
+    let folder = std::env::temp_dir().join("new_session.superb");
     println!("saved? {}", session.history.is_clean());
-    session::save(&mut session, &path)?;
+    session::save(&mut session, &folder)?;
     println!(
         "saved? {} -> {}",
         session.history.is_clean(),
-        path.display()
+        folder.display()
     );
 
-    let mut again = session::open(&path, 256)?;
-    again.audio.insert(
-        "vox-take-1.wav",
-        (*session.audio.get("vox-take-1.wav".as_ref()).unwrap()).clone(),
-    );
+    let again = session::open(&folder, 256)?;
     println!(
-        "reopened {:?}: {} tracks, {} clips, marker {:?} at {:.2} s",
+        "reopened {:?}: {} tracks, {} clips, {} audio file(s), marker {:?} at {:.2} s",
         again.memory.name(),
         again.memory.track_count(),
         again.memory.clip_count(),
+        again.audio.len(),
         again.memory.markers()[0].name,
         again.memory.markers()[0].position().to_seconds(rate)
     );

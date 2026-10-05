@@ -10,20 +10,27 @@
 //! has to look like (tracks, clips, routing) rebuild it for you: at once
 //! while a device is playing, otherwise at the next start.
 //!
+//! A saved session is a folder: `memory.json` beside an `audio/` folder of
+//! WAV files, which clips refer to by relative path.
+//!
 //! Made of `superb::primitives::session` (the memory and its commands),
-//! `superb::primitives::undo` (the history) and the engine side in
-//! [`steps`]. Each function below lists the primitive calls it makes.
+//! `superb::primitives::undo` (the history), `superb::primitives::io::wav`
+//! (the files) and the engine side in [`steps`]. Each function below lists
+//! the primitive calls it makes.
 
+pub(crate) mod folder;
 pub mod steps;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::primitives::io::EngineCommand;
 use crate::primitives::session::commands::{AddMarker, SetLoopRange, SetTempo};
 use crate::primitives::session::{Marker, Memory};
 use crate::primitives::transport::LoopRange;
 use crate::primitives::undo::Command;
-use crate::primitives::{BeatPosition, MarkerId, Result, SampleRate, TimePosition, TrackId};
+use crate::primitives::{
+    BeatPosition, MarkerId, Result, SampleRate, SuperbError, TimePosition, TrackId,
+};
 
 use std::sync::Arc;
 
@@ -48,8 +55,14 @@ pub struct Session {
     /// pause starts a new step. Call `history.seal()` to end a step sooner
     /// (on mouse up, say).
     pub history: UndoStack<Memory>,
-    /// Audio held in memory, keyed by the name clips refer to.
+    /// Audio held in memory, keyed by the path clips refer to, relative to
+    /// the session folder (`audio/vox 1.wav`).
     pub audio: AudioCache,
+    /// The folder the session lives in, once it has been opened or saved:
+    /// `memory.json` and the `audio/` folder of recordings are inside. `None`
+    /// for a session that has only lived in memory; then a recording waits
+    /// in [`Session::audio`] until [`save`].
+    pub folder: Option<PathBuf>,
     /// Control handle to the engine: commands, graph swaps, position.
     pub engine: EngineHandle,
     /// The engine's audio side. Present until a device takes it
@@ -95,6 +108,7 @@ impl Session {
             memory,
             history,
             audio: AudioCache::new(),
+            folder: None,
             engine,
             audio_thread: Some(audio_thread),
             mixer: MixerHandles::default(),
@@ -116,6 +130,7 @@ impl core::fmt::Debug for Session {
             .field("tracks", &self.memory.track_count())
             .field("undo_steps", &self.history.undo_len())
             .field("audio", &self.audio.len())
+            .field("folder", &self.folder)
             .field("engine", &self.engine)
             .field("audio_thread", &self.audio_thread.is_some())
             .field("recording", &self.recording.is_some())
@@ -167,20 +182,36 @@ pub fn create(name: &str, sample_rate: SampleRate, block_size: usize) -> Result<
     Session::new(Memory::new(name, sample_rate), block_size)
 }
 
-/// Opens a session saved with [`save`]. The undo history starts empty and
-/// clean.
+/// Opens a session folder written by [`save`]: reads `memory.json` and
+/// loads every WAV file the clips refer to into [`Session::audio`]. A file
+/// that is missing or at another sample rate is left out, and its clip
+/// plays as silence. The undo history starts empty and clean.
 ///
-/// Made of: `Memory::load` → `Session::new`.
-pub fn open(path: impl AsRef<Path>, block_size: usize) -> Result<Session> {
-    Session::new(Memory::load(path)?, block_size)
+/// Made of: `Memory::load` → `Session::new` → `wav::read` per audio clip.
+pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session> {
+    let folder = folder.as_ref();
+    let memory = Memory::load(folder.join(folder::MEMORY_FILE))?;
+    let mut session = Session::new(memory, block_size)?;
+    folder::load_audio(&mut session, folder);
+    session.folder = Some(folder.to_path_buf());
+    Ok(session)
 }
 
-/// Writes the memory as JSON and remembers this state as saved, so
-/// `session.history.is_clean()` says whether anything changed since.
+/// Saves the session into `folder`: every clip's audio that is not on disk
+/// yet is written as a WAV file at its key, then the memory as
+/// `memory.json`. The folder becomes [`Session::folder`], so recordings
+/// from now on are written there as they stop, and the history remembers
+/// this state as saved (`session.history.is_clean()`).
 ///
-/// Made of: `Memory::save` → `UndoStack::mark_clean`.
-pub fn save(session: &mut Session, path: impl AsRef<Path>) -> Result<()> {
-    session.memory.save(path)?;
+/// Made of: `create_dir_all` → `wav::write` per audio clip not yet on disk
+/// → `Memory::save` → `UndoStack::mark_clean`.
+pub fn save(session: &mut Session, folder: impl AsRef<Path>) -> Result<()> {
+    let folder = folder.as_ref();
+    std::fs::create_dir_all(folder)
+        .map_err(|e| SuperbError::Message(format!("cannot create {}: {e}", folder.display())))?;
+    folder::write_missing_audio(session, folder)?;
+    session.memory.save(folder.join(folder::MEMORY_FILE))?;
+    session.folder = Some(folder.to_path_buf());
     session.history.mark_clean();
     Ok(())
 }
@@ -416,26 +447,59 @@ mod tests {
     }
 
     #[test]
-    fn save_and_open_round_trip() {
-        let dir = std::env::temp_dir().join(format!("superb-project-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("memory.superb.json");
+    fn a_session_folder_holds_the_memory_and_the_audio() {
+        let dir = std::env::temp_dir().join(format!("superb-session-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
         let mut session = create("saved", R, 128).unwrap();
         let t = track::add(&mut session, "t", TrackKind::Audio).unwrap();
+        let mut tone = PlanarBuffer::new(2, 256);
+        tone.fill(0.5);
+        session.audio.insert("audio/tone.wav", tone);
+        let clip = clip::add(&mut session, t, "audio/tone.wav", TimePosition::ZERO).unwrap();
         add_marker(&mut session, "m", TimePosition::from_samples(7)).unwrap();
-        save(&mut session, &path).unwrap();
+        assert!(session.folder.is_none());
+
+        save(&mut session, &dir).unwrap();
         assert!(session.history.is_clean());
+        assert_eq!(session.folder.as_deref(), Some(dir.as_path()));
+        assert!(dir.join("memory.json").is_file());
+        assert!(
+            dir.join("audio/tone.wav").is_file(),
+            "the clip's audio was written"
+        );
         track::add(&mut session, "later", TrackKind::Audio).unwrap();
         assert!(!session.history.is_clean());
 
-        let reopened = open(&path, 128).unwrap();
+        let mut reopened = open(&dir, 128).unwrap();
         assert_eq!(reopened.memory.name(), "saved");
         assert!(reopened.memory.track(t).is_ok());
         assert_eq!(reopened.memory.markers().len(), 1);
         assert!(reopened.history.is_clean());
+        assert_eq!(reopened.folder.as_deref(), Some(dir.as_path()));
         assert_eq!(reopened.engine.sample_rate(), R);
         assert_eq!(reopened.engine.max_frames(), 128);
-        assert!(open(dir.join("missing.json"), 128).is_err());
+        let audio = reopened
+            .audio
+            .get("audio/tone.wav".as_ref())
+            .expect("audio loaded");
+        assert_eq!(audio.frames(), 256);
+        assert_eq!(audio.channel(0)[10], 0.5);
+        crate::transport::start(&mut reopened).unwrap();
+        assert!(steps::render_blocks(&mut reopened, 2).unwrap().peak() > 0.3);
+
+        // A second save writes nothing twice and keeps the file.
+        save(&mut reopened, &dir).unwrap();
+        assert!(dir.join("audio/tone.wav").is_file());
+
+        // A missing file opens fine; its clip is silent.
+        std::fs::remove_file(dir.join("audio/tone.wav")).unwrap();
+        let mut silent = open(&dir, 128).unwrap();
+        assert!(silent.audio.get("audio/tone.wav".as_ref()).is_none());
+        assert!(silent.memory.clip(clip).is_ok());
+        crate::transport::start(&mut silent).unwrap();
+        assert!(steps::render_blocks(&mut silent, 2).unwrap().is_silent());
+
+        assert!(open(dir.join("missing"), 128).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
