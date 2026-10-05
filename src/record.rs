@@ -1,16 +1,16 @@
 //! Recording: arm tracks, capture input, get a clip on each of them.
 //!
-//! A recording flows through a [`CaptureConsumer`]: the input side fills it
-//! with blocks and something empties it into the growing audio, because the
-//! queue holds only a fraction of a second. With a device (`start`) a
-//! collector thread does the emptying. With a source of your own
-//! ([`start_from`]) the blocks wait until [`collect`] runs, which
-//! [`session::steps::render_blocks`] does after every block. [`stop`] puts the audio in the
-//! audio cache and places a clip on every armed track, as one undo step.
+//! [`start`] records from a [`Source`] onto every armed track from the
+//! playhead; [`stop`] puts the audio in memory and places a clip on each
+//! of those tracks, as one undo step. The audio arrives through a capture
+//! queue that holds only a fraction of a second, so something has to empty
+//! it as it fills: a hardware source gets a thread that does so; a queue
+//! you fill yourself waits for [`collect`], which
+//! [`session::steps::render_blocks`] calls after every block it renders.
 //!
 //! Made of `superb::primitives::io::capture` (the queue),
 //! `superb::primitives::io::device` (hardware input, feature `devices`),
-//! the audio cache, and the document's clip commands.
+//! the audio held on the `Session`, and [`clip::add`](crate::clip::add).
 
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -25,19 +25,35 @@ use crate::session;
 use crate::session::Session;
 use crate::transport;
 
-/// A recording in progress.
-pub struct Recording {
-    /// Where the captured blocks are being gathered.
-    pub capture: Capture,
-    /// Where on the timeline the recording started.
-    pub punch_in: TimePosition,
-    /// Tracks that were armed when recording started; each gets a clip.
-    pub tracks: Vec<TrackId>,
-    /// Channels being recorded.
-    pub channels: usize,
-    /// The input stream keeping the capture alive, when recording from hardware.
+/// Where a recording's audio comes from.
+pub enum Source {
+    /// A hardware input: `None` for the default device, or a name from
+    /// `devices::inputs`. As many channels are captured as the armed
+    /// tracks' inputs need ([`track::input`](crate::track::input)), and a
+    /// thread gathers the audio until [`stop`].
     #[cfg(feature = "devices")]
-    pub stream: Option<crate::primitives::io::device::InputStream>,
+    Device(Option<String>),
+    /// A capture queue you fill yourself (a file, a generator, a test) with
+    /// blocks of `channels` channels. Blocks wait on the queue until
+    /// [`collect`] runs; [`session::steps::render_blocks`] does that after
+    /// every block, so an offline program never calls it.
+    Queue {
+        /// The queue's consumer end (`capture_queue` gives you both ends).
+        blocks: CaptureConsumer,
+        /// Channels in every block.
+        channels: usize,
+    },
+}
+
+/// A recording in progress: what [`Session::recording`] holds between
+/// [`start`] and [`stop`].
+pub struct Recording {
+    capture: Capture,
+    punch_in: TimePosition,
+    tracks: Vec<TrackId>,
+    channels: usize,
+    #[cfg(feature = "devices")]
+    stream: Option<crate::primitives::io::device::InputStream>,
 }
 
 impl Recording {
@@ -50,6 +66,26 @@ impl Recording {
     /// Anything above zero means a gap in the recording.
     pub fn dropped(&self) -> u64 {
         self.capture.dropped()
+    }
+
+    /// Where on the timeline the recording started.
+    pub fn punch_in(&self) -> TimePosition {
+        self.punch_in
+    }
+
+    /// The tracks that were armed when it started; each gets a clip.
+    pub fn tracks(&self) -> &[TrackId] {
+        &self.tracks
+    }
+
+    /// Channels being captured.
+    pub fn channels(&self) -> usize {
+        self.channels
+    }
+
+    /// Moves waiting blocks into a queue recording; see [`collect`].
+    pub(crate) fn collect(&mut self) -> usize {
+        steps::collect(&mut self.capture)
     }
 }
 
@@ -67,23 +103,23 @@ impl core::fmt::Debug for Recording {
 }
 
 /// How a recording's blocks get from the capture queue into memory.
-pub enum Capture {
+pub(crate) enum Capture {
     /// Blocks wait on the queue until [`collect`] moves them into `planes`.
-    /// [`session::steps::render_blocks`] collects after every block it renders; with a
-    /// device driving the engine you would call [`collect`] from a timer.
     Manual {
         /// The queue's consumer end.
         blocks: CaptureConsumer,
         /// Audio gathered so far, one plane per channel.
         planes: Vec<Vec<f32>>,
     },
-    /// A thread empties the queue as it fills; nothing to call.
+    /// A thread empties the queue as it fills; nothing to call. Only a
+    /// device source makes one, so without `devices` it exists for tests.
+    #[cfg_attr(not(feature = "devices"), allow(dead_code))]
     Threaded(Collector),
 }
 
 impl Capture {
     /// Frames gathered so far.
-    pub fn frames(&self) -> usize {
+    pub(crate) fn frames(&self) -> usize {
         match self {
             Capture::Manual { planes, .. } => planes.first().map_or(0, Vec::len),
             Capture::Threaded(collector) => collector.frames(),
@@ -91,7 +127,7 @@ impl Capture {
     }
 
     /// Blocks the input side had to drop.
-    pub fn dropped(&self) -> u64 {
+    pub(crate) fn dropped(&self) -> u64 {
         match self {
             Capture::Manual { blocks, .. } => blocks.dropped(),
             Capture::Threaded(collector) => collector.dropped(),
@@ -101,9 +137,9 @@ impl Capture {
 
 /// A thread that moves captured blocks into memory as they arrive, so a
 /// recording can be as long as memory allows no matter how small the queue is.
-/// Made by [`steps::spawn_collector`]; [`finish`](Collector::finish) hands
+/// Made by `steps::spawn_collector`; [`finish`](Collector::finish) hands
 /// the planes back.
-pub struct Collector {
+pub(crate) struct Collector {
     frames: Arc<AtomicUsize>,
     dropped: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
@@ -112,20 +148,20 @@ pub struct Collector {
 
 impl Collector {
     /// Frames gathered so far.
-    pub fn frames(&self) -> usize {
+    pub(crate) fn frames(&self) -> usize {
         self.frames.load(Ordering::Acquire)
     }
 
     /// Blocks the input side had to drop (the thread was late, or the
     /// queue is too small for the block rate).
-    pub fn dropped(&self) -> u64 {
+    pub(crate) fn dropped(&self) -> u64 {
         self.dropped.load(Ordering::Relaxed)
     }
 
     /// Stops the thread after it has drained what is left on the queue and
     /// returns the planes. Drop the input stream first so nothing new
     /// arrives.
-    pub fn finish(mut self) -> Result<Vec<Vec<f32>>> {
+    pub(crate) fn finish(mut self) -> Result<Vec<Vec<f32>>> {
         self.stop.store(true, Ordering::Release);
         let handle = self.handle.take().expect("finish is called once");
         handle
@@ -150,66 +186,54 @@ impl core::fmt::Debug for Collector {
     }
 }
 
-/// `true` while a recording is running.
-pub fn is_recording(session: &Session) -> bool {
-    session.recording.is_some()
-}
-
-/// Starts recording from a hardware input (`None` for the default device,
-/// or a name from `devices::inputs`) onto every armed track, from the
-/// current playhead position. As many channels are captured as the armed
-/// tracks' inputs need ([`track::input`](crate::track::input)); a track
-/// with no input set gets all of them. The transport starts rolling, and a
-/// collector thread gathers the audio until [`stop`].
+/// Starts recording from `source` onto every armed track, from the
+/// current playhead position. The transport starts rolling (recording)
+/// at the engine's next block.
 ///
-/// Made of: [`steps::input_width`] → an `InputConfig` matching the session
-/// → [`steps::open_input`] with 64 queued blocks → [`steps::spawn_collector`]
-/// → the same beginning as [`start_from`].
-#[cfg(feature = "devices")]
-pub fn start(session: &mut Session, device: Option<&str>) -> Result<()> {
-    let channels = steps::input_width(session);
-    let input = crate::devices::input_config(session, device, channels);
-    let (stream, blocks) = steps::open_input(&input, 64)?;
-    let channels = stream.channels();
-    let collector = steps::spawn_collector(blocks, channels)?;
-    begin(session, Capture::Threaded(collector), channels)?;
-    if let Some(recording) = session.recording.as_mut() {
-        recording.stream = Some(stream);
-    }
-    Ok(())
-}
-
-/// Starts recording from a capture queue you fill yourself (a file, a
-/// generator, a test), onto every armed track from the current playhead.
-/// Blocks wait on the queue until [`collect`] runs; [`session::steps::render_blocks`] does
-/// that after every block, so an offline program never calls it.
-///
-/// Made of: [`track::armed`](crate::track::armed) → [`session::steps::rebuild`] when needed →
+/// Made of: [`track::arm`](crate::track::arm)ed tracks → for a device, an
+/// `InputConfig` matching the session with as many channels as their
+/// inputs need, `device::run_capture` with 64 queued blocks and a collector
+/// thread → [`session::steps::rebuild`] when needed →
 /// `EngineHandle::send(Record)` → [`transport::playhead`] for the punch-in.
-pub fn start_from(session: &mut Session, blocks: CaptureConsumer, channels: usize) -> Result<()> {
-    begin(
-        session,
-        Capture::Manual {
-            blocks,
-            planes: vec![Vec::new(); channels],
-        },
-        channels,
-    )
-}
-
-/// What every start has in common once the capture exists.
-fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()> {
+pub fn start(session: &mut Session, source: Source) -> Result<()> {
     if session.recording.is_some() {
         return Err(SuperbError::Message(
             "a recording is already running".into(),
         ));
     }
-    let tracks = crate::track::armed(session);
-    if tracks.is_empty() {
+    if crate::track::armed(session).is_empty() {
         return Err(SuperbError::Message(
             "arm an audio track before recording".into(),
         ));
     }
+    match source {
+        #[cfg(feature = "devices")]
+        Source::Device(device) => {
+            let width = steps::input_width(session);
+            let config = crate::devices::input_config(session, device.as_deref(), width);
+            let (stream, blocks) = steps::open_input(&config, 64)?;
+            let channels = stream.channels();
+            let collector = steps::spawn_collector(blocks, channels)?;
+            begin(session, Capture::Threaded(collector), channels)?;
+            if let Some(recording) = session.recording.as_mut() {
+                recording.stream = Some(stream);
+            }
+            Ok(())
+        }
+        Source::Queue { blocks, channels } => begin(
+            session,
+            Capture::Manual {
+                blocks,
+                planes: vec![Vec::new(); channels],
+            },
+            channels,
+        ),
+    }
+}
+
+/// What every source has in common once the capture exists.
+fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()> {
+    let tracks = crate::track::armed(session);
     if session.needs_rebuild {
         session::steps::rebuild(session)?;
     }
@@ -225,15 +249,16 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
     Ok(())
 }
 
-/// Moves waiting blocks into the recording when the capture is manual (see
-/// [`start_from`]); with a collector thread there is nothing to do.
-/// Returns the frames gathered in total, or zero when nothing is recording.
-///
-/// Made of: [`steps::collect`].
+/// Moves waiting blocks into the recording when the source is a queue
+/// ([`Source::Queue`]); a device recording has its thread and needs
+/// nothing. Returns the frames gathered in total, or zero when nothing is
+/// recording. [`session::steps::render_blocks`] calls this after every
+/// block; with a device driving the engine and a queue source, call it
+/// from a timer.
 pub fn collect(session: &mut Session) -> usize {
     match session.recording.as_mut() {
         Some(recording) => {
-            steps::collect(&mut recording.capture);
+            recording.collect();
             recording.frames()
         }
         None => 0,
@@ -247,11 +272,12 @@ pub fn collect(session: &mut Session) -> usize {
 /// one share the whole capture). Returns the new clips (none if nothing was
 /// captured). The whole placement is one undo step called "Record".
 ///
-/// Made of: `EngineHandle::send(Stop)` → drop the input stream →
-/// [`steps::collect`] or `Collector::finish` → the planes become one
-/// buffer → per track, a name no cache entry uses (`vox 1`) →
-/// `AudioCache::insert_shared` → [`clip::add`](crate::clip::add), inside
-/// one undo group; rebuilds the mixer so the clips play back on their strips.
+/// Made of: `EngineHandle::send(Stop)` → drop the input stream → drain the
+/// queue or `Collector::finish` → the planes become one buffer → per
+/// track, a name no audio in memory uses (`vox 1`) and the channels its
+/// `Input` selects → `AudioCache::insert_shared` →
+/// [`clip::add`](crate::clip::add), inside one undo group; rebuilds the
+/// mixer so the clips play back on their strips.
 pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     let recording = session
         .recording
@@ -311,17 +337,14 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     Ok(clips)
 }
 
-/// The steps `start`, [`start_from`] and [`collect`] are made of, for
-/// recording from a source of your own.
-pub mod steps {
+/// The parts `start`, `collect` and `stop` are made of.
+pub(crate) mod steps {
     use super::*;
 
     /// Opens a hardware input as a capture queue with `slots` pre-allocated
     /// blocks. Returns the stream (drop it to stop) and the consumer end.
-    ///
-    /// Made of: `device::run_capture`.
     #[cfg(feature = "devices")]
-    pub fn open_input(
+    pub(crate) fn open_input(
         config: &crate::primitives::io::device::InputConfig,
         slots: usize,
     ) -> Result<(crate::primitives::io::device::InputStream, CaptureConsumer)> {
@@ -331,7 +354,11 @@ pub mod steps {
     /// Starts a thread that empties `blocks` into memory as they arrive.
     /// The thread sleeps briefly when the queue is empty and exits after
     /// [`Collector::finish`].
-    pub fn spawn_collector(mut blocks: CaptureConsumer, channels: usize) -> Result<Collector> {
+    #[cfg_attr(not(feature = "devices"), allow(dead_code))]
+    pub(crate) fn spawn_collector(
+        mut blocks: CaptureConsumer,
+        channels: usize,
+    ) -> Result<Collector> {
         let frames = Arc::new(AtomicUsize::new(0));
         let dropped = blocks.dropped_handle();
         let stop = Arc::new(AtomicBool::new(false));
@@ -367,7 +394,8 @@ pub mod steps {
 
     /// How many input channels the armed tracks need: one past the highest
     /// channel any of their inputs names, and at least one.
-    pub fn input_width(session: &Session) -> usize {
+    #[cfg_attr(not(feature = "devices"), allow(dead_code))]
+    pub(crate) fn input_width(session: &Session) -> usize {
         crate::track::armed(session)
             .into_iter()
             .filter_map(|t| session.document.track(t).ok()?.state.input)
@@ -380,7 +408,7 @@ pub mod steps {
     /// The channel(s) an [`Input`] selects from a captured buffer: one for
     /// `Mono`, two for `Stereo`. A channel the capture did not have is
     /// silence.
-    pub fn select_input(captured: &PlanarBuffer, input: Input) -> PlanarBuffer {
+    pub(crate) fn select_input(captured: &PlanarBuffer, input: Input) -> PlanarBuffer {
         let frames = captured.frames();
         let pick = |c: usize| -> Vec<f32> {
             if c < captured.channels() {
@@ -398,7 +426,7 @@ pub mod steps {
 
     /// Moves every waiting block into the recording when the capture is manual;
     /// a threaded capture needs nothing. Returns the frames appended.
-    pub fn collect(capture: &mut Capture) -> usize {
+    pub(crate) fn collect(capture: &mut Capture) -> usize {
         match capture {
             Capture::Manual { blocks, planes } => append_blocks(blocks, planes),
             Capture::Threaded(_) => 0,
@@ -482,16 +510,23 @@ mod tests {
         track::arm(&mut session, vox, true).unwrap();
         track::arm(&mut session, gtr, true).unwrap();
         assert_eq!(crate::track::armed(&session), [vox, gtr]);
-        assert!(!is_recording(&session));
+        assert!(session.recording.is_none());
 
         // Roll to 640 frames, then punch in there.
         transport::start(&mut session).unwrap();
         session::steps::render_blocks(&mut session, 10).unwrap();
         let (mut mic, blocks) = capture_queue(1, 64, 16).unwrap();
-        start_from(&mut session, blocks, 1).unwrap();
-        assert!(is_recording(&session));
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
+        assert!(session.recording.is_some());
         assert_eq!(
-            session.recording.as_ref().unwrap().punch_in,
+            session.recording.as_ref().unwrap().punch_in(),
             TimePosition::from_samples(640)
         );
         session::steps::render_blocks(&mut session, 5).unwrap();
@@ -503,7 +538,7 @@ mod tests {
 
         let clips = stop(&mut session).unwrap();
         assert_eq!(clips.len(), 2);
-        assert!(!is_recording(&session));
+        assert!(session.recording.is_none());
         for (clip, name) in clips.iter().zip(["vox 1", "gtr 1"]) {
             let c = session.document.clip(*clip).unwrap();
             assert_eq!(c.start(), TimePosition::from_samples(640));
@@ -550,7 +585,14 @@ mod tests {
         track::arm(&mut session, vox, true).unwrap();
         for i in 1..=2 {
             let (mut mic, blocks) = capture_queue(2, 64, 4).unwrap();
-            start_from(&mut session, blocks, 2).unwrap();
+            start(
+                &mut session,
+                Source::Queue {
+                    blocks,
+                    channels: 2,
+                },
+            )
+            .unwrap();
             feed_stereo(&mut mic, 2);
             let clips = stop(&mut session).unwrap();
             assert_eq!(
@@ -560,7 +602,14 @@ mod tests {
         }
         assert_eq!(session.cache.len(), 2);
         let (_mic, blocks) = capture_queue(2, 64, 4).unwrap();
-        start_from(&mut session, blocks, 2).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 2,
+            },
+        )
+        .unwrap();
         assert!(
             stop(&mut session).unwrap().is_empty(),
             "nothing captured, nothing placed"
@@ -596,7 +645,14 @@ mod tests {
         let mut block = PlanarBuffer::new(2, 64);
         block.channel_mut(0).fill(0.25);
         block.channel_mut(1).fill(0.5);
-        start_from(&mut session, blocks, 2).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 2,
+            },
+        )
+        .unwrap();
         for i in 0..3 {
             assert!(mic.push(&block, i));
         }
@@ -635,16 +691,37 @@ mod tests {
         );
         let (_mic, blocks) = capture_queue(1, 64, 2).unwrap();
         assert!(
-            start_from(&mut session, blocks, 1).is_err(),
+            start(
+                &mut session,
+                Source::Queue {
+                    blocks,
+                    channels: 1
+                }
+            )
+            .is_err(),
             "no armed track"
         );
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         track::arm(&mut session, vox, true).unwrap();
         let (_a, blocks) = capture_queue(1, 64, 2).unwrap();
-        start_from(&mut session, blocks, 1).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
         let (_b, blocks) = capture_queue(1, 64, 2).unwrap();
         assert!(
-            start_from(&mut session, blocks, 1).is_err(),
+            start(
+                &mut session,
+                Source::Queue {
+                    blocks,
+                    channels: 1
+                }
+            )
+            .is_err(),
             "already recording"
         );
         let _ = format!("{:?}", session.recording.as_ref().unwrap());
@@ -722,7 +799,14 @@ mod tests {
         track::arm(&mut session, vox, true).unwrap();
         // A queue of only two blocks; the recording is ten blocks long.
         let (mut mic, blocks) = capture_queue(1, 64, 2).unwrap();
-        start_from(&mut session, blocks, 1).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
         for i in 0..10 {
             feed(&mut mic, 1, 0.5);
             // Advancing the engine collects for us (a UI timer would call
@@ -741,7 +825,14 @@ mod tests {
 
         // Without collecting, the input side reports what it had to drop.
         let (mut mic, blocks) = capture_queue(1, 64, 2).unwrap();
-        start_from(&mut session, blocks, 1).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
         feed_lossy(&mut mic, 5, 0.5);
         assert_eq!(session.recording.as_ref().unwrap().dropped(), 3);
         stop(&mut session).unwrap();

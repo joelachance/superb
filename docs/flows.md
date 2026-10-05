@@ -111,10 +111,10 @@ Everything runs without an audio device.
 `session::steps::render_blocks(&mut session, blocks)` runs the engine loop
 by hand and hands you the audio, standing in for the sound card: that is
 how the tests and most examples hear the session. `export` renders through
-its own offline engine. `record::start_from` accepts any capture producer,
-so a recording can come from a file or a generator. With the `devices`
-feature, `devices::output` moves the engine loop into a real output stream
-and `record::start` opens a real input.
+its own offline engine. `record::start` with a `Source::Queue` records
+from any capture producer, so a recording can come from a file or a
+generator. With the `devices` feature, `devices::output` moves the engine
+loop into a real output stream and `Source::Device` opens a real input.
 
 ## Writing a new flow
 

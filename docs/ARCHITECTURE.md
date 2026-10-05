@@ -119,10 +119,10 @@ Data crosses the thread boundary in exactly three ways:
    result out. `offline::render` drives a private engine for `export`.
 
 Recording runs the other way: a device (or any producer) fills a capture
-queue, a collector thread (or `record::collect`, for a source you drive
+queue, a collector thread (or `record::collect`, for a queue you fill
 yourself) moves blocks into memory on the control thread, and
-`record::stop` stores the audio in the cache and places one clip per
-armed track as a single undo step.
+`record::stop` stores the audio in memory and places one clip per armed
+track as a single undo step.
 
 ## Rules of the house
 

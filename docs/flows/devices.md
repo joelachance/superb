@@ -26,7 +26,7 @@ for d in devices::outputs()? {
 }
 devices::output(&mut session, None)?;          // the default output
 
-record::start(&mut session, None, 1)?;         // the default input, one channel
+record::start(&mut session, record::Source::Device(None))?;   // the default input
 ```
 
 ## Made of

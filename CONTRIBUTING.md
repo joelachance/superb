@@ -94,8 +94,9 @@ exists because its absence cost a rename.
   not `record::`. No invented areas.
 * **Verbs are imperative and say what happens.** `start`, `stop`,
   `rebuild`, `bounce`. One verb per action: no `begin` next to `start`. A
-  variant gets a suffix on the same verb: `start_from`, `bounce_at_rate`,
-  `bounce_session`.
+  variant is an argument, not a second verb: `record::start(s,
+  Source::Device(None))`, never `start_from`; a `bounce` that resamples
+  takes the rate, it is not `bounce_at_rate`.
 * **A setter is the noun of what it sets.** `track::volume(s, t, db)`,
   `track::input(s, t, ch)`, `send::level(s, send, db)`: no `set_` prefix. Units go in the doc, not the name, when only
   one unit exists at that tier (dB everywhere in the flows).
@@ -121,8 +122,8 @@ exists because its absence cost a rename.
   Sugar that exists for the SDK author's convenience, or that holds logic
   of its own, is not.
 * **Plumbing stays private.** What a verb is made of is public only when
-  someone building their own verb needs it (`session::steps`,
-  `record::steps`). Helpers under those are `pub(crate)`; making one public later is cheap, taking it back is not.
+  someone building their own verb needs it (`session::steps`). Helpers
+  under those are `pub(crate)`; making one public later is cheap, taking it back is not.
 * **No silent obligations.** If a flow only works when the caller also
   remembers to do something later (end a drag, empty a queue), either the
   flow does it itself (a time window, a thread) or the obligation is a

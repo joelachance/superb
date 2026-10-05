@@ -4,44 +4,40 @@ Start a recording, stop it, get a clip on every armed track.
 
 ## Purpose
 
-A recording flows through a capture queue: the input side fills it with
-blocks, a collector thread (device recording) or `collect` (your own
-source) moves them into memory, and `stop` stores the audio and places one
-clip per armed track as a single undo step. Each clip is named after its
-track (`vox 1`, `vox 2`, ...) and holds the channels the track's input
-selects.
+`start` records from a `Source` onto every armed track from the playhead;
+`stop` puts the audio in memory and places one clip per armed track as a
+single undo step. Each clip is named after its track (`vox 1`, `vox 2`,
+...) and holds the channels the track's input selects. The audio arrives
+through a capture queue that holds only a fraction of a second, so
+something empties it as it fills: a hardware source gets a thread; a queue
+you fill yourself waits for `collect`, which `render_blocks` calls after
+every block.
 
 ## Verbs
 
 | verb | does |
 |---|---|
-| `start(session, Option<device name>)` (feature `devices`) | open a hardware input matched to the session with as many channels as the armed tracks' inputs need, spawn a collector thread, begin at the playhead |
-| `start_from(session, CaptureConsumer, channels)` | begin from a queue you fill yourself; blocks wait for `collect` |
-| `collect(session) -> frames` | move waiting blocks into a manual recording (`session::steps::render_blocks` does this); nothing to do for a threaded one |
+| `start(session, Source)` | begin at the playhead on every armed track; the transport rolls |
+| `collect(session) -> frames` | move waiting blocks into a queue recording (`session::steps::render_blocks` does this); nothing to do for a device recording |
 | `stop(session) -> Vec<ClipId>` | stop the transport, finish the recording, place clips ("Record") |
-| `is_recording(session)` | |
+
+`Source` says where the audio comes from:
+
+| source | does |
+|---|---|
+| `Source::Device(Option<name>)` (feature `devices`) | a hardware input matched to the session with as many channels as the armed tracks' inputs need, gathered by a thread |
+| `Source::Queue { blocks, channels }` | a capture queue you fill yourself (`capture_queue` gives both ends) |
+
+`Recording` is the recording in progress, held in `session.recording`:
+`frames()`, `dropped()` (blocks lost to a full queue), `punch_in()`,
+`tracks()`, `channels()`.
 
 Arming and the input a track records from are track state: `track::arm`,
-`track::armed`, `track::input`.
-
-## Steps (`record::steps`)
-
-| step | does |
-|---|---|
-| `open_input(&InputConfig, slots)` (feature `devices`) | a capture queue fed by hardware; returns the stream and the consumer |
-| `spawn_collector(CaptureConsumer, channels) -> Collector` | a thread that empties the queue as it fills; `finish` returns the planes |
-| `collect(&mut Capture) -> frames appended` | drain a manual capture's queue into its planes |
-| `input_width(session) -> channels` | how many input channels the armed tracks' inputs need |
-| `select_input(&PlanarBuffer, Input) -> PlanarBuffer` | the channel(s) an input picks out of a capture |
-
-`Recording` is the recording in progress: its `Capture` (`Manual { blocks,
-planes }` or `Threaded(Collector)`), punch-in position, armed tracks,
-channel count, and (with `devices`) the input stream. `frames()` and
-`dropped()` report progress and lost blocks.
+`track::input`.
 
 ## Usage
 
-Offline, from a producer you fill yourself:
+Offline, from a queue you fill yourself:
 
 ```rust
 use superb::primitives::io::capture::capture_queue;
@@ -50,7 +46,7 @@ use superb::{record, session, track, transport};
 track::arm(&mut session, vox, true)?;
 transport::start(&mut session)?;
 let (mut mic, blocks) = capture_queue(1, 256, 64)?;
-record::start_from(&mut session, blocks, 1)?;
+record::start(&mut session, record::Source::Queue { blocks, channels: 1 })?;
 for block in my_audio_blocks() {
     mic.push(&block, timestamp_us);
     session::steps::render_blocks(&mut session, 1)?;   // renders and collects
@@ -61,28 +57,30 @@ let clips = record::stop(&mut session)?;                 // one clip per armed t
 From a real input (feature `devices`):
 
 ```rust
-record::start(&mut session, None)?;   // the default input; a thread gathers the audio
+record::start(&mut session, record::Source::Device(None))?;   // the default input
 // ... play ...
 let clips = record::stop(&mut session)?;
 ```
 
 ## Made of
 
-`start_from` (and `start` after opening the input and spawning the
-collector): `track::armed` → `session::steps::rebuild` if needed →
-`EngineHandle::send(Record)` → `transport::playhead` for the punch-in.
-`stop`: `EngineHandle::send(Stop)` → drop the stream → `collect` or
-`Collector::finish` → one buffer from the planes → per track a name no
-cache entry uses and the channels its `Input` selects (`select_input`; the
-whole capture, shared, when none is set) → `AudioCache::insert_shared` →
-`clip::add` (the clip takes the audio's length), inside one undo group →
-rebuild.
+`start`: the armed tracks → for a device, an `InputConfig` at the
+session's rate and block size with the channels the inputs need,
+`device::run_capture` with 64 queued blocks, and a collector thread →
+`session::steps::rebuild` if needed → `EngineHandle::send(Record)` →
+`transport::playhead` for the punch-in. `stop`: `EngineHandle::send(Stop)`
+→ drop the stream → drain the queue or finish the thread → one buffer from
+the planes → per track a name no audio in memory uses and the channels its
+`Input` selects (the whole capture, shared, when none is set) →
+`AudioCache::insert_shared` → `clip::add` (the clip takes the audio's
+length), inside one undo group → rebuild.
 
 ## Notes
 
-* The queue holds only a fraction of a second (`start` uses 64 blocks),
-  which is why a device recording gets a collector thread. A manual
-  recording relies on `render_blocks` collecting after every block.
+* The queue holds only a fraction of a second (a device source uses 64
+  blocks), which is why a device recording gets a thread. A queue
+  recording relies on `render_blocks` collecting after every block; with a
+  device driving the engine, call `collect` from a timer.
   `Recording::dropped` tells you if blocks were lost either way.
 * Every armed track gets a clip at the punch-in position holding the
   channels its input selects. Input monitoring, punch-out, loop recording

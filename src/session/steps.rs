@@ -56,8 +56,8 @@ pub fn rebuild(session: &mut Session) -> Result<()> {
 /// it fails with a message saying so.
 ///
 /// Made of: [`rebuild`] when needed → `EngineLoop::tick` per block, with
-/// [`record::steps::collect`](crate::record::steps::collect) after each
-/// while a recording is running.
+/// [`record::collect`](crate::record::collect) after each while a
+/// recording is running.
 pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffer> {
     if session.needs_rebuild {
         rebuild(session)?;
@@ -72,7 +72,7 @@ pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffe
         engine_loop.tick(&mut scratch)?;
         out.copy_block_from(i * block, &scratch, block)?;
         if let Some(recording) = session.recording.as_mut() {
-            crate::record::steps::collect(&mut recording.capture);
+            recording.collect();
         }
     }
     session.engine.reclaim();

@@ -69,7 +69,7 @@ in `primitives::session::commands` pushed through `UndoStack::push`; `DocumentSn
 `build_mixer` → `publish`, then
 `LiveGraph::apply_pending` while the loop is still in the session.
 `render_blocks`: `EngineLoop::tick` per block, plus
-`record::steps::collect` while a recording runs.
+`record::collect` while a recording runs.
 
 The crate-private helpers `edit`, `structural`, `changed_structure` and
 `set_state` are how the other flows change the document; see

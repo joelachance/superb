@@ -3,10 +3,9 @@
 //! What you'll learn:
 //! - Armed audio tracks receive a clip when a recording stops, holding the
 //!   input channel(s) chosen with `track::input`
-//! - A recording arrives through a capture queue; `record::start` (feature
-//!   `devices`) fills it from a microphone and gathers it on a thread, and
-//!   `record::start_from` accepts any producer you like, which is what
-//!   this example does
+//! - `record::start` takes a `Source`: a hardware input (feature `devices`),
+//!   gathered on a thread, or a capture queue you fill yourself, which is
+//!   what this example does
 //! - `record::stop` stores the audio, places the clips as one undo step and
 //!   stops the transport
 //!
@@ -41,11 +40,16 @@ fn main() -> Result<()> {
     );
 
     // Our "microphone": a mono capture queue with 64 pre-allocated blocks.
-    // `record::start` would open a real input here and hand us the same
-    // consumer end.
+    // `Source::Device` would open a real input and feed the same kind of queue.
     let (mut mic, blocks) = capture_queue(1, block, 64)?;
-    record::start_from(&mut session, blocks, 1)?;
-    println!("recording: {}", record::is_recording(&session));
+    record::start(
+        &mut session,
+        record::Source::Queue {
+            blocks,
+            channels: 1,
+        },
+    )?;
+    println!("recording: {}", session.recording.is_some());
 
     // Half a second of "singing" (a 440 Hz tone), one block at a time,
     // while the engine keeps rolling. On a device both sides run on their
@@ -114,7 +118,8 @@ fn main() -> Result<()> {
             println!("no input device to record from");
         } else {
             track::arm(&mut session, vox, true)?;
-            record::start(&mut session, None)?; // the default input; a thread gathers the audio
+            // The default input; a thread gathers the audio.
+            record::start(&mut session, record::Source::Device(None))?;
             std::thread::sleep(std::time::Duration::from_millis(500));
             let clips = record::stop(&mut session)?;
             println!("recorded {} clip(s) from the default input", clips.len());
