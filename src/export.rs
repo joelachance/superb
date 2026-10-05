@@ -24,7 +24,7 @@ use crate::session::Session;
 /// → a `Transport` on the document's tempo map, sought to `start` and playing →
 /// `Engine::new` → `offline::render`.
 pub fn render(session: &mut Session, start: TimePosition, frames: usize) -> Result<PlanarBuffer> {
-    let (mixer, _wiring) =
+    let (mixer, _handles) =
         session::steps::build_mixer(&session.document, &session.cache, session.channels)?;
     let mut transport = Transport::with_tempo_map(session.document.tempo_map().clone());
     transport.seek(start);

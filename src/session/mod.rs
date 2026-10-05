@@ -12,12 +12,7 @@
 //! `superb::primitives::undo` (the history) and the engine side in
 //! [`steps`]. Each function below lists the primitive calls it makes.
 
-pub(crate) mod bridge;
 pub mod steps;
-pub mod wiring;
-
-pub use bridge::MixerBinding;
-pub use wiring::{WiredClip, Wiring};
 
 use std::path::{Path, PathBuf};
 
@@ -63,8 +58,9 @@ pub struct Session {
     /// (`devices::output`, feature `devices`);
     /// while present, [`steps::render_blocks`] runs it by hand.
     pub engine_loop: Option<EngineLoop>,
-    /// Handles into the mixer built by the last [`steps::rebuild`].
-    pub live: LiveHandles,
+    /// The live controls of the mixer built by the last [`steps::rebuild`]:
+    /// one per strip and send, keyed by document id.
+    pub mixer: MixerHandles,
     /// A take being recorded, if any.
     pub recording: Option<crate::record::Recording>,
     /// Channels per strip and at the output (2 = stereo).
@@ -112,7 +108,7 @@ impl Session {
             cache: AudioCache::new(),
             engine,
             engine_loop: Some(engine_loop),
-            live: LiveHandles::default(),
+            mixer: MixerHandles::default(),
             recording: None,
             channels,
             needs_rebuild: true,
@@ -140,28 +136,24 @@ impl core::fmt::Debug for Session {
     }
 }
 
-/// Document track or bus → its live strip parameters.
-pub type StripHandles = Vec<(TrackId, Arc<StripParams>)>;
-/// Document send → its live level and enable switch.
-pub type SendHandles = Vec<(SendId, Arc<SendParams>)>;
-
-/// Handles into the mixer the engine is currently running.
+/// The live controls of the mixer the engine is running, keyed by the
+/// document object each was built for.
 ///
-/// Rebuilt by every [`steps::rebuild`]; the atomics behind
-/// them are what the audio thread reads, so a change made through them is
-/// heard on the next block.
+/// Filled by every [`steps::rebuild`]. The `Mixer` itself becomes the graph
+/// the engine runs; what the control side keeps are these handles, whose
+/// atomics the audio thread reads every block, so a change made through
+/// them is heard at the next block. Handles from before a rebuild are
+/// stale: look them up again.
 #[derive(Debug, Default)]
-pub struct LiveHandles {
-    /// Document track → its strip (tracks and buses alike).
-    pub strips: StripHandles,
-    /// Document send → its level and enable switch.
-    pub sends: SendHandles,
-    /// How the document was wired into that mixer: which strip each
-    /// track got, which node plays each clip.
-    pub wiring: Option<Wiring>,
+pub struct MixerHandles {
+    /// Document track or bus → its strip: volume, pan, mute, solo, pan law
+    /// and the peak meter.
+    pub strips: Vec<(TrackId, Arc<StripParams>)>,
+    /// Document send → its level and on/off.
+    pub sends: Vec<(SendId, Arc<SendParams>)>,
 }
 
-impl LiveHandles {
+impl MixerHandles {
     /// The live strip of a document track or bus.
     pub fn strip(&self, track: TrackId) -> Option<&Arc<StripParams>> {
         self.strips
@@ -170,7 +162,7 @@ impl LiveHandles {
             .map(|(_, p)| p)
     }
 
-    /// The live parameters of a document send.
+    /// The live controls of a document send.
     pub fn send(&self, send: SendId) -> Option<&Arc<SendParams>> {
         self.sends
             .iter()

@@ -33,15 +33,15 @@ Tracks are added and set up in [`track`](track.md).
 |---|---|
 | `rebuild(session)` | build a fresh mixer from the document and swap it into the engine; the structural flows call it for you |
 | `render_blocks(session, blocks) -> PlanarBuffer` | run the engine loop for `blocks` blocks when no sound card is attached, and return the audio |
-| `build_mixer(&document, &cache, channels) -> (Mixer, Wiring)` | strips, buses, sends, clip nodes, a live instrument per monitoring MIDI track |
-| `collect_handles(&Mixer, &Wiring) -> (StripHandles, SendHandles)` | the atomics the control side keeps |
+| `build_mixer(&document, &cache, channels) -> (Mixer, MixerHandles)` | strips carrying each track's state, routing, sends, a node per clip, a live instrument per monitoring MIDI track; and the live controls, keyed by document id |
 | `publish(&mut EngineHandle, Mixer)` | prepare the graph and hand it to the engine |
 
-`Wiring` is what `build_mixer` returns beside the mixer: `strip(track)`,
-`strips()`, `send(send)`, `sends()` say what each document track and send
-became, and `clips()` lists the node made for each clip (`WiredClip`). The
-bridge beneath it is internal. The `session_steps` example builds a mixer
-this way without a `Session`.
+`MixerHandles` is what `build_mixer` returns beside the mixer and what
+`rebuild` stores in `session.mixer`: `strip(track)` and `send(send)` give
+the live `StripParams` / `SendParams` of a document track or send, so a
+fader can move without a rebuild. The document's and the mixer's ids are
+separate namespaces; the handles hide the mixer's. The `session_steps`
+example builds a mixer this way without a `Session`.
 
 ## Usage
 
@@ -74,7 +74,7 @@ matching command in `primitives::session::commands` pushed through
 `UndoStack::push`; `DocumentSnapshot` and `serde_json` for files;
 `AudioCache::load` for import. `set_loop` additionally sends
 `EngineCommand::SetLoop`. `rebuild`: `EngineHandle::reclaim` →
-`build_mixer` → `collect_handles` → `publish`, then
+`build_mixer` → `publish`, then
 `LiveGraph::apply_pending` while the loop is still in the session.
 `render_blocks`: `EngineLoop::tick` per block, plus
 `record::steps::collect` while a recording runs.

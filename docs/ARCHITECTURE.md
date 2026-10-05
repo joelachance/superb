@@ -15,7 +15,7 @@ and connects them deliberately.
 
 ```text
  flows (free functions over a Session)
- session · track · transport · mix · midi · record · plugins · export · devices
+ session · track · transport · mix · midi · record · export · devices
  ─────────────────────────────────────────────────────────────────────
  primitives
    document side (UI thread)           engine side (audio thread)
@@ -40,9 +40,9 @@ primitives and each other, and all of them work on the `Session`.
 `Session` (`src/session/mod.rs`) is the one thing a program works on: a
 plain record of the `Document` (what gets saved), its `UndoStack`, the
 `AudioCache`, the `EngineHandle` control handle, the `EngineLoop` (until a
-device takes it), the handles into the last mixer that was built
-(`LiveHandles`: strip and send atomics, plugin parameter queues), the
-recording in progress, and the plugin loader. It has constructors and
+device takes it), the live controls of the last mixer that was built
+(`MixerHandles`: one strip handle per track and bus, one per send, keyed
+by document id) and the recording in progress. It has constructors and
 nothing else. Flow verbs take `&mut Session` so a call does not need seven
 arguments; steps take the fields they need, so a program can assemble its
 own verb.
@@ -90,14 +90,14 @@ Data crosses the thread boundary in exactly three ways:
    their original IDs so the UI's handles stay valid.
 2. **`session::steps::rebuild`** turns the document into a mixer and hands
    it to the engine. Structural flows call it; its steps are public:
-   * `build_mixer` maps document tracks onto mixer strips and buses
-     (`session::bridge`), mirrors volume, pan, mute, solo, outputs and sends,
-     and attaches one source node per audible clip (`session::wiring`):
-     `BufferPlayerNode` for audio in the cache, `ScheduledSynthNode` for
-     MIDI notes converted through the tempo map, plus a live instrument
-     for every monitoring MIDI track.
-   * `collect_handles` gathers the strip, send and plugin handles the
-     control side keeps.
+   * `build_mixer` makes a strip per track and a bus per bus track with
+     the track's volume, pan, mute and solo, routes each output where the
+     document says, adds a send per document send, and attaches one source
+     node per audible clip: `BufferPlayerNode` for audio in the cache,
+     `ScheduledSynthNode` for MIDI notes converted through the tempo map,
+     plus a live instrument for every monitoring MIDI track. It returns
+     the `MixerHandles` the control side keeps, keyed by document id (the
+     mixer has its own id namespace, which the flows never see).
    * `publish` prepares the mixer's graph and sends it to the engine.
 3. **`primitives::mixer`** builds the mixer out of graph nodes: every
    track is an input summing node, an insert chain, and a strip node

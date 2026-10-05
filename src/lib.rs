@@ -114,7 +114,6 @@ pub mod prelude {
         TimeDuration, TimePosition, TimeSignature, TrackId,
     };
     pub use crate::session::Session;
-    pub use crate::session::Wiring;
 }
 
 #[cfg(test)]
@@ -150,10 +149,10 @@ mod tests {
         assert!(document.track(track).is_err());
         let _ = crate::primitives::plugins::vst3::AVAILABLE;
         let _ = PluginDescriptor::new(crate::primitives::plugins::PluginFormat::Clap, "id", "name");
-        let mut mixer = Mixer::new(2);
-        let mut bridge = crate::session::bridge::MixerBridge::new();
-        assert_eq!(bridge.bind(&document, &mut mixer), 0);
-        assert_eq!(bridge.apply_routing(&document, &mut mixer).unwrap(), 0);
+        let (mixer, handles) =
+            crate::session::steps::build_mixer(&document, &AudioCache::new(), 2).unwrap();
+        assert_eq!(mixer.tracks().len(), 0);
+        assert!(handles.strips.is_empty());
         let _ = TrackSend::new(track);
     }
 

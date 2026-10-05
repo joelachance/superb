@@ -105,9 +105,9 @@ exists because its absence cost a rename.
 * **Prefer the primitive's enum to a bool parameter.** `SendTap::PreFader`,
   not `pre_fader: true`.
 * **Types and fields are named for their role, not their mechanism.**
-  `EngineHandle` and `EngineLoop` say which side you hold; `Wiring` is the
-  map from document to mixer; `param_queue` holds parameter changes. A
-  type called `Player` must play.
+  `EngineHandle` and `EngineLoop` say which side you hold; `MixerHandles`
+  are the live controls of the mixer the engine runs. A type called
+  `Player` must play.
 * **State is a field called `state`.** Every document object keeps its
   settable fields under one `state` (`TrackState`, `SendState`,
   `InsertState`), with nouns for switches: `mute`, not `muted`.
@@ -122,8 +122,7 @@ exists because its absence cost a rename.
   of its own, is not.
 * **Plumbing stays private.** What a verb is made of is public only when
   someone building their own verb needs it (`session::steps`,
-  `record::steps`, `Wiring`). Side tables and helpers under those are
-  `pub(crate)`; making one public later is cheap, taking it back is not.
+  `record::steps`). Helpers under those are `pub(crate)`; making one public later is cheap, taking it back is not.
 * **No silent obligations.** If a flow only works when the caller also
   remembers to do something later (end a drag, empty a queue), either the
   flow does it itself (a time window, a thread) or the obligation is a

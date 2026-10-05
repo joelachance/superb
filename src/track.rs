@@ -48,7 +48,7 @@ pub fn rename(session: &mut Session, track: TrackId, name: &str) -> Result<()> {
 /// live strip.
 pub fn volume(session: &mut Session, track: TrackId, db: f32) -> Result<()> {
     crate::session::edit(session, commands::set_track_volume_db(track, db))?;
-    if let Some(strip) = session.live.strip(track) {
+    if let Some(strip) = session.mixer.strip(track) {
         strip.set_volume_db(db);
     }
     Ok(())
@@ -59,7 +59,7 @@ pub fn volume(session: &mut Session, track: TrackId, db: f32) -> Result<()> {
 /// Made of: push `set_track_pan` → `StripParams::set_pan` on the live strip.
 pub fn pan(session: &mut Session, track: TrackId, pan: f32) -> Result<()> {
     crate::session::edit(session, commands::set_track_pan(track, pan))?;
-    if let Some(strip) = session.live.strip(track) {
+    if let Some(strip) = session.mixer.strip(track) {
         strip.set_pan(pan);
     }
     Ok(())
@@ -75,7 +75,7 @@ pub fn mute(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
         d.track_mut(track)?.state.mute = on;
         Ok(())
     })?;
-    if let Some(strip) = session.live.strip(track) {
+    if let Some(strip) = session.mixer.strip(track) {
         strip.set_mute(on);
     }
     Ok(())
@@ -91,7 +91,7 @@ pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
         d.track_mut(track)?.state.solo = on;
         Ok(())
     })?;
-    if let Some(strip) = session.live.strip(track) {
+    if let Some(strip) = session.mixer.strip(track) {
         strip.set_solo(on);
     }
     Ok(())

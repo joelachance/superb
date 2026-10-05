@@ -169,12 +169,11 @@ or `superb::primitives::graph::live`.
 See `examples/session_undo` for the stack driving a session document,
 saving it as JSON and reloading it.
 
-## Mixer bridge
+## From document to mixer
 
-Mirroring a session into a live [`Mixer`](mixer.md) is handled by
-the session's internal mixer bridge (separate `TrackId` namespaces,
-`rebuild` + `apply_routing` + `apply_strip_params`). Playing clips onto those strips is
-`superb::session::Wiring` attaches a node per clip onto those strips, and
-`superb::export::render` runs the result offline; see `docs/flows/play.md`
-and the `console_steps` example.
+The `Document` and the live [`Mixer`](mixer.md) use separate `TrackId` /
+`SendId` namespaces. `superb::session::steps::build_mixer` builds a fresh
+mixer from a document (a strip per track, a node per clip) and returns the
+live controls keyed by document id; `superb::export` runs such a mixer
+offline. See `docs/flows/session.md` and the `session_steps` example.
 

@@ -69,7 +69,7 @@ pub fn level(session: &mut Session, send: SendId, db: f32) -> Result<()> {
     session
         .history
         .push(&mut session.document, commands::set_send_level_db(send, db))?;
-    if let Some(live) = session.live.send(send) {
+    if let Some(live) = session.mixer.send(send) {
         live.set_level_db(db);
     }
     Ok(())
@@ -85,7 +85,7 @@ pub fn enable(session: &mut Session, send: SendId, on: bool) -> Result<()> {
         s.send_mut(send)?.state.enabled = on;
         Ok(())
     })?;
-    if let Some(live) = session.live.send(send) {
+    if let Some(live) = session.mixer.send(send) {
         live.set_enabled(on);
     }
     Ok(())
@@ -96,7 +96,7 @@ pub fn enable(session: &mut Session, send: SendId, on: bool) -> Result<()> {
 ///
 /// Made of: `StripParams::take_peak` for channels 0 and 1.
 pub fn peak(session: &Session, track: TrackId) -> Option<[f32; 2]> {
-    let strip = session.live.strip(track)?;
+    let strip = session.mixer.strip(track)?;
     Some([strip.take_peak(0), strip.take_peak(1)])
 }
 
@@ -138,7 +138,7 @@ mod tests {
     }
 
     fn balance_all(session: &Session) {
-        for (_, strip) in &session.live.strips {
+        for (_, strip) in &session.mixer.strips {
             strip.set_pan_law(crate::primitives::mixer::PanLaw::Balance);
         }
     }

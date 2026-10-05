@@ -49,7 +49,7 @@ fn main() -> Result<()> {
     // Strips default to a -3 dB centre pan law; use the plain "balance" law
     // here so the arithmetic below is exact. This is a live-strip primitive:
     // the flows do not wrap it, and you can still reach it.
-    for (_, strip) in &session.live.strips {
+    for (_, strip) in &session.mixer.strips {
         strip.set_pan_law(PanLaw::Balance);
     }
     println!(
@@ -99,7 +99,7 @@ fn main() -> Result<()> {
     let _gtr_send = mix::add_send(&mut session, gtr, room, -6.0206, SendTap::PostFader)?;
     println!("needs rebuild: {}", session.needs_rebuild);
     session::steps::rebuild(&mut session)?;
-    for (_, strip) in &session.live.strips {
+    for (_, strip) in &session.mixer.strips {
         strip.set_pan_law(PanLaw::Balance);
     }
     println!(
@@ -115,7 +115,7 @@ fn main() -> Result<()> {
     // bus down: the bus fader now scales gtr.
     track::route(&mut session, gtr, Some(room))?;
     session::steps::rebuild(&mut session)?;
-    for (_, strip) in &session.live.strips {
+    for (_, strip) in &session.mixer.strips {
         strip.set_pan_law(PanLaw::Balance);
     }
     track::volume(&mut session, room, -6.0206)?;

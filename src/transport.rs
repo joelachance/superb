@@ -105,8 +105,7 @@ mod tests {
         assert!(session.needs_rebuild);
         start(&mut session).unwrap();
         assert!(!session.needs_rebuild);
-        assert!(session.live.strip(vox).is_some());
-        assert!(session.live.wiring.is_some());
+        assert!(session.mixer.strip(vox).is_some());
         let audio = session::steps::render_blocks(&mut session, 10).unwrap(); // 640 frames
         assert_eq!(audio.frames(), 640);
         // Constant-power pan at centre: 0.5 * ~0.707 per side once the ramp settled.

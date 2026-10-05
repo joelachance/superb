@@ -42,7 +42,7 @@ pub struct Session {
     pub cache: AudioCache,           // audio in memory, keyed by the path clips use
     pub engine: EngineHandle,        // control side of the running engine
     pub engine_loop: Option<EngineLoop>, // the audio side, until a device takes it
-    pub live: LiveHandles,           // strip, send and plugin handles from the last rebuild
+    pub mixer: MixerHandles,         // live strip and send controls from the last rebuild
     pub recording: Option<Recording>,
     pub channels: usize,             // 2 = stereo
     pub needs_rebuild: bool,
@@ -60,15 +60,15 @@ from it and is not something you name.
 
 Every *edit* to the document is a command on `session.history`, so it can
 be undone. Structural edits (add, remove, move) are one step each; a
-continuous edit (volume, pan, send level, plugin parameter, clip drag)
+continuous edit (volume, pan, send level, clip drag)
 coalesces: moves of the same control within half a second
 (`Session::COALESCE_WINDOW`) merge into one step, so a drag is one step and
 not a hundred, and a pause starts the next. A UI that wants mouse-up
 precision calls the primitive `session.history.seal()`. `record::stop`
 groups the clips it places into one step called "Record".
 
-*State* (a track's mute, solo, arm and monitor; a send's on/off; an
-insert's bypass) is not an edit. It is saved with the session and heard at
+*State* (a track's mute, solo, arm, monitor and input; a send's on/off)
+is not an edit. It is saved with the session and heard at
 the next block, but it never enters the undo history: nobody expects Undo
 to un-mute a track. Flows set it through `session::set_state`, which also
 tells the history its saved point is gone, so `is_saved` turns false.
@@ -80,22 +80,21 @@ undo.
 ## The mixer follows the document
 
 The engine runs a mixer built from the document. Edits that change its
-*shape* (a new track, a clip moved, a send, a route, an insert, monitoring
-on a MIDI track) rebuild it: at once while a device is playing (so the
+*shape* (a new track, a clip moved, a send, a route, monitoring on a MIDI
+track) rebuild it: at once while a device is playing (so the
 change is heard within a block), otherwise at the next `transport::start`
 or `session::steps::render_blocks`, which is cheaper when many edits
 arrive together (opening a file). `session.needs_rebuild` is the flag in
 between. You never call `rebuild` yourself unless you want to choose the
 moment; it is a step, `session::steps::rebuild`.
 
-Edits to a level (volume, pan, send level, plugin parameter) and state
-changes (mute, solo, bypass, send on/off) do not rebuild: the flow writes
-them to the document and to the live handle in `session.live` at once.
+Edits to a level (volume, pan, send level) and state changes (mute, solo,
+send on/off) do not rebuild: the flow writes them to the document and to
+the live control in `session.mixer` at once.
 
-After a rebuild, `session.live` points at the new mixer. Handles from
-before are stale; do not keep them across a rebuild. A rebuild recreates
-plugin instances with their stored parameters and preset, so reverb tails
-and meters reset.
+After a rebuild, `session.mixer` holds the new mixer's controls. Handles
+from before are stale; look them up again rather than keeping them across
+a rebuild. A rebuild resets the meters.
 
 ## Commands reach the engine at the next block
 
