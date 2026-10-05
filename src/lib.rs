@@ -105,7 +105,8 @@ pub mod prelude {
     pub use crate::primitives::plugins::{PluginDescriptor, PluginInstance, PluginNode};
     pub use crate::primitives::realtime::{AtomicF32, LoadMeter};
     pub use crate::primitives::session::{
-        Clip, ClipSource, Document, DocumentSnapshot, Marker, Track, TrackKind, TrackSend,
+        Clip, ClipSource, Document, DocumentSnapshot, Input, Marker, Track, TrackKind, TrackSend,
+        TrackState,
     };
     pub use crate::primitives::transport::{LoopRange, TempoMap, Transport, TransportState};
     pub use crate::primitives::undo::{CoalesceKey, Command, PropertyEdit, UndoStack};

@@ -27,6 +27,7 @@ shape, so they rebuild it.
 | `armed(session) -> Vec<TrackId>` | the armed audio tracks | |
 | `monitor(session, track, on)` | state; MIDI tracks only; the track carries a live instrument; rebuilds | — |
 | `is_monitoring(session, track)` | | |
+| `input(session, track, Option<Input>)` | state; audio tracks only; which input channel(s) feed the track when it records: `Input::Mono(0)`, `Input::Stereo(0, 1)`, or `None` for everything captured | — |
 | `route(session, track, Some(bus) or None)` | output into a bus or the master; loops refused | one |
 
 ## Usage
@@ -43,6 +44,7 @@ for db in [-1.0, -2.0, -3.0] {
 }
 track::mute(&mut session, vox, true)?;       // state: saved, not undoable
 track::arm(&mut session, vox, true)?;
+track::input(&mut session, vox, Some(Input::Mono(0)))?;   // records the first input, mono
 track::monitor(&mut session, keys, true)?;   // the keys track now sounds when MIDI arrives
 assert_eq!(session.document.track(vox)?.state.volume_db, -3.0);
 ```
@@ -53,7 +55,7 @@ assert_eq!(session.document.track(vox)?.state.volume_db, -3.0);
 through `session::structural`. `volume` / `pan`: `set_track_volume_db` /
 `set_track_pan` through `session::edit`, then `StripParams::set_volume_db`
 / `set_pan` on the live strip. `mute` / `solo` / `arm` / `monitor`:
-`TrackState::{mute, solo, arm, monitor}` through `session::set_state`,
+`TrackState::{mute, solo, arm, monitor, input}` through `session::set_state`,
 then `StripParams::set_mute` / `set_solo` for the first two and a rebuild
 for `monitor`. `route`: `SetTrackOutput` through `session::structural`.
 
@@ -67,5 +69,4 @@ for `monitor`. `route`: `SetTrackOutput` through `session::structural`.
 * The instrument a monitoring MIDI track gets is `MonoSynthNode`, a simple
   synth for hearing that MIDI arrives; an instrument plugin on the track
   (`plugins::insert`) is the real thing.
-* Not yet: choosing which input channel feeds a track (`track::input`) and
-  hearing that input through the strip.
+* Not yet: hearing a track's input through its strip while recording.

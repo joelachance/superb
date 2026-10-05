@@ -12,7 +12,7 @@
 //! commands) and `superb::primitives::mixer` (`StripParams`, the live side).
 
 use crate::primitives::session::commands::{self, AddTrack, RemoveTrack, SetTrackOutput};
-use crate::primitives::session::{Track, TrackKind};
+use crate::primitives::session::{Input, Track, TrackKind};
 use crate::primitives::{Result, SuperbError, TrackId};
 use crate::session::Session;
 
@@ -152,6 +152,25 @@ pub fn is_monitoring(session: &Session, track: TrackId) -> bool {
         .track(track)
         .map(|t| t.kind == TrackKind::Midi && t.state.monitor)
         .unwrap_or(false)
+}
+
+/// Chooses which channel(s) of the audio input feed an audio track when it
+/// records: `Input::Mono(0)` for the first input, `Input::Stereo(0, 1)` for
+/// the first pair, `None` for everything the recording captures. State:
+/// saved with the session, not an undo step. `record::start` captures as
+/// many channels as the armed tracks' inputs need.
+///
+/// Made of: `TrackState::input` through `session::set_state`.
+pub fn input(session: &mut Session, track: TrackId, input: Option<Input>) -> Result<()> {
+    if session.document.track(track)?.kind != TrackKind::Audio {
+        return Err(SuperbError::InvalidArgument {
+            what: "only audio tracks take an input",
+        });
+    }
+    crate::session::set_state(session, |d| {
+        d.track_mut(track)?.state.input = input;
+        Ok(())
+    })
 }
 
 /// Sends a track's (or bus's) output into `bus`, or back to the master

@@ -16,7 +16,7 @@ undone freely.
 ## Key types
 
 State: each object keeps its settable fields under one `state`:
-`Track.state: TrackState { volume_db, pan, mute, solo, arm, monitor }`,
+`Track.state: TrackState { volume_db, pan, mute, solo, arm, monitor, input }`,
 `TrackSend.state: SendState { level_db, enabled }`, `Insert.state:
 InsertState { bypass, params }` (the plugin's own saved bytes are
 `Insert.preset`). Snapshots accept the older flat field names.

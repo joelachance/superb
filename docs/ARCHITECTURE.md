@@ -82,7 +82,7 @@ Data crosses the thread boundary in exactly three ways:
 
 1. **`primitives::session`** holds the `Document` as plain data: tracks
    (audio, MIDI or bus) with their state (volume, pan, mute, solo, arm,
-   monitor), clips on tracks, markers, a tempo map, loop range, routing
+   monitor, input), clips on tracks, markers, a tempo map, loop range, routing
    (each track's output bus and its sends) and insert chains (plugin,
    state, preset). It knows nothing about audio
    threads, so it can be cloned, saved as JSON and undone freely. Edits go
@@ -242,8 +242,8 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 ## Not there yet
 
 Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
-Incremental edits to a running mixer (a rebuild replaces it). Per-track
-input routing and monitoring a live input through a strip. Punch-in/out and loop
+Incremental edits to a running mixer (a rebuild replaces it). Monitoring a
+live input through a strip. Punch-in/out and loop
 recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
 Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes
 owned by the session. Multi-bus or sidechain nodes.

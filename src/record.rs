@@ -19,6 +19,7 @@ use std::thread::JoinHandle;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
 use crate::primitives::io::live::EngineCommand;
+use crate::primitives::session::Input;
 use crate::primitives::{ClipId, Result, SuperbError, TimeDuration, TimePosition, TrackId};
 use crate::session;
 use crate::session::Session;
@@ -154,16 +155,19 @@ pub fn is_recording(session: &Session) -> bool {
     session.recording.is_some()
 }
 
-/// Starts recording `channels` channels from a hardware input (`None` for
-/// the default device, or a name from `devices::inputs`) onto every armed
-/// track, from the current playhead position. The transport starts
-/// rolling, and a collector thread gathers the audio until [`stop`].
+/// Starts recording from a hardware input (`None` for the default device,
+/// or a name from `devices::inputs`) onto every armed track, from the
+/// current playhead position. As many channels are captured as the armed
+/// tracks' inputs need ([`track::input`](crate::track::input)); a track
+/// with no input set gets all of them. The transport starts rolling, and a
+/// collector thread gathers the audio until [`stop`].
 ///
-/// Made of: an `InputConfig` matching the session → [`steps::open_input`]
-/// with 64 queued blocks → [`steps::spawn_collector`] → the same beginning
-/// as [`start_from`].
+/// Made of: [`steps::input_width`] → an `InputConfig` matching the session
+/// → [`steps::open_input`] with 64 queued blocks → [`steps::spawn_collector`]
+/// → the same beginning as [`start_from`].
 #[cfg(feature = "devices")]
-pub fn start(session: &mut Session, device: Option<&str>, channels: usize) -> Result<()> {
+pub fn start(session: &mut Session, device: Option<&str>) -> Result<()> {
+    let channels = steps::input_width(session);
     let input = crate::devices::input_config(session, device, channels);
     let (stream, blocks) = steps::open_input(&input, 64)?;
     let channels = stream.channels();
@@ -238,9 +242,10 @@ pub fn collect(session: &mut Session) -> usize {
 
 /// Stops the recording and the transport, stores the audio, and places one
 /// clip per armed track starting at the punch-in point, each named after
-/// its track (`vox 1`, `vox 2`, ...). The clips share one buffer. Returns
-/// the new clips (none if nothing was captured). The whole placement is
-/// one undo step called "Record".
+/// its track (`vox 1`, `vox 2`, ...) and holding the channels its
+/// [`Input`] selects (tracks without
+/// one share the whole capture). Returns the new clips (none if nothing was
+/// captured). The whole placement is one undo step called "Record".
 ///
 /// Made of: `EngineHandle::send(Stop)` → drop the input stream →
 /// [`steps::collect`] or `Collector::finish` → the planes become one
@@ -278,18 +283,22 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         return Ok(Vec::new());
     }
     let length = TimeDuration::from_samples(audio.frames() as i64);
-    let audio = Arc::new(audio);
+    let whole = Arc::new(audio);
     session.history.begin_group("Record");
     let mut clips = Vec::with_capacity(tracks.len());
     for track in &tracks {
-        let name = match steps::clip_name(session, *track) {
-            Ok(name) => name,
+        let (name, input) = match steps::clip_name(session, *track) {
+            Ok(name) => (name, session.document.track(*track)?.state.input),
             Err(e) => {
                 session.history.cancel_group(&mut session.document)?;
                 return Err(e);
             }
         };
-        session.cache.insert_shared(&name, Arc::clone(&audio));
+        let audio = match input {
+            None => Arc::clone(&whole),
+            Some(input) => Arc::new(steps::select_input(&whole, input)),
+        };
+        session.cache.insert_shared(&name, audio);
         match steps::place_clip(session, *track, &name, punch_in, length) {
             Ok(clip) => clips.push(clip),
             Err(e) => {
@@ -355,6 +364,37 @@ pub mod steps {
             stop,
             handle: Some(handle),
         })
+    }
+
+    /// How many input channels the armed tracks need: one past the highest
+    /// channel any of their inputs names, and at least one.
+    pub fn input_width(session: &Session) -> usize {
+        crate::track::armed(session)
+            .into_iter()
+            .filter_map(|t| session.document.track(t).ok()?.state.input)
+            .map(Input::width)
+            .max()
+            .unwrap_or(1)
+            .max(1)
+    }
+
+    /// The channel(s) an [`Input`] selects from a captured buffer: one for
+    /// `Mono`, two for `Stereo`. A channel the capture did not have is
+    /// silence.
+    pub fn select_input(captured: &PlanarBuffer, input: Input) -> PlanarBuffer {
+        let frames = captured.frames();
+        let pick = |c: usize| -> Vec<f32> {
+            if c < captured.channels() {
+                captured.channel(c).to_vec()
+            } else {
+                vec![0.0; frames]
+            }
+        };
+        let planes: Vec<Vec<f32>> = match input {
+            Input::Mono(c) => vec![pick(c)],
+            Input::Stereo(l, r) => vec![pick(l), pick(r)],
+        };
+        finish_recording(planes)
     }
 
     /// Moves every waiting block into the recording when the capture is manual;
@@ -547,6 +587,52 @@ mod tests {
         for i in 0..blocks {
             assert!(producer.push(&block, i as u64));
         }
+    }
+
+    #[test]
+    fn tracks_record_the_input_channels_they_chose() {
+        let mut session = session::create("rec", R, 64).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        let gtr = track::add(&mut session, "gtr", TrackKind::Audio).unwrap();
+        let room = track::add(&mut session, "room", TrackKind::Audio).unwrap();
+        for t in [vox, gtr, room] {
+            track::arm(&mut session, t, true).unwrap();
+        }
+        track::input(&mut session, vox, Some(Input::Mono(0))).unwrap();
+        track::input(&mut session, gtr, Some(Input::Mono(1))).unwrap();
+        track::input(&mut session, room, Some(Input::Stereo(0, 1))).unwrap();
+        assert_eq!(steps::input_width(&session), 2);
+        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
+        assert!(track::input(&mut session, keys, Some(Input::Mono(0))).is_err());
+
+        // A two-channel capture: 0.25 on the left, 0.5 on the right.
+        let (mut mic, blocks) = capture_queue(2, 64, 8).unwrap();
+        let mut block = PlanarBuffer::new(2, 64);
+        block.channel_mut(0).fill(0.25);
+        block.channel_mut(1).fill(0.5);
+        start_from(&mut session, blocks, 2).unwrap();
+        for i in 0..3 {
+            assert!(mic.push(&block, i));
+        }
+        let clips = stop(&mut session).unwrap();
+        assert_eq!(clips.len(), 3);
+        let audio = |name: &str| session.cache.get(name.as_ref()).unwrap();
+        assert_eq!(audio("vox 1").channels(), 1);
+        assert!(audio("vox 1").channel(0).iter().all(|&s| s == 0.25));
+        assert_eq!(audio("gtr 1").channels(), 1);
+        assert!(audio("gtr 1").channel(0).iter().all(|&s| s == 0.5));
+        assert_eq!(audio("room 1").channels(), 2);
+        assert!(audio("room 1").channel(1).iter().all(|&s| s == 0.5));
+        // A channel the capture did not have is silence.
+        let silent = steps::select_input(&audio("room 1"), Input::Mono(5));
+        assert!(silent.is_silent() && silent.frames() == 192);
+        // No input set: the whole capture, shared.
+        track::input(&mut session, vox, None).unwrap();
+        assert_eq!(
+            steps::input_width(&session),
+            2,
+            "gtr and room still need two"
+        );
     }
 
     #[test]

@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::primitives::plugins::PluginFormat;
 use crate::primitives::session::{
-    Clip, ClipSource, Document, Insert, Marker, PluginRef, Track, TrackKind, TrackSend,
+    Clip, ClipSource, Document, Input, Insert, Marker, PluginRef, Track, TrackKind, TrackSend,
 };
 
 /// Version of the snapshot format written by this crate.
@@ -165,6 +165,9 @@ pub struct TrackSnapshot {
     /// monitoring instead).
     #[serde(default)]
     pub monitor: bool,
+    /// Which input channels the track records from (absent in older files).
+    #[serde(default)]
+    pub input: Option<Input>,
     /// Raw ID of the bus track the output feeds (`None` = master; absent
     /// in files written before routing existed).
     #[serde(default)]
@@ -272,6 +275,7 @@ impl From<&Track> for TrackSnapshot {
             solo: t.state.solo,
             arm: t.state.arm,
             monitor: t.state.monitor,
+            input: t.state.input,
             output: t.output.map(TrackId::raw),
             sends: t.sends.iter().map(SendSnapshot::from).collect(),
             inserts: t.inserts.iter().map(InsertSnapshot::from).collect(),
@@ -409,6 +413,7 @@ impl Document {
                 track.state.arm = t.arm;
                 track.state.monitor = t.monitor;
             }
+            track.state.input = t.input;
             if t.kind == TrackKind::Bus && !t.clips.is_empty() {
                 return Err(SuperbError::InvalidArgument {
                     what: "bus tracks hold no clips",
@@ -576,6 +581,7 @@ mod tests {
         .unwrap();
         s.track_mut(drums).unwrap().color = Some(0xFF8800);
         s.track_mut(drums).unwrap().state.volume_db = -3.5;
+        s.track_mut(drums).unwrap().state.input = Some(Input::Stereo(0, 1));
         s.track_mut(keys).unwrap().state.pan = 0.25;
         s.track_mut(keys).unwrap().state.solo = true;
         let mut audio = Clip::new(

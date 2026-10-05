@@ -181,6 +181,30 @@ pub struct TrackState {
     /// Monitoring: a MIDI track that carries a live instrument for
     /// incoming MIDI.
     pub monitor: bool,
+    /// Which channel(s) of the audio input feed this track when it records.
+    /// `None` takes everything the recording captures.
+    pub input: Option<Input>,
+}
+
+/// Which channels of the audio input a track records from, by zero-based
+/// channel index on the device.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Input {
+    /// One channel, recorded as mono.
+    Mono(usize),
+    /// Two channels (left, right), recorded as stereo.
+    Stereo(usize, usize),
+}
+
+impl Input {
+    /// How many input channels a recording must capture for this input to
+    /// be present: one past the highest index it names.
+    pub fn width(self) -> usize {
+        match self {
+            Input::Mono(c) => c + 1,
+            Input::Stereo(l, r) => l.max(r) + 1,
+        }
+    }
 }
 
 impl Default for TrackState {
@@ -192,6 +216,7 @@ impl Default for TrackState {
             solo: false,
             arm: false,
             monitor: false,
+            input: None,
         }
     }
 }

@@ -62,4 +62,6 @@ pub use snapshot::{
     ClipSnapshot, DocumentSnapshot, InsertSnapshot, MarkerSnapshot, MeterSnapshot, SendSnapshot,
     TempoPointSnapshot, TempoSnapshot, TrackSnapshot, FORMAT_VERSION,
 };
-pub use track::{Clip, ClipSource, MidiNote, SendState, Track, TrackKind, TrackSend, TrackState};
+pub use track::{
+    Clip, ClipSource, Input, MidiNote, SendState, Track, TrackKind, TrackSend, TrackState,
+};

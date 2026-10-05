@@ -8,20 +8,21 @@ A recording flows through a capture queue: the input side fills it with
 blocks, a collector thread (device recording) or `collect` (your own
 source) moves them into memory, and `stop` stores the audio and places one
 clip per armed track as a single undo step. Each clip is named after its
-track (`vox 1`, `vox 2`, ...), and the clips of one recording share one
-buffer.
+track (`vox 1`, `vox 2`, ...) and holds the channels the track's input
+selects.
 
 ## Verbs
 
 | verb | does |
 |---|---|
-| `start(session, Option<device name>, channels)` (feature `devices`) | open a hardware input matched to the session, spawn a collector thread, begin at the playhead |
+| `start(session, Option<device name>)` (feature `devices`) | open a hardware input matched to the session with as many channels as the armed tracks' inputs need, spawn a collector thread, begin at the playhead |
 | `start_from(session, CaptureConsumer, channels)` | begin from a queue you fill yourself; blocks wait for `collect` |
 | `collect(session) -> frames` | move waiting blocks into a manual recording (`session::steps::render_blocks` does this); nothing to do for a threaded one |
 | `stop(session) -> Vec<ClipId>` | stop the transport, finish the recording, place clips ("Record") |
 | `is_recording(session)` | |
 
-Arming is track state: `track::arm` and `track::armed`.
+Arming and the input a track records from are track state: `track::arm`,
+`track::armed`, `track::input`.
 
 ## Steps (`record::steps`)
 
@@ -30,6 +31,8 @@ Arming is track state: `track::arm` and `track::armed`.
 | `open_input(&InputConfig, slots)` (feature `devices`) | a capture queue fed by hardware; returns the stream and the consumer |
 | `spawn_collector(CaptureConsumer, channels) -> Collector` | a thread that empties the queue as it fills; `finish` returns the planes |
 | `collect(&mut Capture) -> frames appended` | drain a manual capture's queue into its planes |
+| `input_width(session) -> channels` | how many input channels the armed tracks' inputs need |
+| `select_input(&PlanarBuffer, Input) -> PlanarBuffer` | the channel(s) an input picks out of a capture |
 
 `Recording` is the recording in progress: its `Capture` (`Manual { blocks,
 planes }` or `Threaded(Collector)`), punch-in position, armed tracks,
@@ -58,7 +61,7 @@ let clips = record::stop(&mut session)?;                 // one clip per armed t
 From a real input (feature `devices`):
 
 ```rust
-record::start(&mut session, None, 1)?;   // the default input, one channel; a thread gathers the audio
+record::start(&mut session, None)?;   // the default input; a thread gathers the audio
 // ... play ...
 let clips = record::stop(&mut session)?;
 ```
@@ -70,8 +73,9 @@ collector): `track::armed` → `session::steps::rebuild` if needed →
 `EngineHandle::send(Record)` → `transport::playhead` for the punch-in.
 `stop`: `EngineHandle::send(Stop)` → drop the stream → `collect` or
 `Collector::finish` → one buffer from the planes → per track a name no
-cache entry uses → `AudioCache::insert_shared` → `session::add_audio_clip`,
-inside one undo group → rebuild.
+cache entry uses and the channels its `Input` selects (`select_input`; the
+whole capture, shared, when none is set) → `AudioCache::insert_shared` →
+`session::add_audio_clip`, inside one undo group → rebuild.
 
 ## Notes
 
@@ -79,6 +83,6 @@ inside one undo group → rebuild.
   which is why a device recording gets a collector thread. A manual
   recording relies on `render_blocks` collecting after every block.
   `Recording::dropped` tells you if blocks were lost either way.
-* Every armed track gets the same audio at the punch-in position. Per-track
-  inputs (`track::input`) are the next step; input monitoring, punch-out,
-  loop recording and pre-roll are not there yet.
+* Every armed track gets a clip at the punch-in position holding the
+  channels its input selects. Input monitoring, punch-out, loop recording
+  and pre-roll are not there yet.

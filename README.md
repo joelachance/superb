@@ -127,15 +127,15 @@ Working today: a document with tracks and their state, clips, markers,
 routing, inserts, JSON files and undo; a mixer built from the document with
 faders, buses, sends and insert chains, swapped glitch-free into a running
 engine; offline rendering and WAV export; device output and capture;
-recording into clips; MIDI messages, live monitoring and hardware
+recording into clips with per-track input selection; MIDI messages, live monitoring and hardware
 input; automation envelopes and modes; CLAP plugin hosting with parameter
 edits reaching the running instance; file decoding, resampling and
 bouncing behind the `files` feature.
 
 Not yet: duplex device streams, aligning hardware MIDI timestamps with the
 audio clock, updating a running mixer incrementally (a rebuild replaces it,
-which resets plugin tails), per-track input routing and monitoring a live
-input through a strip, punch-in/out and loop recording, VST3 hosting, SysEx and
+which resets plugin tails), monitoring a live input through a strip,
+punch-in/out and loop recording, VST3 hosting, SysEx and
 Standard MIDI Files, and encoders other than WAV.
 
 ## Licence

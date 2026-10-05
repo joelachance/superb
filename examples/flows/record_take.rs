@@ -1,7 +1,8 @@
 //! `record`: arm a track, record, get a clip.
 //!
 //! What you'll learn:
-//! - Armed audio tracks receive a clip when a recording stops
+//! - Armed audio tracks receive a clip when a recording stops, holding the
+//!   input channel(s) chosen with `track::input`
 //! - A recording arrives through a capture queue; `record::start` (feature
 //!   `devices`) fills it from a microphone and gathers it on a thread, and
 //!   `record::start_from` accepts any producer you like, which is what
@@ -24,8 +25,11 @@ fn main() -> Result<()> {
     let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
     let _bed = track::add(&mut session, "bed", TrackKind::Audio)?;
 
-    // Arm the vocal. Arming is a switch in the session: undoable, saved.
+    // Arm the vocal and say which input feeds it: the first channel of the
+    // interface, recorded as mono. Both are track state: saved, not undo
+    // steps. A track with no input set records everything captured.
     track::arm(&mut session, vox, true)?;
+    track::input(&mut session, vox, Some(Input::Mono(0)))?;
     println!("armed: {:?}", track::armed(&session));
 
     // Roll the transport a second in, then punch in there.
@@ -110,7 +114,7 @@ fn main() -> Result<()> {
             println!("no input device to record from");
         } else {
             track::arm(&mut session, vox, true)?;
-            record::start(&mut session, None, 1)?; // the default input, one channel; a thread gathers the audio
+            record::start(&mut session, None)?; // the default input; a thread gathers the audio
             std::thread::sleep(std::time::Duration::from_millis(500));
             let clips = record::stop(&mut session)?;
             println!("recorded {} clip(s) from the default input", clips.len());
