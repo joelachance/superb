@@ -1,20 +1,22 @@
-//! `export`: bounce the document to a WAV file.
+//! `export`: bounce the session to a WAV file.
 //!
 //! What you'll learn:
-//! - Export renders offline through its own copy of the console, inserts
-//!   included, without touching the live engine
-//! - `bounce_session` covers start to the end of the last clip; `bounce` takes
-//!   a range; `render` gives you the audio without a file
-//! - With feature `files`, `bounce_at_rate` converts to another sample rate
+//! - A bounce renders offline through its own copy of the mixer, without
+//!   touching the live engine
+//! - `Bounce::default()` covers the session from zero to the end of the
+//!   last clip, at the session's rate, as 16-bit PCM; set `start`,
+//!   `length`, `format` for a range or another file format
+//! - With feature `files`, `sample_rate` converts the bounce on the way out
 //!
 //! ```text
 //! cargo run --example export_session
 //! cargo run --example export_session --features files
 //! ```
 
+use superb::export::{self, Bounce};
 use superb::prelude::*;
 use superb::primitives::io::wav::{self, WavFormat};
-use superb::{clip, export, session, track, transport};
+use superb::{clip, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
@@ -22,7 +24,7 @@ fn main() -> Result<()> {
     let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
     let pad = track::add(&mut session, "pad", TrackKind::Audio)?;
 
-    // Two one-second tones, the second starting at 0.5 s: the document ends at 1.5 s.
+    // Two one-second tones, the second starting at 0.5 s: the session ends at 1.5 s.
     let mut a = PlanarBuffer::new(2, rate.hz() as usize);
     let mut b = PlanarBuffer::new(2, rate.hz() as usize);
     for i in 0..a.frames() {
@@ -46,10 +48,10 @@ fn main() -> Result<()> {
     track::volume(&mut session, pad, -6.0)?;
     track::pan(&mut session, lead, 0.3)?;
 
-    // The live engine is untouched by an export: leave it stopped at zero.
+    // The whole session. The live engine is untouched: it stays stopped at zero.
     let dir = std::env::temp_dir();
     let path = dir.join("export_session.wav");
-    let audio = export::bounce_session(&mut session, &path, WavFormat::Pcm16)?;
+    let audio = export::bounce(&mut session, &path, Bounce::default())?;
     println!(
         "bounced {:.2} s ({} frames) to {}; peak {:.3}",
         audio.frames() as f64 / rate.hz() as f64,
@@ -71,31 +73,29 @@ fn main() -> Result<()> {
         read.channels()
     );
 
-    // Just the overlap, as 32-bit float, into memory and to a file.
-    let overlap = export::render(
-        &mut session,
-        TimePosition::from_seconds(0.5, rate),
-        rate.hz() as usize / 2,
-    )?;
-    println!("0.5 s .. 1.0 s in memory: peak {:.3}", overlap.peak());
-    export::bounce(
+    // Just the overlap (0.5 s .. 1.0 s), as 32-bit float.
+    let overlap = export::bounce(
         &mut session,
         dir.join("export_overlap.wav"),
-        TimePosition::from_seconds(0.5, rate),
-        rate.hz() as usize / 2,
-        WavFormat::Float32,
+        Bounce {
+            start: TimePosition::from_seconds(0.5, rate),
+            length: Some(TimeDuration::from_seconds(0.5, rate)),
+            format: WavFormat::Float32,
+            ..Bounce::default()
+        },
     )?;
+    println!("0.5 s .. 1.0 s as float: peak {:.3}", overlap.peak());
 
     #[cfg(feature = "files")]
     {
-        let cd = dir.join("export_song_44k1.wav");
-        let converted = export::bounce_at_rate(
+        let cd = dir.join("export_session_44k1.wav");
+        let converted = export::bounce(
             &mut session,
             &cd,
-            TimePosition::ZERO,
-            audio.frames(),
-            SampleRate::CD,
-            WavFormat::Pcm16,
+            Bounce {
+                sample_rate: Some(SampleRate::CD),
+                ..Bounce::default()
+            },
         )?;
         println!(
             "resampled to 44.1 kHz: {} frames -> {}",

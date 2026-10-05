@@ -116,8 +116,7 @@ exists because its absence cost a rename.
   offline render in `export`. When two functions do the same thing,
   delete one rather than alias it.
 * **Sugar is welcome when it is a button.** A verb may be one line over
-  a primitive or another verb (`rewind`, `is_rolling`, `play_note`,
-  `bounce_session`) if a musician would recognise it as a
+  a primitive or another verb (`rewind`, `is_rolling`, `play_note`) if a musician would recognise it as a
   control on a DAW and its "Made of:" line is the whole implementation.
   Sugar that exists for the SDK author's convenience, or that holds logic
   of its own, is not.

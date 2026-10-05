@@ -377,7 +377,7 @@ mod tests {
     }
 
     /// Builds a mixer and renders `frames` from `start` offline, the way
-    /// `export::render` does.
+    /// `export::bounce` does.
     fn render(
         document: &Document,
         cache: &AudioCache,

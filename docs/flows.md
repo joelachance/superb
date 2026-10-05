@@ -14,7 +14,7 @@ This page covers what they share; each flow has its own note in
 | `send` — a copy of a track into a bus: add, remove, level, on/off | [send.md](flows/send.md) |
 | `midi` — send notes, connect a keyboard | [midi.md](flows/midi.md) |
 | `record` — start a recording, stop it, get clips | [record.md](flows/record.md) |
-| `export` — bounce a range or the session to WAV | [export.md](flows/export.md) |
+| `export` — bounce the session, or a range of it, to WAV | [export.md](flows/export.md) |
 | `devices` — audio and MIDI hardware; play through an output | [devices.md](flows/devices.md) |
 
 ## Why free functions

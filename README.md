@@ -49,7 +49,7 @@ They know nothing about flows or the `Session`.
 | `send` | a copy of a track into a bus: add, remove, level, on/off | [send.md](docs/flows/send.md) |
 | `midi` | send notes, connect a keyboard | [midi.md](docs/flows/midi.md) |
 | `record` | start a recording, stop it, get a clip on every armed track | [record.md](docs/flows/record.md) |
-| `export` | render a range or the whole session to WAV, optionally resampled | [export.md](docs/flows/export.md) |
+| `export` | bounce the session, or a range of it, to WAV, optionally resampled | [export.md](docs/flows/export.md) |
 | `devices` | list audio and MIDI hardware; play through an output; configurations that match the session | [devices.md](docs/flows/devices.md) |
 
 [docs/flows.md](docs/flows.md) explains how the flows fit together (the
@@ -88,7 +88,7 @@ cargo run --example play_session               # transport: start, seek, loop, o
 cargo run --example mix_session                # track and send: faders, a bus, sends, meters
 cargo run --example midi_keys                  # midi: notes into a monitoring track
 cargo run --example record_take                # record: a recording from a synthetic microphone
-cargo run --example export_session             # export: bounce to WAV
+cargo run --example export_session             # export: bounce to WAV, whole or a range
 cargo run --example list_devices --features devices
 ```
 

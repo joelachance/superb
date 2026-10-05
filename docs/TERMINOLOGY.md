@@ -32,7 +32,7 @@ a musician would use.
 | A send | `send` | A copy of a track into a bus: add, remove, level, on/off |
 | MIDI, the keyboard | `midi` | Playing notes, connecting a controller |
 | Recording | `record` | Start, stop; a clip on every armed track |
-| Bounce, export, mixdown | `export` | Rendering the session to a file |
+| Bounce, export, mixdown | `export` | Rendering the session, or a range of it, to a file |
 | Hardware, audio interface | `devices` | Which speakers, mics and MIDI ports exist |
 | The session (the thing you open) | `Session` | The document plus its history, audio in memory and the running engine |
 
