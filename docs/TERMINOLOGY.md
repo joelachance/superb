@@ -16,7 +16,7 @@ a musician would use.
 | Mixer / channel strips | `primitives::mixer` | Faders, pan, mute/solo, meters, sends, insert chains |
 | MIDI | `primitives::midi` | Notes and controllers (not audio) |
 | Engine, devices and files | `primitives::io` | The block loop, speakers, mics, bounce, open/save audio files |
-| Memory (what the session remembers and saves; a musician just says the session) | `primitives::session` | Tracks and their state, clips, tempo, routing, inserts |
+| Memory (what the session remembers and saves; a musician just says the session) | `primitives::session` | Tracks and their state, clips (archived ones included), markers, tempo, routing |
 | Undo history | `primitives::undo` | Undo / redo stack |
 | Automation | `primitives::automation` | Envelopes that move knobs over time |
 | Plugin host | `primitives::plugins` | Loading third-party effects and instruments (CLAP first) |
@@ -54,7 +54,7 @@ column is what not to say in code, docs or UI text.
 | archive (a clip; it stays, silent) | delete, remove (clips are never deleted) |
 | strip | channel (a strip's channel count is something else) |
 | insert | effect slot, plugin slot |
-| state (mute, solo, arm, monitor, bypass, send on/off) | switch, toggle, flag |
+| state (mute, solo, arm, monitor, input, send on/off) | switch, toggle, flag |
 | edit | change, gesture (for anything the undo history records) |
 | volume (a strip's fader, dB) | gain (that is the engine's linear multiplier) |
 | level (a send, dB) | gain, amount |
@@ -69,8 +69,8 @@ column is what not to say in code, docs or UI text.
 - **Signal path (we also say "graph")** — The wiring of processors. Same idea as inserts, sends, and buses on a mixing desk.
 - **Rebuild** — In Superb, rebuilding the mixer from the memory and swapping it into the running engine. Happens for you: at once while a device is playing, otherwise when you next start.
 - **Recording** — A recording in progress. When it stops, every armed track gets a clip named after it (`vox 1`); the clips share the audio.
-- **Insert** — An effect or instrument sitting in a track's signal path, in order. Stored in the memory; instantiated at rebuild.
-- **State vs. edit** — A track's mute, solo, arm and monitor, a send's on/off and an insert's bypass are state: saved with the session, heard at once, never undo steps. Volume and pan are state too but continuous, so they are undoable edits that coalesce. Everything else you change is an edit.
+- **Insert** — An effect or instrument sitting in a track's signal path, in order. A primitive today (the memory stores it); the flow for it comes back with plugins.
+- **State vs. edit** — A track's mute, solo, arm, monitor and input and a send's on/off are state: saved with the session, heard at once, never undo steps. Volume and pan are state too but continuous, so they are undoable edits that coalesce. Everything else you change is an edit.
 
 ## Plugin formats (short map)
 

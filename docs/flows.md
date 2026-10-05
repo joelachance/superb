@@ -31,16 +31,16 @@ Two kinds of function appear in a flow:
 
 * **Verbs** take `&mut Session` and do the whole job: `transport::start(&mut session)`.
 * **Steps** take the primitives they need and live in a `steps` module:
-  `session::steps::build_mixer(&memory, &cache, channels)`. Verbs are
+  `session::steps::build_mixer(&memory, &audio, channels)`. Verbs are
   built from steps; so can your own verbs be.
 
 ## The Session
 
 ```rust
 pub struct Session {
-    pub memory: Memory,          // tracks, clips, routing, tempo: what gets saved
-    pub history: UndoStack<Memory>,// every edit goes through here
-    pub audio: AudioCache,           // audio in memory, keyed by the name clips use
+    pub memory: Memory,              // tracks, clips, routing, tempo: what gets saved
+    pub history: UndoStack<Memory>,  // every edit goes through here
+    pub audio: AudioCache,           // the audio clips play, keyed by name
     pub engine: EngineHandle,        // control side of the running engine
     pub audio_thread: Option<AudioThread>, // the audio side, until a device takes it
     pub mixer: MixerHandles,         // live strip and send controls from the last rebuild
@@ -52,25 +52,27 @@ pub struct Session {
 ```
 
 `session::create` or `session::open` makes one; `Session::new` wraps a
-`Memory` you already have. The `Memory` is the session's saved shape:
-plain data, undoable, written to JSON. The mixer the engine runs is built
-from it and is not something you name.
+`Memory` you already have. The `Memory` is what the session remembers and
+saves: plain data, undoable, written to JSON. The audio clips play sits
+beside it in `session.audio`, because the memory holds no buffers, only
+the names clips refer to. The mixer the engine runs is built from the
+memory and is not something you name.
 
 ## Edits and state
 
 Every *edit* to the memory is a command on `session.history`, so it can
-be undone. Structural edits (add, remove, move) are one step each; a
-continuous edit (volume, pan, send level, clip drag)
-coalesces: moves of the same control within half a second
+be undone. Structural edits (add, remove, move, archive) are one step
+each; a continuous edit (volume, pan, send level, clip drag) coalesces:
+moves of the same control within half a second
 (`Session::COALESCE_WINDOW`) merge into one step, so a drag is one step and
 not a hundred, and a pause starts the next. A UI that wants mouse-up
 precision calls the primitive `session.history.seal()`. `record::stop`
 groups the clips it places into one step called "Record".
 
 *State* (a track's mute, solo, arm, monitor and input; a send's on/off)
-is not an edit. It is saved with the session and heard at
-the next block, but it never enters the undo history: nobody expects Undo
-to un-mute a track. Flows set it through `session::set_state`, which also
+is not an edit. It is saved with the session and heard at the next block,
+but it never enters the undo history: nobody expects Undo to un-mute a
+track. Flows set it through `session::set_state`, which also
 tells the history its saved point is gone, so `session.history.is_clean()`
 turns false.
 
@@ -81,9 +83,9 @@ undo.
 ## The mixer follows the memory
 
 The engine runs a mixer built from the memory. Edits that change its
-*shape* (a new track, a clip moved, a send, a route, monitoring on a MIDI
-track) rebuild it: at once while a device is playing (so the
-change is heard within a block), otherwise at the next `transport::start`
+*shape* (a new track, a clip added, moved or archived, a send, a route,
+monitoring on a MIDI track) rebuild it: at once while a device is playing
+(so the change is heard within a block), otherwise at the next `transport::start`
 or `session::steps::render_blocks`, which is cheaper when many edits
 arrive together (opening a file). You never call `rebuild` yourself unless
 you want to choose the moment; it is a step, `session::steps::rebuild`.
@@ -108,8 +110,8 @@ a few milliseconds away.
 
 Everything runs without an audio device.
 `session::steps::render_blocks(&mut session, blocks)` ticks the audio
-thread by hand and hands you the audio, standing in for the sound card: that is
-how the tests and most examples hear the session. `export` renders through
+thread by hand and hands you the audio, standing in for the sound card:
+that is how the tests and most examples hear the session. `export` renders through
 its own offline engine. `record::start` with a `Source::Queue` records
 from any capture producer, so a recording can come from a file or a
 generator. With the `devices` feature, `devices::output` moves the audio

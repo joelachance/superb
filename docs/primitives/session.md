@@ -1,6 +1,6 @@
 # primitives::session
 
-The memory model: what a session *is*.
+The session's memory: what a session *is* and remembers.
 
 ## Purpose
 
@@ -9,7 +9,7 @@ The memory model: what a session *is*.
 and `serde` + `serde_json` for snapshots. It holds the editable description of
 a session — tracks, clips, markers, tempo map, loop range — and nothing about
 rendering. Turning a `Memory` into a mixer is the job of `session::steps::rebuild` (see
-`docs/flows/play.md`); the session is deliberately free of `Arc<AtomicF32>`
+`docs/flows/session.md`); the session is deliberately free of `Arc<AtomicF32>`
 handles and audio-thread concerns, so it can be cloned, diffed, serialised and
 undone freely.
 

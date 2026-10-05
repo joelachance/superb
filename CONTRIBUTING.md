@@ -58,14 +58,14 @@ replacing at least three primitive calls or by hiding an ordering hazard
   primitive and step calls in order. Keep it accurate when you change the
   body; it is the contract that lets a reader bypass the verb.
 * Edits that change the mixer's shape (tracks, clips, sends, routing,
-  inserts, monitoring) go through `session::structural`, which rebuilds at
-  once while a device drives the engine and otherwise marks the session
-  for a rebuild at the next start. Edits to a level go to the memory *and* the live
-  handle at once and do not rebuild.
+  monitoring) go through `session::structural`, which rebuilds at once
+  while a device drives the engine and otherwise marks the session for a
+  rebuild at the next start. Edits to a level go to the memory *and* the
+  live handle at once and do not rebuild.
 * A continuous edit (fader, knob, clip drag) pushes through the undo stack
   and coalesces by time (`Session::COALESCE_WINDOW`), so a drag is one step
   without the UI having to say when it ended. State (mute, solo, arm,
-  monitor, bypass, send on/off) is not an edit: it goes through
+  monitor, input, send on/off) is not an edit: it goes through
   `session::set_state`, which changes the memory directly and marks the
   history dirty, and never enters the undo history.
 * No behaviour on the `Session` itself beyond constructors; it is a record.
@@ -79,17 +79,18 @@ module docs. Before adding a name, check it against these rules; each one
 exists because its absence cost a rename.
 
 * **One word per thing, across both tiers.** The thing you open is the
-  *session*; what it remembers and saves is its *memory*; what the engine runs is
-  the *mixer*; rebuilding it is *rebuild*; a recording in progress is a
-  *recording* and its result a *clip*. Never song, project, console or
-  take. If two words are in use for one thing, pick one and rename the
+  *session*; what it remembers and saves is its *memory*; the buffers
+  clips play are its *audio*; what the engine runs is the *mixer*;
+  rebuilding it is *rebuild*; a recording in progress is a *recording*
+  and its result a *clip*, which is *archived*, never deleted. Never song,
+  project, document, console, cache or take. If two words are in use for one thing, pick one and rename the
   other.
 * **A word with a DAW meaning keeps it.** *Sync* is clock synchronisation,
   *advance* moves the playhead, *gain* is a multiplier, *bounce* renders
   to a file. Do not borrow one for something else; TERMINOLOGY lists them.
 * **A flow is named for the thing or the task.** `session`, `track`,
-  `transport`, `send` and `midi` are things (the first four share a
-  primitive's name); `record`, `export` and `devices` are tasks. State
+  `clip`, `transport`, `send` and `midi` are things; `record`, `export`
+  and `devices` are tasks. State
   lives with its thing: mute and arm are `track::mute` and `track::arm`,
   not `record::`. No invented areas.
 * **Verbs are imperative and say what happens.** `start`, `stop`,
@@ -98,8 +99,9 @@ exists because its absence cost a rename.
   Source::Device(None))`, never `start_from`; a `bounce` that resamples
   takes the rate, it is not `bounce_at_rate`.
 * **A setter is the noun of what it sets.** `track::volume(s, t, db)`,
-  `track::input(s, t, ch)`, `send::level(s, send, db)`: no `set_` prefix. Units go in the doc, not the name, when only
-  one unit exists at that tier (dB everywhere in the flows).
+  `track::input(s, t, ch)`, `send::level(s, send, db)`: no `set_` prefix.
+  Units go in the doc, not the name, when only one unit exists at that
+  tier (dB everywhere in the flows).
 * **Queries read as what they return.** `is_x` for a bool, a noun for data
   (`playhead`, `state`, `peak`). Never a past participle for a getter:
   `loaded` reads as a question and returned a descriptor. A query that
@@ -112,19 +114,21 @@ exists because its absence cost a rename.
   are the live controls of the mixer the engine runs. A type called
   `Player` must play.
 * **State is a field called `state`.** Every object in the memory keeps its
-  settable fields under one `state` (`TrackState`, `SendState`,
-  `InsertState`), with nouns for switches: `mute`, not `muted`.
+  settable fields under one `state` (`TrackState`, `SendState`), with
+  nouns for switches: `mute`, not `muted`.
 * **One home per behaviour.** A device listing lives in `devices`, an
   offline render in `export`. When two functions do the same thing,
   delete one rather than alias it.
 * **Sugar is welcome when it is a button.** A verb may be one line over
-  a primitive or another verb (`rewind`, `play_note`) if a musician would recognise it as a
-  control on a DAW and its "Made of:" line is the whole implementation.
+  a primitive or another verb (`rewind`, `play_note`) if a musician would
+  recognise it as a control on a DAW and its "Made of:" line is the whole
+  implementation.
   Sugar that exists for the SDK author's convenience, or that holds logic
   of its own, is not.
 * **Plumbing stays private.** What a verb is made of is public only when
   someone building their own verb needs it (`session::steps`). Helpers
-  under those are `pub(crate)`; making one public later is cheap, taking it back is not.
+  under those are `pub(crate)`; making one public later is cheap, taking
+  it back is not.
 * **No silent obligations.** If a flow only works when the caller also
   remembers to do something later (end a drag, empty a queue), either the
   flow does it itself (a time window, a thread) or the obligation is a

@@ -39,7 +39,7 @@ cargo doc --no-deps
 - No unsafe outside `primitives::realtime::{alloc, spsc}` and
   `primitives::plugins::clap`.
 - Structural edits go through `session::structural` (rebuilds the mixer);
-  state (mute, solo, arm, monitor, bypass, send on/off) goes through
+  state (mute, solo, arm, monitor, input, send on/off) goes through
   `session::set_state` and never enters the undo history; level edits
   reach the memory and the live handle.
 - Names follow CONTRIBUTING.md "Naming" and the one-word table in

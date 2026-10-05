@@ -17,7 +17,7 @@ One per flow module, in the order you would use them to make a session.
 | `midi_keys` | `midi` | a monitoring MIDI track, notes and a chord, release, any message; ports with `midi-io` | `cargo run --example midi_keys` |
 | `record_take` | `record` | arm, punch in, a recording from a synthetic microphone, clips, undo; a real input with `devices` | `cargo run --example record_take` |
 | `export_session` | `export` | bounce the session and a range; resample with `files` | `cargo run --example export_session` |
-| `session_steps` | `session::steps` | build the mixer from a document by hand (strips, a bus, a send, the live controls) and render it through an offline engine | `cargo run --example session_steps` |
+| `session_steps` | `session::steps` | build the mixer from a `Memory` by hand (strips, a bus, a send, the live controls) and render it through an offline engine | `cargo run --example session_steps` |
 | `list_devices` | `devices` | audio devices with the default marked; MIDI ports with `midi-io` | `cargo run --example list_devices --features devices` |
 
 ## Primitives
@@ -33,7 +33,7 @@ One per flow module, in the order you would use them to make a session.
 | `midi_monitor` | `midi::input` | print hardware MIDI for ten seconds | `cargo run --example midi_monitor --features midi-io` |
 | `play_sine_device` | `io::device` | a sine on the default output device, with load stats | `cargo run --example play_sine_device --features devices` |
 | `decode_bounce` | `io::files` | bounce → decode → resample → export | `cargo run --example decode_bounce --features files` |
-| `session_undo` | `session`, `undo` | undoable document edits, JSON save and load | `cargo run --example session_undo` |
+| `session_undo` | `session`, `undo` | undoable edits to a `Memory`, JSON save and load | `cargo run --example session_undo` |
 | `clap_host_scan` | `plugins::clap` | scan and instantiate a CLAP plugin, render offline | `cargo run --example clap_host_scan -- [dir ...] [--id …]` |
 
 The `buffers` and `undo` modules have no example of their own: every

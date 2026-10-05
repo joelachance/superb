@@ -6,9 +6,9 @@ One crate, `superb`, dual-licensed Apache-2.0 OR MIT.
 Superb is the engine side of a DAW: sample-accurate time, audio buffers, a
 real-time-safe processing graph, a mixer with tracks, buses, sends and
 insert chains, MIDI, automation, the session's memory (tracks, clips,
-routing, tempo) with undo, CLAP plugin
-hosting, recording, offline export, and audio device and file I/O. It has
-no user interface; you bring your own.
+routing, tempo) with undo, CLAP plugin hosting, recording, offline export,
+and audio device and file I/O. It has no user interface; you bring your
+own.
 
 ## Two tiers
 
@@ -123,20 +123,21 @@ are published as whole prepared graphs and swapped in between two blocks.
 
 ## Status
 
-Working today: the session's memory with tracks and their state, clips, markers,
-routing, inserts, JSON files and undo; a mixer built from the memory with
-faders, buses, sends and insert chains, swapped glitch-free into a running
-engine; offline rendering and WAV export; device output and capture;
-recording into clips with per-track input selection; MIDI messages, live monitoring and hardware
-input; automation envelopes and modes; CLAP plugin hosting with parameter
-edits reaching the running instance; file decoding, resampling and
-bouncing behind the `files` feature.
+Working today, through the flows: the session's memory with tracks and
+their state, clips (archived rather than deleted), markers, routing, JSON
+files and undo; a mixer built from the memory with faders, buses and
+sends, swapped glitch-free into a running engine; bouncing to WAV; device
+output and capture; recording into clips with per-track input selection;
+MIDI messages, live monitoring and hardware input. In the primitives
+only, for now: insert chains and CLAP plugin hosting, automation envelopes
+and modes, file decoding and resampling behind the `files` feature.
 
-Not yet: duplex device streams, aligning hardware MIDI timestamps with the
-audio clock, updating a running mixer incrementally (a rebuild replaces it,
-which resets plugin tails), monitoring a live input through a strip,
-punch-in/out and loop recording, VST3 hosting, SysEx and
-Standard MIDI Files, and encoders other than WAV.
+Not yet: recordings written to disk (recorded audio lives in memory until
+you bounce), a plugins flow, duplex device streams, aligning hardware MIDI
+timestamps with the audio clock, updating a running mixer incrementally (a
+rebuild replaces it), monitoring a live input through a strip, punch-in/out
+and loop recording, VST3 hosting, SysEx and Standard MIDI Files, and
+encoders other than WAV.
 
 ## Licence
 

@@ -8,9 +8,10 @@ and [flows.md](flows.md) for the top tier in detail.
 
 A DAW has two very different jobs. One is **memory**: what the session
 remembers, its tracks, clips, tempo and routing, edited by a person on a
-UI thread that may take its time and saved to a file. The other is an **engine**: a callback the audio
-hardware fires every few milliseconds that must fill the next buffer before
-the deadline, every time, without ever waiting. Superb keeps the two apart
+UI thread that may take its time and saved to a file. The other is an
+**engine**: a callback the audio hardware fires every few milliseconds
+that must fill the next buffer before the deadline, every time, without
+ever waiting. Superb keeps the two apart
 and connects them deliberately.
 
 ```text
@@ -18,9 +19,9 @@ and connects them deliberately.
  session · track · clip · transport · send · midi · record · export · devices
  ─────────────────────────────────────────────────────────────────────
  primitives
-   memory side (UI thread)           engine side (audio thread)
+   memory side (UI thread)             engine side (audio thread)
 
-   session ── Memory: tracks, clips  io         EngineHandle ◄─queues─► AudioThread
+   session ── Memory: tracks, clips    io         EngineHandle ◄─queues─► AudioThread
    undo    ── history                  io         Engine, offline render, WAV, devices
                   session::steps::rebuild ───► mixer      strips, buses, sends, inserts
    automation ─► Arc<AtomicF32> ─────► graph      nodes, schedule, live swap
@@ -184,7 +185,7 @@ previous state in `apply`, not at construction, so redo after other edits
 is still correct. A failed revert clears the whole history because the
 memory state is unknown. The clean (saved) state is a depth index that
 becomes unreachable if the saved step is coalesced onto or discarded.
-Flows add one convention on top: state (mute, solo, arm, monitor, bypass,
+Flows add one convention on top: state (mute, solo, arm, monitor, input,
 send on/off) is not an edit. It changes the memory directly and tells
 the history its saved point is gone (`UndoStack::mark_dirty`), so it is
 saved but never undone. Volume and pan are state in the memory but
@@ -241,8 +242,9 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 ## Not there yet
 
 Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
-Incremental edits to a running mixer (a rebuild replaces it). Monitoring a
-live input through a strip. Punch-in/out and loop
-recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
+Recordings written to disk (recorded audio lives in memory). A plugins
+flow (the host is a primitive). Incremental edits to a running mixer (a
+rebuild replaces it). Monitoring a live input through a strip. Punch-in/out
+and loop recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
 Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes
 owned by the session. Multi-bus or sidechain nodes.

@@ -32,7 +32,7 @@ record::start(&mut session, record::Source::Device(None))?;   // the default inp
 ## Made of
 
 `io::device::output_devices` / `input_devices`, `OutputConfig` /
-`InputConfig` filled from `session.session.sample_rate()`, `session.channels` and
+`InputConfig` filled from `session.memory.sample_rate()`, `session.channels` and
 `session.engine.max_frames()`; `midi::input::list_input_ports`.
 
 ## Notes
