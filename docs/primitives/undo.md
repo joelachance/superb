@@ -1,10 +1,10 @@
 # primitives::undo
 
-Coalescing undo/redo command stack for document edits.
+Coalescing undo/redo command stack for memory edits.
 
 ## Purpose
 
-`primitives::undo` sits in front of any document type `T` (typically
+`primitives::undo` sits in front of any memory type `T` (typically
 `superb::primitives::session::Session`) on the UI thread. It knows nothing
 about audio: mutations happen through `Command::apply` / `revert`, and nothing
 here is real-time safe.
@@ -63,19 +63,19 @@ Contract notes:
 * Capture "previous" state during `apply`, not at construction, so redo
   after intervening edits stays correct.
 * A failed `apply` in `push` records nothing. A failed `revert`/`apply`
-  during undo/redo clears the whole history (document state is unknown).
+  during undo/redo clears the whole history (memory state is unknown).
 * Groups nest; only the outermost label becomes the undo step. Undo/redo
   while a group is open is refused.
 
 ## Real-time notes
 
 Not RT-safe. Pair with RT-safe dirty flags later if the audio thread needs
-to know the document changed; the stack itself stays off-thread.
+to know the memory changed; the stack itself stays off-thread.
 
 ## Limitations / next
 
 * No persistent undo history across process restarts (session snapshots
-  are the document; the stack is ephemeral).
+  are the memory; the stack is ephemeral).
 * The module has no unsafe code: downcasting goes through
   `dyn Any` (trait upcasting, Rust 1.86+).
 * Session-facing commands live in `superb::primitives::session::commands`, not here.

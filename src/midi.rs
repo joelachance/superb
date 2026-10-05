@@ -76,9 +76,9 @@ mod tests {
     fn a_monitoring_track_sounds_when_a_note_arrives() {
         let mut session = session::create("keys", R, 64).unwrap();
         let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
-        assert!(!session.document.track(keys).unwrap().state.monitor);
+        assert!(!session.memory.track(keys).unwrap().state.monitor);
         track::monitor(&mut session, keys, true).unwrap();
-        assert!(session.document.track(keys).unwrap().state.monitor);
+        assert!(session.memory.track(keys).unwrap().state.monitor);
         transport::start(&mut session).unwrap();
         // Nothing played yet: silence.
         assert!(session::steps::render_blocks(&mut session, 2)

@@ -42,7 +42,7 @@ export::bounce(&mut session, "chorus.wav", Bounce {
 
 ## Made of
 
-`Document::end_position` for the length when none is given →
+`Memory::end_position` for the length when none is given →
 `session::steps::build_mixer` → `Transport::with_tempo_map(session tempo
 map)`, `seek`, `play` → `Engine::new` → `io::offline::render` →
 `io::files::resample` when a rate is given → `wav::write`.

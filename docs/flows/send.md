@@ -8,7 +8,7 @@ A bus is a track of kind `Bus` (`track::add`); `track::route` sends a whole
 track through one. A *send* feeds a bus a copy of a track instead, tapped
 before or after the fader, so the track is heard both directly and through
 the bus (the classic reverb return). Adding or removing a send changes the
-mixer's shape and rebuilds it. A send's level is an edit (document + live
+mixer's shape and rebuilds it. A send's level is an edit (memory + live
 send, coalescing); whether a send is on is state.
 
 ## Verbs
@@ -17,8 +17,8 @@ send, coalescing); whether a send is on is state.
 |---|---|---|
 | `add(session, track, bus, level_db, SendTap) -> SendId` | a copy of a track into a bus, tapped pre- or post-fader; rebuilds | one |
 | `remove(session, send)` | rebuilds | one |
-| `level(session, send, db)` | document + live send | drag (coalesces) |
-| `enable(session, send, on)` | state; document + live send | — |
+| `level(session, send, db)` | memory + live send | drag (coalesces) |
+| `enable(session, send, on)` | state; memory + live send | — |
 
 ## Usage
 
@@ -35,7 +35,7 @@ track::route(&mut session, gtr, Some(room))?;     // gtr goes through the bus in
 
 ## Made of
 
-`add`: `Document::allocate_send_id` → `TrackSend::with_id` → `AddSend`
+`add`: `Memory::allocate_send_id` → `TrackSend::with_id` → `AddSend`
 through `session::structural`. `remove`: `RemoveSend` through
 `session::structural`. `level`: `set_send_level_db` through `session::edit`
 → `SendParams::set_level_db`. `enable`: `SendState::enabled` through

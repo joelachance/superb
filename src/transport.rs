@@ -2,7 +2,7 @@
 //!
 //! Every function sends a command to the running engine, which applies it
 //! at the start of its next block, or reads what the engine published after
-//! its last block. Nothing here touches the document.
+//! its last block. Nothing here touches the memory.
 //!
 //! Made of `superb::primitives::io` (`Engine::live`) (`EngineHandle::send`, the
 //! position and state atomics).
@@ -13,7 +13,7 @@ use crate::primitives::{Result, TimePosition};
 use crate::session::Session;
 
 /// Starts playing from where the playhead is. Rebuilds the mixer first if
-/// the document changed since it was built.
+/// the memory changed since it was built.
 ///
 /// Made of: [`session::steps::rebuild`](crate::session::steps::rebuild)
 /// when needed → `EngineHandle::send(Play)`.

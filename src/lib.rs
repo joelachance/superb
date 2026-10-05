@@ -8,11 +8,11 @@
 //! * **Flows** are top-level modules named after everyday tasks:
 //!   [`session`], [`track`], [`clip`], [`transport`], [`send`], [`midi`],
 //!   [`record`], [`export`] and [`devices`]. Each is a set of free functions over a
-//!   [`Session`] (the state of a document in progress), and every function's docs
+//!   [`Session`] (its memory, undo history, audio and running engine), and every function's docs
 //!   end with a "Made of:" list of the primitive calls it performs, so you
 //!   can call those yourself when the flow is not quite what you want.
 //! * **[`primitives`]** are the engine: sample-accurate time, buffers, the
-//!   real-time graph, the mixer, MIDI, automation, the document document
+//!   real-time graph, the mixer, MIDI, automation, the memory memory
 //!   with undo, plugin hosting and device / file I/O. They know nothing
 //!   about flows.
 //!
@@ -22,7 +22,7 @@
 //! resampling and bounce helpers). Hardware and codecs are off by default
 //! so the crate builds and tests without audio hardware.
 //!
-//! A document from nothing to sound, without an audio device:
+//! A memory from nothing to sound, without an audio device:
 //!
 //! ```
 //! use superb::prelude::*;
@@ -105,7 +105,7 @@ pub mod prelude {
     pub use crate::primitives::plugins::{PluginDescriptor, PluginInstance, PluginNode};
     pub use crate::primitives::realtime::{AtomicF32, LoadMeter};
     pub use crate::primitives::session::{
-        Clip, ClipSource, Document, DocumentSnapshot, Input, Marker, Track, TrackKind, TrackSend,
+        Clip, ClipSource, Input, Marker, Memory, MemorySnapshot, Track, TrackKind, TrackSend,
         TrackState,
     };
     pub use crate::primitives::transport::{LoopRange, TempoMap, Transport, TransportState};
@@ -132,12 +132,12 @@ mod tests {
         let _ = Mixer::new(2);
         let _ = AutomationMode::Read;
         let _ = crate::primitives::io::wav::WavFormat::Float32;
-        let mut document = Document::new("facade", SampleRate::HZ_48K);
+        let mut memory = Memory::new("facade", SampleRate::HZ_48K);
         let mut history = UndoStack::new();
-        let track = document.allocate_track_id();
+        let track = memory.allocate_track_id();
         history
             .push(
-                &mut document,
+                &mut memory,
                 crate::primitives::session::commands::AddTrack::new(Track::with_id(
                     track,
                     "t",
@@ -145,13 +145,13 @@ mod tests {
                 )),
             )
             .unwrap();
-        assert!(document.track(track).is_ok());
-        history.undo(&mut document).unwrap();
-        assert!(document.track(track).is_err());
+        assert!(memory.track(track).is_ok());
+        history.undo(&mut memory).unwrap();
+        assert!(memory.track(track).is_err());
         let _ = crate::primitives::plugins::vst3::AVAILABLE;
         let _ = PluginDescriptor::new(crate::primitives::plugins::PluginFormat::Clap, "id", "name");
         let (mixer, handles) =
-            crate::session::steps::build_mixer(&document, &AudioCache::new(), 2).unwrap();
+            crate::session::steps::build_mixer(&memory, &AudioCache::new(), 2).unwrap();
         assert_eq!(mixer.tracks().len(), 0);
         assert!(handles.strips.is_empty());
         let _ = TrackSend::new(track);

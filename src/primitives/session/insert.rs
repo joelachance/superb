@@ -1,4 +1,4 @@
-//! Inserts: the effects in a track's chain, as the document remembers them.
+//! Inserts: the effects in a track's chain, as the memory remembers them.
 
 use std::path::PathBuf;
 
@@ -30,10 +30,10 @@ impl From<&PluginDescriptor> for PluginRef {
 
 /// One effect in a track's insert chain.
 ///
-/// The document stores what is needed to recreate the effect: which plugin,
+/// The memory stores what is needed to recreate the effect: which plugin,
 /// its state (bypass and the parameter values the user has set), and the
 /// plugin's own saved preset. Turning this into a running node is the job
-/// of the session's steps, not the document.
+/// of the session's steps, not the memory.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Insert {
     pub(crate) id: InsertId,
@@ -58,13 +58,13 @@ pub struct InsertState {
 }
 
 impl Insert {
-    /// An insert for `plugin` with no ID yet (the document assigns one).
+    /// An insert for `plugin` with no ID yet (the memory assigns one).
     pub fn new(plugin: PluginRef) -> Self {
         Self::with_id(InsertId::INVALID, plugin)
     }
 
     /// An insert with a pre-allocated ID (see
-    /// [`Document::allocate_insert_id`](crate::primitives::session::Document::allocate_insert_id)).
+    /// [`Memory::allocate_insert_id`](crate::primitives::session::Memory::allocate_insert_id)).
     pub fn with_id(id: InsertId, plugin: PluginRef) -> Self {
         Self {
             id,
@@ -74,7 +74,7 @@ impl Insert {
         }
     }
 
-    /// The insert's ID (`InsertId::INVALID` until added to a document).
+    /// The insert's ID (`InsertId::INVALID` until added to a memory).
     pub fn id(&self) -> InsertId {
         self.id
     }

@@ -5,7 +5,8 @@ One crate, `superb`, dual-licensed Apache-2.0 OR MIT.
 
 Superb is the engine side of a DAW: sample-accurate time, audio buffers, a
 real-time-safe processing graph, a mixer with tracks, buses, sends and
-insert chains, MIDI, automation, a session document with undo, CLAP plugin
+insert chains, MIDI, automation, the session's memory (tracks, clips,
+routing, tempo) with undo, CLAP plugin
 hosting, recording, offline export, and audio device and file I/O. It has
 no user interface; you bring your own.
 
@@ -36,7 +37,7 @@ They know nothing about flows or the `Session`.
 | `primitives::mixer` | mixer | tracks, buses, sends, insert chains, pan laws, mute/solo, peak meters | [mixer.md](docs/primitives/mixer.md) |
 | `primitives::automation` | automation | envelopes, read/touch/latch/write modes, sample-accurate apply | [automation.md](docs/primitives/automation.md) |
 | `primitives::undo` | undo history | coalescing undo/redo stack with groups and clean-state tracking | [undo.md](docs/primitives/undo.md) |
-| `primitives::session` | the document | `Document`: tracks and their state, clips, markers, routing, inserts, tempo map, JSON save/load, undoable commands | [session.md](docs/primitives/session.md) |
+| `primitives::session` | the memory | `Memory`: tracks and their state, clips, markers, routing, inserts, tempo map, JSON save/load, undoable commands | [session.md](docs/primitives/session.md) |
 | `primitives::plugins` | plugin host | plugin instance model, `PluginNode`, CLAP host (VST3 is a stub) | [plugins.md](docs/primitives/plugins.md) |
 | `primitives::io` | engine, devices, files | block loop, live engine with control handle, offline render, capture queue, WAV, decode/resample (feature `files`), device streams (feature `devices`) | [io.md](docs/primitives/io.md) |
 
@@ -53,7 +54,7 @@ They know nothing about flows or the `Session`.
 | `devices` | list audio and MIDI hardware; play through an output; configurations that match the session | [devices.md](docs/flows/devices.md) |
 
 [docs/flows.md](docs/flows.md) explains how the flows fit together (the
-`Session`, edits versus state, how the mixer follows the document). [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+`Session`, edits versus state, how the mixer follows the memory). [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 covers the engine and the rules every module follows. If the DAW words are
 new to you, start with [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md).
 
@@ -122,8 +123,8 @@ are published as whole prepared graphs and swapped in between two blocks.
 
 ## Status
 
-Working today: a document with tracks and their state, clips, markers,
-routing, inserts, JSON files and undo; a mixer built from the document with
+Working today: the session's memory with tracks and their state, clips, markers,
+routing, inserts, JSON files and undo; a mixer built from the memory with
 faders, buses, sends and insert chains, swapped glitch-free into a running
 engine; offline rendering and WAV export; device output and capture;
 recording into clips with per-track input selection; MIDI messages, live monitoring and hardware

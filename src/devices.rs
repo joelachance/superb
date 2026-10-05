@@ -39,7 +39,7 @@ pub fn inputs() -> Result<Vec<DeviceInfo>> {
 pub(crate) fn output_config(session: &Session, device: Option<&str>) -> OutputConfig {
     OutputConfig {
         device_name: device.map(str::to_owned),
-        sample_rate: session.document.sample_rate(),
+        sample_rate: session.memory.sample_rate(),
         channels: session.channels,
         buffer_frames: None,
         max_block_frames: session.engine.max_frames(),
@@ -86,7 +86,7 @@ pub(crate) fn input_config(
 ) -> InputConfig {
     InputConfig {
         device_name: device.map(str::to_owned),
-        sample_rate: session.document.sample_rate(),
+        sample_rate: session.memory.sample_rate(),
         channels,
         buffer_frames: None,
         max_block_frames: session.engine.max_frames(),

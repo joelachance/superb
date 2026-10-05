@@ -1,11 +1,11 @@
 //! `transport`: hear the session, move the playhead, loop a section.
 //!
 //! What you'll learn:
-//! - `transport::start` rebuilds the mixer from the document and starts the transport
+//! - `transport::start` rebuilds the mixer from the memory and starts the transport
 //! - Without an audio device, `session::steps::render_blocks` renders blocks and hands you
 //!   the audio (tests and headless tools work this way)
 //! - The playhead is read from atomics: `playhead`, `state`
-//! - A loop range lives in the document (`session::set_loop`); `set_loop_enabled`
+//! - A loop range lives in the memory (`session::set_loop`); `set_loop_enabled`
 //!   turns it on and off while rolling
 //! - With feature `devices`, `devices::output` moves the engine onto a
 //!   real output stream and the device drives it from then on
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
         transport::playhead(&session).to_seconds(rate)
     );
 
-    // Loop the middle pluck. The range is part of the document (undoable,
+    // Loop the middle pluck. The range is part of the memory (undoable,
     // saved); enabling is a transport switch.
     let range = LoopRange::new(
         TimePosition::from_seconds(0.5, rate),

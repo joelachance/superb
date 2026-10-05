@@ -313,9 +313,9 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     let mut clips = Vec::with_capacity(tracks.len());
     for track in &tracks {
         let (name, input) = match steps::clip_name(session, *track) {
-            Ok(name) => (name, session.document.track(*track)?.state.input),
+            Ok(name) => (name, session.memory.track(*track)?.state.input),
             Err(e) => {
-                session.history.cancel_group(&mut session.document)?;
+                session.history.cancel_group(&mut session.memory)?;
                 return Err(e);
             }
         };
@@ -327,7 +327,7 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         match crate::clip::add(session, *track, name.as_str(), punch_in) {
             Ok(clip) => clips.push(clip),
             Err(e) => {
-                session.history.cancel_group(&mut session.document)?;
+                session.history.cancel_group(&mut session.memory)?;
                 return Err(e);
             }
         }
@@ -398,7 +398,7 @@ pub(crate) mod steps {
     pub(crate) fn input_width(session: &Session) -> usize {
         crate::track::armed(session)
             .into_iter()
-            .filter_map(|t| session.document.track(t).ok()?.state.input)
+            .filter_map(|t| session.memory.track(t).ok()?.state.input)
             .map(Input::width)
             .max()
             .unwrap_or(1)
@@ -465,7 +465,7 @@ pub(crate) mod steps {
     /// A name for a new clip on `track` that no cache entry uses yet:
     /// `vox 1`, `vox 2`, ... The clip and the audio it plays share it.
     pub(crate) fn clip_name(session: &Session, track: TrackId) -> Result<String> {
-        let base = session.document.track(track)?.name.clone();
+        let base = session.memory.track(track)?.name.clone();
         let mut n = 1;
         loop {
             let name = format!("{base} {n}");
@@ -540,13 +540,13 @@ mod tests {
         assert_eq!(clips.len(), 2);
         assert!(session.recording.is_none());
         for (clip, name) in clips.iter().zip(["vox 1", "gtr 1"]) {
-            let c = session.document.clip(*clip).unwrap();
+            let c = session.memory.clip(*clip).unwrap();
             assert_eq!(c.start(), TimePosition::from_samples(640));
             assert_eq!(c.length(), TimeDuration::from_samples(320));
             assert_eq!(c.name, name);
         }
-        assert_eq!(session.document.clip_track(clips[0]).unwrap(), vox);
-        assert_eq!(session.document.clip_track(clips[1]).unwrap(), gtr);
+        assert_eq!(session.memory.clip_track(clips[0]).unwrap(), vox);
+        assert_eq!(session.memory.clip_track(clips[1]).unwrap(), gtr);
         assert_eq!(session.audio.len(), 2, "one entry per clip");
         assert!(
             Arc::ptr_eq(
@@ -571,11 +571,9 @@ mod tests {
 
         // One undo removes both clips.
         assert!(session::undo(&mut session).unwrap());
-        assert!(
-            session.document.clip(clips[0]).is_err() && session.document.clip(clips[1]).is_err()
-        );
+        assert!(session.memory.clip(clips[0]).is_err() && session.memory.clip(clips[1]).is_err());
         assert!(session::redo(&mut session).unwrap());
-        assert!(session.document.clip(clips[0]).is_ok());
+        assert!(session.memory.clip(clips[0]).is_ok());
     }
 
     #[test]
@@ -596,7 +594,7 @@ mod tests {
             feed_stereo(&mut mic, 2);
             let clips = stop(&mut session).unwrap();
             assert_eq!(
-                session.document.clip(clips[0]).unwrap().name,
+                session.memory.clip(clips[0]).unwrap().name,
                 format!("vox {i}")
             );
         }
@@ -614,7 +612,7 @@ mod tests {
             stop(&mut session).unwrap().is_empty(),
             "nothing captured, nothing placed"
         );
-        assert_eq!(session.document.clip_count(), 2);
+        assert_eq!(session.memory.clip_count(), 2);
     }
 
     fn feed_stereo(producer: &mut crate::primitives::io::capture::CaptureProducer, blocks: usize) {
@@ -749,7 +747,7 @@ mod tests {
         let _ = format!("{:?}", session.recording.as_ref().unwrap());
         let clips = stop(&mut session).unwrap();
         let dropped = mic.dropped() as usize;
-        let clip = session.document.clip(clips[0]).unwrap();
+        let clip = session.memory.clip(clips[0]).unwrap();
         assert_eq!(
             clip.length(),
             TimeDuration::from_samples(((200 - dropped) * 64) as i64),
@@ -818,7 +816,7 @@ mod tests {
         assert_eq!(collect(&mut session), 640);
         let clips = stop(&mut session).unwrap();
         assert_eq!(
-            session.document.clip(clips[0]).unwrap().length(),
+            session.memory.clip(clips[0]).unwrap().length(),
             TimeDuration::from_samples(640)
         );
         assert_eq!(collect(&mut session), 0, "nothing recording");

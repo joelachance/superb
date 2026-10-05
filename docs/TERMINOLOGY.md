@@ -16,7 +16,7 @@ a musician would use.
 | Mixer / channel strips | `primitives::mixer` | Faders, pan, mute/solo, meters, sends, insert chains |
 | MIDI | `primitives::midi` | Notes and controllers (not audio) |
 | Engine, devices and files | `primitives::io` | The block loop, speakers, mics, bounce, open/save audio files |
-| Document (the session's saved shape; musicians say session, song or project) | `primitives::session` | Tracks and their state, clips, tempo, routing, inserts |
+| Memory (what the session remembers and saves; a musician just says the session) | `primitives::session` | Tracks and their state, clips, tempo, routing, inserts |
 | Undo history | `primitives::undo` | Undo / redo stack |
 | Automation | `primitives::automation` | Envelopes that move knobs over time |
 | Plugin host | `primitives::plugins` | Loading third-party effects and instruments (CLAP first) |
@@ -34,7 +34,7 @@ a musician would use.
 | Recording | `record` | Start, stop; a clip on every armed track |
 | Bounce, export, mixdown | `export` | Rendering the session, or a range of it, to a file |
 | Hardware, audio interface | `devices` | Which speakers, mics and MIDI ports exist |
-| The session (the thing you open) | `Session` | The document plus its history, audio in memory and the running engine |
+| The session (the thing you open) | `Session` | Its memory, the undo history, the audio clips play and the running engine |
 
 ## One word per thing
 
@@ -44,7 +44,7 @@ column is what not to say in code, docs or UI text.
 | Say | Not |
 |---|---|
 | session (the thing you open) | song, project, rig, workspace |
-| document (its saved shape, a primitive) | session file, model |
+| memory (what the session remembers and saves: tracks, clips, routing, tempo) | document, model, session file |
 | mixer (what the engine runs, built for you) | console |
 | rebuild (the mixer) | sync, refresh, update |
 | render_blocks (run the engine with no sound card) | drive, advance, tick, sample |
@@ -67,9 +67,9 @@ column is what not to say in code, docs or UI text.
 - **Real-time (RT)** — The audio callback must finish filling the next buffer before the interface needs it, or you hear clicks/dropouts. It is **not** a pub/sub event bus. Closer to: hardware demands audio on a schedule; UI *pushes* parameter changes into atomics/queues the callback *pulls*.
 - **Control / UI thread** — Where you click Play, drag a fader, edit clips. That work is allowed to allocate and wait. It must not do heavy DSP inside the audio callback.
 - **Signal path (we also say "graph")** — The wiring of processors. Same idea as inserts, sends, and buses on a mixing desk.
-- **Rebuild** — In Superb, rebuilding the mixer from the document and swapping it into the running engine. Happens for you: at once while a device is playing, otherwise when you next start.
+- **Rebuild** — In Superb, rebuilding the mixer from the memory and swapping it into the running engine. Happens for you: at once while a device is playing, otherwise when you next start.
 - **Recording** — A recording in progress. When it stops, every armed track gets a clip named after it (`vox 1`); the clips share the audio.
-- **Insert** — An effect or instrument sitting in a track's signal path, in order. Stored in the document; instantiated at rebuild.
+- **Insert** — An effect or instrument sitting in a track's signal path, in order. Stored in the memory; instantiated at rebuild.
 - **State vs. edit** — A track's mute, solo, arm and monitor, a send's on/off and an insert's bypass are state: saved with the session, heard at once, never undo steps. Volume and pan are state too but continuous, so they are undoable edits that coalesce. Everything else you change is an edit.
 
 ## Plugin formats (short map)

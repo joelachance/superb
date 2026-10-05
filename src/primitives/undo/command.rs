@@ -25,7 +25,7 @@ impl CoalesceKey {
     }
 }
 
-/// A reversible edit of a document of type `T`.
+/// A reversible edit of a target of type `T`.
 ///
 /// Contract:
 /// * `apply` is called once when the command is pushed and again on every
@@ -33,7 +33,7 @@ impl CoalesceKey {
 /// * A command should capture whatever it needs to revert *during* `apply`
 ///   (for example the previous value), not at construction time, so that a
 ///   redo after other edits still restores the right state.
-/// * `revert`/redo failures leave the document in an unknown state; the
+/// * `revert`/redo failures leave the memory in an unknown state; the
 ///   [`UndoStack`](crate::primitives::undo::UndoStack) clears its history when that happens.
 pub trait Command<T>: Any + Send {
     /// Human-readable label ("Move clip"), shown as "Undo Move clip".

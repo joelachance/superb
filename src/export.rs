@@ -52,7 +52,7 @@ impl Default for Bounce {
 /// file at `path`. Returns the audio written. Fails when there is nothing
 /// to render: no clips after `start` and no `length` given.
 ///
-/// Made of: `Document::end_position` for the length when none is given →
+/// Made of: `Memory::end_position` for the length when none is given →
 /// [`session::steps::build_mixer`] → a `Transport` on the session's tempo
 /// map, sought to `start` and playing → `Engine::new` → `offline::render`
 /// → `files::resample` when a rate is given → `wav::write`.
@@ -60,7 +60,7 @@ pub fn bounce(session: &mut Session, path: impl AsRef<Path>, what: Bounce) -> Re
     let length = match what.length {
         Some(length) => length,
         None => {
-            let end = session.document.end_position();
+            let end = session.memory.end_position();
             TimeDuration::from_samples(end.samples() - what.start.samples())
         }
     };
@@ -70,7 +70,7 @@ pub fn bounce(session: &mut Session, path: impl AsRef<Path>, what: Bounce) -> Re
         ));
     }
     let audio = render(session, what.start, length.samples() as usize)?;
-    let session_rate = session.document.sample_rate();
+    let session_rate = session.memory.sample_rate();
     let (audio, rate) = match what.sample_rate {
         Some(rate) if rate != session_rate => (resample(&audio, session_rate, rate)?, rate),
         _ => (audio, session_rate),
@@ -87,14 +87,14 @@ pub(crate) fn render(
     frames: usize,
 ) -> Result<PlanarBuffer> {
     let (mixer, _handles) =
-        session::steps::build_mixer(&session.document, &session.audio, session.channels)?;
-    let mut transport = Transport::with_tempo_map(session.document.tempo_map().clone());
+        session::steps::build_mixer(&session.memory, &session.audio, session.channels)?;
+    let mut transport = Transport::with_tempo_map(session.memory.tempo_map().clone());
     transport.seek(start);
     transport.play();
     let mut engine = Engine::new(mixer, transport);
     offline::render(
         &mut engine,
-        session.document.sample_rate(),
+        session.memory.sample_rate(),
         session.engine.max_frames(),
         frames,
     )

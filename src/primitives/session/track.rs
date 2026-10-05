@@ -112,8 +112,8 @@ pub struct Clip {
 }
 
 impl Clip {
-    /// Creates a clip with no ID yet (the document assigns one on
-    /// [`Document::add_clip`](crate::primitives::session::Document::add_clip)). Fails unless
+    /// Creates a clip with no ID yet (the memory assigns one on
+    /// [`Memory::add_clip`](crate::primitives::session::Memory::add_clip)). Fails unless
     /// `length > 0`.
     pub fn new(
         name: impl Into<String>,
@@ -125,7 +125,7 @@ impl Clip {
     }
 
     /// Creates a clip with a pre-allocated ID (see
-    /// [`Document::allocate_clip_id`](crate::primitives::session::Document::allocate_clip_id)).
+    /// [`Memory::allocate_clip_id`](crate::primitives::session::Memory::allocate_clip_id)).
     pub fn with_id(
         id: ClipId,
         name: impl Into<String>,
@@ -148,7 +148,7 @@ impl Clip {
         })
     }
 
-    /// The clip's ID (`ClipId::INVALID` until added to a document).
+    /// The clip's ID (`ClipId::INVALID` until added to a memory).
     pub fn id(&self) -> ClipId {
         self.id
     }
@@ -168,8 +168,8 @@ impl Clip {
         self.start.offset(self.length.samples())
     }
 
-    /// Moves the clip (use [`Document::move_clip`](crate::primitives::session::Document::move_clip)
-    /// once the clip lives in a document, so ordering is maintained).
+    /// Moves the clip (use [`Memory::move_clip`](crate::primitives::session::Memory::move_clip)
+    /// once the clip lives in a memory, so ordering is maintained).
     pub fn set_start(&mut self, start: TimePosition) {
         self.start = start;
     }
@@ -202,7 +202,7 @@ fn check_length(length: TimeDuration) -> Result<()> {
 }
 
 /// A track's state: everything its strip shows and a switch or fader can
-/// change. Saved with the document. Mute, solo, arm and monitor are
+/// change. Saved with the memory. Mute, solo, arm and monitor are
 /// switches; volume and pan are continuous.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrackState {
@@ -281,7 +281,7 @@ impl Default for SendState {
 ///
 /// The destination is fixed at creation (remove and re-add to retarget);
 /// tap point and state are plain fields, edited through
-/// [`Document::send_mut`](crate::primitives::session::Document::send_mut) or the
+/// [`Memory::send_mut`](crate::primitives::session::Memory::send_mut) or the
 /// [`commands`](crate::primitives::session::commands) helpers.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrackSend {
@@ -300,7 +300,7 @@ impl TrackSend {
     }
 
     /// A unity, post-fader, enabled send with a pre-allocated ID (see
-    /// [`Document::allocate_send_id`](crate::primitives::session::Document::allocate_send_id)).
+    /// [`Memory::allocate_send_id`](crate::primitives::session::Memory::allocate_send_id)).
     pub fn with_id(id: SendId, bus: TrackId) -> Self {
         Self {
             id,
@@ -322,7 +322,7 @@ impl TrackSend {
         self
     }
 
-    /// The send's ID (`SendId::INVALID` until added to a document).
+    /// The send's ID (`SendId::INVALID` until added to a memory).
     pub fn id(&self) -> SendId {
         self.id
     }
@@ -337,10 +337,10 @@ impl TrackSend {
 ///
 /// Clips are kept sorted by start position (ties by ID). Properties are
 /// plain fields; change them through
-/// [`Document::track_mut`](crate::primitives::session::Document::track_mut) so the document's
+/// [`Memory::track_mut`](crate::primitives::session::Memory::track_mut) so the memory's
 /// revision counter moves. Routing (`output`, `sends`) is validated, so it
-/// goes through [`Document::set_track_output`](crate::primitives::session::Document::set_track_output)
-/// and [`Document::add_send`](crate::primitives::session::Document::add_send).
+/// goes through [`Memory::set_track_output`](crate::primitives::session::Memory::set_track_output)
+/// and [`Memory::add_send`](crate::primitives::session::Memory::add_send).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Track {
     pub(crate) id: TrackId,
@@ -365,7 +365,7 @@ impl Track {
     }
 
     /// Creates a track with a pre-allocated ID (see
-    /// [`Document::allocate_track_id`](crate::primitives::session::Document::allocate_track_id)).
+    /// [`Memory::allocate_track_id`](crate::primitives::session::Memory::allocate_track_id)).
     pub fn with_id(id: TrackId, name: impl Into<String>, kind: TrackKind) -> Self {
         Self {
             id,
@@ -380,7 +380,7 @@ impl Track {
         }
     }
 
-    /// The track's ID (`TrackId::INVALID` until added to a document).
+    /// The track's ID (`TrackId::INVALID` until added to a memory).
     pub fn id(&self) -> TrackId {
         self.id
     }

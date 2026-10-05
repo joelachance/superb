@@ -1,4 +1,4 @@
-//! The [`Document`] document.
+//! The [`Memory`] memory.
 
 use crate::primitives::transport::{LoopRange, TempoMap};
 use crate::primitives::{
@@ -8,24 +8,24 @@ use crate::primitives::{
 
 use crate::primitives::session::{Clip, Insert, Marker, Track, TrackKind, TrackSend};
 
-/// A document: tracks, clips, markers, tempo map and loop range.
+/// A memory: tracks, clips, markers, tempo map and loop range.
 ///
-/// All IDs are allocated from one per-document counter and never reused, so
+/// All IDs are allocated from one per-memory counter and never reused, so
 /// a `TrackId`, `ClipId`, `MarkerId` or `SendId` stays valid for the life
-/// of the document (or until its object is removed). Objects can also be
+/// of the memory (or until its object is removed). Objects can also be
 /// inserted with pre-allocated IDs (`allocate_*_id` + `insert_*`), which is
 /// how undo/redo restores removed objects under their original IDs.
 ///
-/// Routing is part of the document: every track has an
+/// Routing is part of the memory: every track has an
 /// [`output`](Track::output) (a bus track, or `None` for the master) and
 /// audio/MIDI tracks carry [`TrackSend`]s to bus tracks. Both are validated
 /// here (targets must be buses; bus → bus chains may not form a cycle), and
 /// removing a bus detaches everything routed into it.
 ///
-/// Every mutating method bumps [`revision`](Document::revision), so views can
+/// Every mutating method bumps [`revision`](Memory::revision), so views can
 /// cheaply detect "something changed".
 #[derive(Clone, Debug)]
-pub struct Document {
+pub struct Memory {
     name: String,
     sample_rate: SampleRate,
     tempo_map: TempoMap,
@@ -36,8 +36,8 @@ pub struct Document {
     revision: u64,
 }
 
-impl Document {
-    /// Creates an empty document at 120 bpm in 4/4.
+impl Memory {
+    /// Creates an empty memory at 120 bpm in 4/4.
     pub fn new(name: impl Into<String>, sample_rate: SampleRate) -> Self {
         Self {
             name: name.into(),
@@ -52,21 +52,21 @@ impl Document {
     }
 
     // ------------------------------------------------------------------
-    // Document-level properties
+    // Memory-level properties
     // ------------------------------------------------------------------
 
-    /// Document name.
+    /// Memory name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    /// Renames the document.
+    /// Renames the memory.
     pub fn set_name(&mut self, name: impl Into<String>) {
         self.name = name.into();
         self.touch();
     }
 
-    /// Document sample rate.
+    /// Memory sample rate.
     pub fn sample_rate(&self) -> SampleRate {
         self.sample_rate
     }
@@ -106,7 +106,7 @@ impl Document {
         self.revision
     }
 
-    /// End of the last clip on any track (zero for an empty document).
+    /// End of the last clip on any track (zero for an empty memory).
     pub fn end_position(&self) -> TimePosition {
         self.tracks
             .iter()
@@ -149,7 +149,7 @@ impl Document {
         self.allocate()
     }
 
-    /// Next raw ID the document will hand out.
+    /// Next raw ID the memory will hand out.
     pub fn next_raw_id(&self) -> RawId {
         self.next_id
     }
@@ -200,7 +200,7 @@ impl Document {
             });
         }
         // Validate everything before touching the ID counter so a rejected
-        // insert leaves the document untouched.
+        // insert leaves the memory untouched.
         if track.kind == TrackKind::Bus && !track.clips.is_empty() {
             return Err(SuperbError::InvalidArgument {
                 what: "bus tracks hold no clips",
@@ -854,8 +854,8 @@ mod tests {
 
     #[test]
     fn document_properties_and_revision() {
-        let mut s = Document::new("document", R);
-        assert_eq!(s.name(), "document");
+        let mut s = Memory::new("memory", R);
+        assert_eq!(s.name(), "memory");
         assert_eq!(s.sample_rate(), R);
         assert_eq!(s.revision(), 0);
         assert!(s.loop_range().is_none());
@@ -875,7 +875,7 @@ mod tests {
 
     #[test]
     fn tracks_are_ordered_with_unique_ids() {
-        let mut s = Document::new("t", R);
+        let mut s = Memory::new("t", R);
         let a = s.add_track("a", TrackKind::Audio);
         let b = s.add_track("b", TrackKind::Midi);
         let c = s.add_track("c", TrackKind::Bus);
@@ -920,7 +920,7 @@ mod tests {
 
     #[test]
     fn clips_stay_sorted_and_move_between_tracks() {
-        let mut s = Document::new("t", R);
+        let mut s = Memory::new("t", R);
         let a = s.add_track("a", TrackKind::Audio);
         let b = s.add_track("b", TrackKind::Audio);
         let bus = s.add_track("bus", TrackKind::Bus);
@@ -977,7 +977,7 @@ mod tests {
 
     #[test]
     fn insert_track_validates_clip_ids() {
-        let mut s = Document::new("t", R);
+        let mut s = Memory::new("t", R);
         let a = s.add_track("a", TrackKind::Audio);
         let existing = s.add_clip(a, clip(0, 10)).unwrap();
         let mut t = Track::new("dup", TrackKind::Audio);
@@ -1036,7 +1036,7 @@ mod tests {
 
     #[test]
     fn routing_is_validated_and_detached_on_bus_removal() {
-        let mut s = Document::new("t", R);
+        let mut s = Memory::new("t", R);
         let a = s.add_track("a", TrackKind::Audio);
         let k = s.add_track("k", TrackKind::Midi);
         let sub = s.add_track("sub", TrackKind::Bus);
@@ -1177,7 +1177,7 @@ mod tests {
             path: "/plugins/fx.clap".into(),
             id: id.into(),
         };
-        let mut s = Document::new("t", R);
+        let mut s = Memory::new("t", R);
         let a = s.add_track("a", TrackKind::Audio);
         let bus = s.add_track("bus", TrackKind::Bus);
         let eq = s.add_insert(a, Insert::new(plugin("eq"))).unwrap();
@@ -1265,7 +1265,7 @@ mod tests {
 
     #[test]
     fn markers_are_sorted_and_navigable() {
-        let mut s = Document::new("t", R);
+        let mut s = Memory::new("t", R);
         let verse = s.add_marker("verse", TimePosition::from_samples(1_000));
         let intro = s.add_marker("intro", TimePosition::ZERO);
         let chorus = s.add_marker("chorus", TimePosition::from_samples(2_000));

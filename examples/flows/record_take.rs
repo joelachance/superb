@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     // steps. A track with no input set records everything captured.
     track::arm(&mut session, vox, true)?;
     track::input(&mut session, vox, Some(Input::Mono(0)))?;
-    println!("vox armed: {}", session.document.track(vox)?.state.arm);
+    println!("vox armed: {}", session.memory.track(vox)?.state.arm);
 
     // Roll the transport a second in, then punch in there.
     transport::start(&mut session)?;
@@ -81,14 +81,11 @@ fn main() -> Result<()> {
     // track, starting at the punch-in point.
     let clips = record::stop(&mut session)?;
     for id in &clips {
-        let clip = session.document.clip(*id)?;
+        let clip = session.memory.clip(*id)?;
         println!(
             "clip {:?} on {}: {:.3} s .. {:.3} s (source {:?})",
             clip.name,
-            session
-                .document
-                .track(session.document.clip_track(*id)?)?
-                .name,
+            session.memory.track(session.memory.clip_track(*id)?)?.name,
             clip.start().to_seconds(rate),
             (clip.start() + clip.length()).to_seconds(rate),
             clip.source
@@ -106,7 +103,7 @@ fn main() -> Result<()> {
     session::undo(&mut session)?;
     println!(
         "after undo: {} clips, {} recording(s) in memory",
-        session.document.clip_count(),
+        session.memory.clip_count(),
         session.audio.len()
     );
 

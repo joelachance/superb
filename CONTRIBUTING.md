@@ -60,13 +60,13 @@ replacing at least three primitive calls or by hiding an ordering hazard
 * Edits that change the mixer's shape (tracks, clips, sends, routing,
   inserts, monitoring) go through `session::structural`, which rebuilds at
   once while a device drives the engine and otherwise marks the session
-  for a rebuild at the next start. Edits to a level go to the document *and* the live
+  for a rebuild at the next start. Edits to a level go to the memory *and* the live
   handle at once and do not rebuild.
 * A continuous edit (fader, knob, clip drag) pushes through the undo stack
   and coalesces by time (`Session::COALESCE_WINDOW`), so a drag is one step
   without the UI having to say when it ended. State (mute, solo, arm,
   monitor, bypass, send on/off) is not an edit: it goes through
-  `session::set_state`, which changes the document directly and marks the
+  `session::set_state`, which changes the memory directly and marks the
   history dirty, and never enters the undo history.
 * No behaviour on the `Session` itself beyond constructors; it is a record.
 
@@ -79,7 +79,7 @@ module docs. Before adding a name, check it against these rules; each one
 exists because its absence cost a rename.
 
 * **One word per thing, across both tiers.** The thing you open is the
-  *session*; its saved shape is the *document*; what the engine runs is
+  *session*; what it remembers and saves is its *memory*; what the engine runs is
   the *mixer*; rebuilding it is *rebuild*; a recording in progress is a
   *recording* and its result a *clip*. Never song, project, console or
   take. If two words are in use for one thing, pick one and rename the
@@ -111,7 +111,7 @@ exists because its absence cost a rename.
   `EngineHandle` and `AudioThread` say which side you hold; `MixerHandles`
   are the live controls of the mixer the engine runs. A type called
   `Player` must play.
-* **State is a field called `state`.** Every document object keeps its
+* **State is a field called `state`.** Every object in the memory keeps its
   settable fields under one `state` (`TrackState`, `SendState`,
   `InsertState`), with nouns for switches: `mute`, not `muted`.
 * **One home per behaviour.** A device listing lives in `devices`, an
@@ -164,7 +164,7 @@ request that adds unsafe elsewhere needs a very good reason.
 
 ## Documentation
 
-* The crate has `#![warn(missing_docs)]`. Document every public item, and
+* The crate has `#![warn(missing_docs)]`. Write docs for every public item, and
   write module docs that explain what the module is for and why it is
   shaped the way it is, not just what each function does.
 * Each primitive module has a usage note in `docs/primitives/<module>.md`

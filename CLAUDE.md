@@ -41,9 +41,9 @@ cargo doc --no-deps
 - Structural edits go through `session::structural` (rebuilds the mixer);
   state (mute, solo, arm, monitor, bypass, send on/off) goes through
   `session::set_state` and never enters the undo history; level edits
-  reach the document and the live handle.
+  reach the memory and the live handle.
 - Names follow CONTRIBUTING.md "Naming" and the one-word table in
-  docs/TERMINOLOGY.md: session / document / mixer / recording / clip,
+  docs/TERMINOLOGY.md: session / memory / mixer / recording / clip,
   DAW words keep their DAW meaning (sync, advance, sample), setters are
   nouns without `set_`, state lives under `.state`, queries read as what
   they return, enums over bool parameters, no duplicate homes, no silent

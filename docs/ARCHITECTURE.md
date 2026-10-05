@@ -6,9 +6,9 @@ and [flows.md](flows.md) for the top tier in detail.
 
 ## The big picture
 
-A DAW has two very different jobs. One is a **document**: the session, with
-its tracks, clips, tempo and routing, edited by a person on a UI thread that
-may take its time. The other is an **engine**: a callback the audio
+A DAW has two very different jobs. One is **memory**: what the session
+remembers, its tracks, clips, tempo and routing, edited by a person on a
+UI thread that may take its time and saved to a file. The other is an **engine**: a callback the audio
 hardware fires every few milliseconds that must fill the next buffer before
 the deadline, every time, without ever waiting. Superb keeps the two apart
 and connects them deliberately.
@@ -18,9 +18,9 @@ and connects them deliberately.
  session · track · clip · transport · send · midi · record · export · devices
  ─────────────────────────────────────────────────────────────────────
  primitives
-   document side (UI thread)           engine side (audio thread)
+   memory side (UI thread)           engine side (audio thread)
 
-   session ── Document: tracks, clips  io         EngineHandle ◄─queues─► AudioThread
+   session ── Memory: tracks, clips  io         EngineHandle ◄─queues─► AudioThread
    undo    ── history                  io         Engine, offline render, WAV, devices
                   session::steps::rebuild ───► mixer      strips, buses, sends, inserts
    automation ─► Arc<AtomicF32> ─────► graph      nodes, schedule, live swap
@@ -38,11 +38,11 @@ primitives and each other, and all of them work on the `Session`.
 ## The Session
 
 `Session` (`src/session/mod.rs`) is the one thing a program works on: a
-plain record of the `Document` (what gets saved), its `UndoStack`, the
+plain record of the `Memory` (what gets saved), its `UndoStack`, the
 `AudioCache`, the `EngineHandle` control handle, the `AudioThread` (until a
 device takes it), the live controls of the last mixer that was built
 (`MixerHandles`: one strip handle per track and bus, one per send, keyed
-by document id) and the recording in progress. It has constructors and
+by the memory's ids) and the recording in progress. It has constructors and
 nothing else. Flow verbs take `&mut Session` so a call does not need seven
 arguments; steps take the fields they need, so a program can assemble its
 own verb.
@@ -80,7 +80,7 @@ Data crosses the thread boundary in exactly three ways:
 
 ## From session to sound
 
-1. **`primitives::session`** holds the `Document` as plain data: tracks
+1. **`primitives::session`** holds the `Memory` as plain data: tracks
    (audio, MIDI or bus) with their state (volume, pan, mute, solo, arm,
    monitor, input), clips on tracks, markers, a tempo map, loop range, routing
    (each track's output bus and its sends) and insert chains (plugin,
@@ -88,15 +88,15 @@ Data crosses the thread boundary in exactly three ways:
    threads, so it can be cloned, saved as JSON and undone freely. Edits go
    through `primitives::undo` commands, which restore removed objects under
    their original IDs so the UI's handles stay valid.
-2. **`session::steps::rebuild`** turns the document into a mixer and hands
+2. **`session::steps::rebuild`** turns the memory into a mixer and hands
    it to the engine. Structural flows call it; its steps are public:
    * `build_mixer` makes a strip per track and a bus per bus track with
      the track's volume, pan, mute and solo, routes each output where the
-     document says, adds a send per document send, and attaches one source
+     memory says, adds a send per send in the memory, and attaches one source
      node per audible clip: `BufferPlayerNode` for audio held in memory,
      `ScheduledSynthNode` for MIDI notes converted through the tempo map,
      plus a live instrument for every monitoring MIDI track. It returns
-     the `MixerHandles` the control side keeps, keyed by document id (the
+     the `MixerHandles` the control side keeps, keyed by the memory's ids (the
      mixer has its own id namespace, which the flows never see).
    * `publish` prepares the mixer's graph and sends it to the engine.
 3. **`primitives::mixer`** builds the mixer out of graph nodes: every
@@ -182,20 +182,20 @@ transport is stopped every mode is a no-op in both directions.
 coalesced run of same-key commands, or a group. Commands capture the
 previous state in `apply`, not at construction, so redo after other edits
 is still correct. A failed revert clears the whole history because the
-document state is unknown. The clean (saved) state is a depth index that
+memory state is unknown. The clean (saved) state is a depth index that
 becomes unreachable if the saved step is coalesced onto or discarded.
 Flows add one convention on top: state (mute, solo, arm, monitor, bypass,
-send on/off) is not an edit. It changes the document directly and tells
+send on/off) is not an edit. It changes the memory directly and tells
 the history its saved point is gone (`UndoStack::mark_dirty`), so it is
-saved but never undone. Volume and pan are state in the document but
+saved but never undone. Volume and pan are state in the memory but
 continuous, so they go through the history and coalesce.
 
-**Document.** The document is plain data with no `Arc` handles and no audio
+**Memory.** The memory is plain data with no `Arc` handles and no audio
 types. Each object's settable fields sit under one `state` field
 (`TrackState`, `SendState`, `InsertState`). IDs come from one per-session counter and are never reused. The
 file format is a separate primitive-only snapshot with a format version,
 not the in-memory types, and old fields load with defaults. Routing is
-validated in the document (targets must be buses, bus chains may not form
+validated in the memory (targets must be buses, bus chains may not form
 a cycle), and removing a bus detaches what fed it instead of failing.
 
 **Files.** The MPL-2.0 decoder is imported from exactly one source file and

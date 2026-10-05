@@ -2,7 +2,7 @@
 //!
 //! A coalescing undo/redo command stack for the Superb DAW SDK.
 //!
-//! * [`Command`] — a reversible edit of some document type `T`: `apply`,
+//! * [`Command`] — a reversible edit of some memory type `T`: `apply`,
 //!   `revert`, an optional [`CoalesceKey`] and an optional `merge` so a run
 //!   of small edits (a fader drag, typing a name) collapses into one step.
 //! * [`UndoStack`] — the history: `push` applies and records, `undo`/`redo`
@@ -13,7 +13,7 @@
 //!   expressed with getter/setter closures.
 //!
 //! The stack knows nothing about audio; it is meant to sit in front of the
-//! session document (`primitives::session`) on the UI thread. Nothing here is
+//! session memory (`primitives::session`) on the UI thread. Nothing here is
 //! real-time safe and nothing needs to be.
 //!
 //! ```

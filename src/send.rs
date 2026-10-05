@@ -4,11 +4,11 @@
 //! (a track of kind `Bus`, added with [`track::add`](crate::track::add);
 //! route a whole track into one with [`track::route`](crate::track::route)).
 //! Adding or removing a send changes the mixer's shape, so it rebuilds. A
-//! send's level is an edit: into the document through the undo history,
+//! send's level is an edit: into the memory through the undo history,
 //! coalescing, and onto the live send at once. Whether a send is on is
 //! state: saved, heard at the next block, never an undo step.
 //!
-//! Made of `superb::primitives::session::commands` (the document side) and
+//! Made of `superb::primitives::session::commands` (the memory side) and
 //! `superb::primitives::mixer::SendParams` (the live side).
 
 use crate::primitives::mixer::SendTap;
@@ -20,7 +20,7 @@ use crate::session::Session;
 /// Adds a send from a track into a bus at `level_db`, tapped before or
 /// after the fader (`SendTap::PreFader` / `SendTap::PostFader`).
 ///
-/// Made of: `Document::allocate_send_id` → `TrackSend::with_id` → `AddSend`
+/// Made of: `Memory::allocate_send_id` → `TrackSend::with_id` → `AddSend`
 /// through `session::structural`; rebuilds the mixer.
 pub fn add(
     session: &mut Session,
@@ -29,7 +29,7 @@ pub fn add(
     level_db: f32,
     tap: SendTap,
 ) -> Result<SendId> {
-    let id = session.document.allocate_send_id();
+    let id = session.memory.allocate_send_id();
     let mut send = TrackSend::with_id(id, bus).level_db(level_db);
     if tap == SendTap::PreFader {
         send = send.pre_fader();
@@ -122,7 +122,7 @@ mod tests {
         track::volume(&mut session, vox, -6.0206).unwrap();
         track::volume(&mut session, vox, -6.0206).unwrap(); // a drag: one step
         session.history.seal();
-        assert!((session.document.track(vox).unwrap().state.volume_db + 6.0206).abs() < 1e-6);
+        assert!((session.memory.track(vox).unwrap().state.volume_db + 6.0206).abs() < 1e-6);
         assert!(
             (settled(&mut session) - 0.25).abs() < 1e-3,
             "heard without a rebuild"
@@ -136,11 +136,11 @@ mod tests {
             audio.channel(1)[255].abs() < 1e-6,
             "hard left: right is silent"
         );
-        assert_eq!(session.document.track(vox).unwrap().state.pan, -1.0);
+        assert_eq!(session.memory.track(vox).unwrap().state.pan, -1.0);
 
         track::mute(&mut session, vox, true).unwrap();
         assert!(settled(&mut session).abs() < 1e-6);
-        assert!(session.document.track(vox).unwrap().state.mute);
+        assert!(session.memory.track(vox).unwrap().state.mute);
         track::mute(&mut session, vox, false).unwrap();
 
         let other = track::add(&mut session, "other", TrackKind::Audio).unwrap();
@@ -160,8 +160,8 @@ mod tests {
         while session.history.undo_len() > steps_before {
             assert!(session::undo(&mut session).unwrap());
         }
-        assert_eq!(session.document.track(vox).unwrap().state.volume_db, 0.0);
-        assert_eq!(session.document.track(vox).unwrap().state.pan, 0.0);
+        assert_eq!(session.memory.track(vox).unwrap().state.volume_db, 0.0);
+        assert_eq!(session.memory.track(vox).unwrap().state.pan, 0.0);
     }
 
     #[test]
@@ -174,8 +174,8 @@ mod tests {
         let room = track::add(&mut session, "room", TrackKind::Bus).unwrap();
         assert!(session.needs_rebuild);
         let send = add(&mut session, vox, room, 0.0, SendTap::PostFader).unwrap();
-        assert_eq!(session.document.send(send).unwrap().bus(), room);
-        assert!(!session.document.send(send).unwrap().pre_fader);
+        assert_eq!(session.memory.send(send).unwrap().bus(), room);
+        assert!(!session.memory.send(send).unwrap().pre_fader);
         session::steps::rebuild(&mut session).unwrap();
         balance_all(&session);
         assert!(
@@ -191,7 +191,7 @@ mod tests {
         let steps = session.history.undo_len();
         enable(&mut session, send, false).unwrap();
         assert!((settled(&mut session) - direct).abs() < 1e-3);
-        assert!(!session.document.send(send).unwrap().state.enabled);
+        assert!(!session.memory.send(send).unwrap().state.enabled);
         assert_eq!(session.history.undo_len(), steps, "a switch, not an edit");
         assert!(!session.history.is_clean(), "but it does count as unsaved");
 
@@ -207,7 +207,7 @@ mod tests {
         );
 
         remove(&mut session, send).unwrap();
-        assert!(session.document.send(send).is_err());
+        assert!(session.memory.send(send).is_err());
         track::route(&mut session, vox, None).unwrap();
         session::steps::rebuild(&mut session).unwrap();
         balance_all(&session);

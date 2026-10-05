@@ -74,4 +74,4 @@ as part of a real process call.
 * Converting between the audio and musical domains requires a tempo map,
   which lives in `primitives::transport`, not here.
 * `IdGenerator` never reuses IDs and has no persistence story of its own;
-  `primitives::session` keeps its own ID counter and saves it with the document.
+  `primitives::session` keeps its own ID counter and saves it with the memory.

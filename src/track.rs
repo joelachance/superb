@@ -8,7 +8,7 @@
 //! the mixer's shape, so they rebuild it (at once while a device is
 //! playing, otherwise at the next start).
 //!
-//! Made of `superb::primitives::session` (the document's tracks and their
+//! Made of `superb::primitives::session` (the memory's tracks and their
 //! commands) and `superb::primitives::mixer` (`StripParams`, the live side).
 
 use crate::primitives::session::commands::{self, AddTrack, RemoveTrack, SetTrackOutput};
@@ -18,10 +18,10 @@ use crate::session::Session;
 
 /// Adds a track at the end. `TrackKind::Bus` makes a bus.
 ///
-/// Made of: `Document::allocate_track_id` → `Track::with_id` → push
+/// Made of: `Memory::allocate_track_id` → `Track::with_id` → push
 /// `AddTrack`; rebuilds the mixer.
 pub fn add(session: &mut Session, name: &str, kind: TrackKind) -> Result<TrackId> {
-    let id = session.document.allocate_track_id();
+    let id = session.memory.allocate_track_id();
     crate::session::structural(session, AddTrack::new(Track::with_id(id, name, kind)))?;
     Ok(id)
 }
@@ -103,7 +103,7 @@ pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 ///
 /// Made of: `TrackState::arm` through `session::set_state`.
 pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    if session.document.track(track)?.kind != TrackKind::Audio {
+    if session.memory.track(track)?.kind != TrackKind::Audio {
         return Err(SuperbError::InvalidArgument {
             what: "only audio tracks are armed for recording",
         });
@@ -117,7 +117,7 @@ pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 /// The audio tracks currently armed, in track order.
 pub(crate) fn armed(session: &Session) -> Vec<TrackId> {
     session
-        .document
+        .memory
         .tracks()
         .iter()
         .filter(|t| t.kind == TrackKind::Audio && t.state.arm)
@@ -133,7 +133,7 @@ pub(crate) fn armed(session: &Session) -> Vec<TrackId> {
 /// Made of: `TrackState::arm` through `session::set_state` → rebuild (the
 /// instrument is a node in the mixer).
 pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    if session.document.track(track)?.kind != TrackKind::Midi {
+    if session.memory.track(track)?.kind != TrackKind::Midi {
         return Err(SuperbError::InvalidArgument {
             what: "only MIDI tracks monitor live MIDI",
         });
@@ -153,7 +153,7 @@ pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 ///
 /// Made of: `TrackState::input` through `session::set_state`.
 pub fn input(session: &mut Session, track: TrackId, input: Option<Input>) -> Result<()> {
-    if session.document.track(track)?.kind != TrackKind::Audio {
+    if session.memory.track(track)?.kind != TrackKind::Audio {
         return Err(SuperbError::InvalidArgument {
             what: "only audio tracks take an input",
         });

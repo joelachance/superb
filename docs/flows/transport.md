@@ -6,13 +6,13 @@ The transport bar: start, stop, seek, loop, and where the playhead is.
 
 Every function here sends a command to the running engine, which applies
 it at the start of its next block, or reads what the engine published after
-its last block. Nothing here touches the document.
+its last block. Nothing here touches the memory.
 
 ## Verbs
 
 | verb | does |
 |---|---|
-| `start(session)` | play from where the playhead is; rebuilds the mixer first if the document changed |
+| `start(session)` | play from where the playhead is; rebuilds the mixer first if the memory changed |
 | `stop(session)` | |
 | `seek(session, to)` | move the playhead, stopped or rolling |
 | `rewind(session)` | seek to zero |
@@ -43,7 +43,7 @@ transport::start(&mut session)?;
 ## Made of
 
 `EngineHandle::send(EngineCommand::{Play, Stop, Seek, SetLoopEnabled})`;
-`start` runs `session::steps::rebuild` first when the document changed
+`start` runs `session::steps::rebuild` first when the memory changed
 since the last build. `playhead` and `state` read the engine's atomics.
 
 ## Notes

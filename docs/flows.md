@@ -31,15 +31,15 @@ Two kinds of function appear in a flow:
 
 * **Verbs** take `&mut Session` and do the whole job: `transport::start(&mut session)`.
 * **Steps** take the primitives they need and live in a `steps` module:
-  `session::steps::build_mixer(&document, &cache, channels)`. Verbs are
+  `session::steps::build_mixer(&memory, &cache, channels)`. Verbs are
   built from steps; so can your own verbs be.
 
 ## The Session
 
 ```rust
 pub struct Session {
-    pub document: Document,          // tracks, clips, routing, tempo: what gets saved
-    pub history: UndoStack<Document>,// every edit goes through here
+    pub memory: Memory,          // tracks, clips, routing, tempo: what gets saved
+    pub history: UndoStack<Memory>,// every edit goes through here
     pub audio: AudioCache,           // audio in memory, keyed by the name clips use
     pub engine: EngineHandle,        // control side of the running engine
     pub audio_thread: Option<AudioThread>, // the audio side, until a device takes it
@@ -52,13 +52,13 @@ pub struct Session {
 ```
 
 `session::create` or `session::open` makes one; `Session::new` wraps a
-`Document` you already have. The `Document` is the session's saved shape:
+`Memory` you already have. The `Memory` is the session's saved shape:
 plain data, undoable, written to JSON. The mixer the engine runs is built
 from it and is not something you name.
 
 ## Edits and state
 
-Every *edit* to the document is a command on `session.history`, so it can
+Every *edit* to the memory is a command on `session.history`, so it can
 be undone. Structural edits (add, remove, move) are one step each; a
 continuous edit (volume, pan, send level, clip drag)
 coalesces: moves of the same control within half a second
@@ -78,9 +78,9 @@ Volume and pan are state too (they live in `TrackState`), but they are
 continuous, so they are edits in the history sense: they coalesce and
 undo.
 
-## The mixer follows the document
+## The mixer follows the memory
 
-The engine runs a mixer built from the document. Edits that change its
+The engine runs a mixer built from the memory. Edits that change its
 *shape* (a new track, a clip moved, a send, a route, monitoring on a MIDI
 track) rebuild it: at once while a device is playing (so the
 change is heard within a block), otherwise at the next `transport::start`
@@ -89,7 +89,7 @@ arrive together (opening a file). You never call `rebuild` yourself unless
 you want to choose the moment; it is a step, `session::steps::rebuild`.
 
 Edits to a level (volume, pan, send level) and state changes (mute, solo,
-send on/off) do not rebuild: the flow writes them to the document and to
+send on/off) do not rebuild: the flow writes them to the memory and to
 the live control in `session.mixer` at once.
 
 After a rebuild, `session.mixer` holds the new mixer's controls. Handles

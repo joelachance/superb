@@ -12,7 +12,7 @@ pub type RawId = u64;
 
 /// Monotonic, thread-safe ID generator.
 ///
-/// One generator is typically owned per document/session; the SDK never
+/// One generator is typically owned per memory/session; the SDK never
 /// uses a hidden global so tests remain deterministic.
 #[derive(Debug)]
 pub struct IdGenerator {

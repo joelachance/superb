@@ -24,10 +24,7 @@ fn main() -> Result<()> {
     // mixer: the instrument is a node on the track's strip.
     track::monitor(&mut session, keys, true)?;
     transport::start(&mut session)?;
-    println!(
-        "monitoring: {}",
-        session.document.track(keys)?.state.monitor
-    );
+    println!("monitoring: {}", session.memory.track(keys)?.state.monitor);
     println!(
         "silence before any note: {}",
         session::steps::render_blocks(&mut session, 2)?.is_silent()

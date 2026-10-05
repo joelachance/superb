@@ -5,7 +5,7 @@ Tracks: add them, name them, set their state, read their meters.
 ## Purpose
 
 A track's *state* is what its strip shows: volume, pan, mute, solo, arm,
-monitor, and where its output goes. It lives in the document as
+monitor, and where its output goes. It lives in the memory as
 `Track.state: TrackState` and is saved with the session. Mute, solo, arm
 and monitor are switches in the UI sense: heard at the next block, never
 undo steps.
@@ -20,9 +20,9 @@ shape, so they rebuild it.
 | `add(session, name, kind) -> TrackId` | an Audio, Midi or Bus track | one |
 | `remove(session, track)` | with everything on it; undo brings it back | one |
 | `rename(session, track, name)` | | quick renames merge |
-| `volume(session, track, db)` | the fader, in dB; document + live strip | drag (coalesces) |
+| `volume(session, track, db)` | the fader, in dB; memory + live strip | drag (coalesces) |
 | `pan(session, track, pan)` | `-1.0` left to `1.0` right | drag |
-| `mute(session, track, on)` / `solo(session, track, on)` | state; document + live strip | — |
+| `mute(session, track, on)` / `solo(session, track, on)` | state; memory + live strip | — |
 | `arm(session, track, on)` | state; audio tracks only; armed tracks get a clip when a recording stops | — |
 | `monitor(session, track, on)` | state; MIDI tracks only; the track carries a live instrument; rebuilds | — |
 | `input(session, track, Option<Input>)` | state; audio tracks only; which input channel(s) feed the track when it records: `Input::Mono(0)`, `Input::Stereo(0, 1)`, or `None` for everything captured | — |
@@ -45,12 +45,12 @@ track::mute(&mut session, vox, true)?;       // state: saved, not undoable
 track::arm(&mut session, vox, true)?;
 track::input(&mut session, vox, Some(Input::Mono(0)))?;   // records the first input, mono
 track::monitor(&mut session, keys, true)?;   // the keys track now sounds when MIDI arrives
-assert_eq!(session.document.track(vox)?.state.volume_db, -3.0);
+assert_eq!(session.memory.track(vox)?.state.volume_db, -3.0);
 ```
 
 ## Made of
 
-`add`: `Document::allocate_track_id` → `Track::with_id` → `AddTrack`
+`add`: `Memory::allocate_track_id` → `Track::with_id` → `AddTrack`
 through `session::structural`. `volume` / `pan`: `set_track_volume_db` /
 `set_track_pan` through `session::edit`, then `StripParams::set_volume_db`
 / `set_pan` on the live strip. `mute` / `solo` / `arm` / `monitor`:
@@ -63,7 +63,7 @@ for `monitor`. `route`: `SetTrackOutput` through `session::structural`.
 
 * Meters hold the peak since the last read on the first two channels.
 * Pan law is a live-strip setting (`StripParams::set_pan_law`), not in the
-  document; tracks default to constant power (−3 dB centre), buses to
+  memory; tracks default to constant power (−3 dB centre), buses to
   balance.
 * Solo is a shared counter across strips: soloing one track silences every
   other track; buses ignore solo.

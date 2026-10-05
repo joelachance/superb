@@ -7,7 +7,7 @@
 //! - Clips play audio held in memory (a decoded file or, as here, a buffer
 //!   you made) or MIDI notes; `clip::add` works out which and how long
 //! - Every edit is undoable: `session::undo` / `session::redo`
-//! - Save is JSON; open gives you a fresh Session with the same document
+//! - Save is JSON; open gives you a fresh Session with the same memory
 //!
 //! ```text
 //! cargo run --example new_session
@@ -19,7 +19,7 @@ use superb::{clip, session, track};
 
 fn main() -> Result<()> {
     // 48 kHz, 256-frame blocks. Nothing is playing yet; this is just the
-    // document plus an idle engine.
+    // memory plus an idle engine.
     let mut session = session::create("My first session", SampleRate::HZ_48K, 256)?;
 
     // Tracks. `track::add` returns an ID you keep; names are for people.
@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     // Audio for the vox clip. A real program decodes a file (`AudioCache::load`,
     // feature `files`); here we synthesise one second of a soft sine so the
     // example needs no file on disk. The key is the name the clip refers to.
-    let rate = session.document.sample_rate();
+    let rate = session.memory.sample_rate();
     let mut take = PlanarBuffer::new(2, rate.hz() as usize);
     for ch in 0..2 {
         for (i, s) in take.channel_mut(ch).iter_mut().enumerate() {
@@ -62,15 +62,15 @@ fn main() -> Result<()> {
         .collect();
     clip::add(&mut session, keys, notes, TimePosition::ZERO)?;
 
-    // Document-level settings.
+    // Memory-level settings.
     session::set_tempo(&mut session, 100.0)?;
     session::add_marker(&mut session, "verse", TimePosition::from_seconds(0.5, rate))?;
     println!(
         "{}: {} tracks, {} clips, {} bpm",
-        session.document.name(),
-        session.document.track_count(),
-        session.document.clip_count(),
-        session.document.tempo_map().tempo_at(BeatPosition::ZERO)
+        session.memory.name(),
+        session.memory.track_count(),
+        session.memory.clip_count(),
+        session.memory.tempo_map().tempo_at(BeatPosition::ZERO)
     );
 
     // Undo works on everything above. Move the clip, change your mind.
@@ -80,17 +80,17 @@ fn main() -> Result<()> {
     session.history.seal();
     println!(
         "clip now starts at {:.2} s",
-        session.document.clip(clip)?.start().to_seconds(rate)
+        session.memory.clip(clip)?.start().to_seconds(rate)
     );
     session::undo(&mut session)?;
     println!(
         "after undo:      {:.2} s",
-        session.document.clip(clip)?.start().to_seconds(rate)
+        session.memory.clip(clip)?.start().to_seconds(rate)
     );
     session::redo(&mut session)?;
     println!(
         "after redo:      {:.2} s",
-        session.document.clip(clip)?.start().to_seconds(rate)
+        session.memory.clip(clip)?.start().to_seconds(rate)
     );
 
     // Save, then open into a second session. Audio is not embedded: the clip
@@ -112,11 +112,11 @@ fn main() -> Result<()> {
     );
     println!(
         "reopened {:?}: {} tracks, {} clips, marker {:?} at {:.2} s",
-        again.document.name(),
-        again.document.track_count(),
-        again.document.clip_count(),
-        again.document.markers()[0].name,
-        again.document.markers()[0].position().to_seconds(rate)
+        again.memory.name(),
+        again.memory.track_count(),
+        again.memory.clip_count(),
+        again.memory.markers()[0].name,
+        again.memory.markers()[0].position().to_seconds(rate)
     );
     Ok(())
 }

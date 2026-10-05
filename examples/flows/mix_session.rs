@@ -2,7 +2,7 @@
 //! sends, meters.
 //!
 //! What you'll learn:
-//! - Level changes go two places at once: the document (undoable) and the live
+//! - Level changes go two places at once: the memory (undoable) and the live
 //!   strip (heard on the next block, no rebuild)
 //! - Buses collect tracks; `route` sends a track's output into one
 //! - Sends tap a copy of a track into a bus, pre- or post-fader
@@ -121,7 +121,7 @@ fn main() -> Result<()> {
         println!("room bus meter:          L {l:.3}  R {r:.3}");
     }
 
-    // Everything above is in the document. Undo it all and the document is back
+    // Everything above is in the memory. Undo it all and the memory is back
     // to two tracks at 0 dB; the mixer follows on the next rebuild.
     while session.history.undo_len() > 4 {
         // 4 = the two tracks and two clips we started with
@@ -129,9 +129,9 @@ fn main() -> Result<()> {
     }
     println!(
         "after undo: gtr {} dB, {} tracks, gtr sends {}",
-        session.document.track(gtr)?.state.volume_db,
-        session.document.track_count(),
-        session.document.track(gtr)?.sends().len()
+        session.memory.track(gtr)?.state.volume_db,
+        session.memory.track_count(),
+        session.memory.track(gtr)?.sends().len()
     );
     Ok(())
 }

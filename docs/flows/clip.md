@@ -41,7 +41,7 @@ session::undo(&mut session)?;            // playing again
 ## Made of
 
 `add`: `AudioCache::get` (or `TempoMap::beat_to_samples` for notes) for
-the length → `Document::allocate_clip_id` → `Clip::with_id` → `AddClip`
+the length → `Memory::allocate_clip_id` → `Clip::with_id` → `AddClip`
 through `session::structural`. `move_to`: `MoveClip` through
 `session::structural`. `archive` / `restore`: `ArchiveClip` through
 `session::structural`.

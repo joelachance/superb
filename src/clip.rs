@@ -29,7 +29,7 @@ use crate::session::Session;
 /// the track is a bus.
 ///
 /// Made of: `AudioCache::get` or `TempoMap::beat_to_samples` for the
-/// length → `Document::allocate_clip_id` → `Clip::with_id` → `AddClip`
+/// length → `Memory::allocate_clip_id` → `Clip::with_id` → `AddClip`
 /// through `session::structural`.
 pub fn add(
     session: &mut Session,
@@ -51,14 +51,14 @@ pub fn add(
             (name, TimeDuration::from_samples(frames))
         }
         ClipSource::Midi { notes } => {
-            let tempo = session.document.tempo_map();
+            let tempo = session.memory.tempo_map();
             let start_beat = tempo.samples_to_beat(at).beats();
             let last = notes
                 .iter()
                 .map(|n| n.beat + n.length)
                 .fold(0.0_f64, f64::max);
             let end = tempo.beat_to_samples(BeatPosition::new(start_beat + last));
-            let name = session.document.track(track)?.name.clone();
+            let name = session.memory.track(track)?.name.clone();
             (
                 name,
                 TimeDuration::from_samples(end.samples() - at.samples()),
@@ -75,7 +75,7 @@ pub fn add(
             what: "a clip needs audio or notes to have a length",
         });
     }
-    let id = session.document.allocate_clip_id();
+    let id = session.memory.allocate_clip_id();
     let clip = Clip::with_id(id, name, at, length, source)?;
     crate::session::structural(session, AddClip::new(track, clip))?;
     Ok(id)
@@ -110,7 +110,7 @@ pub fn restore(session: &mut Session, clip: ClipId) -> Result<()> {
 mod tests {
     use super::*;
     use crate::primitives::buffers::PlanarBuffer;
-    use crate::primitives::session::{Document, MidiNote, TrackKind};
+    use crate::primitives::session::{Memory, MidiNote, TrackKind};
     use crate::primitives::SampleRate;
     use crate::{session, track, transport};
 
@@ -140,11 +140,11 @@ mod tests {
             TimePosition::from_samples(100),
         )
         .unwrap();
-        let c = session.document.clip(clip).unwrap();
+        let c = session.memory.clip(clip).unwrap();
         assert_eq!(c.name, "take 1");
         assert_eq!(c.start().samples(), 100);
         assert_eq!(c.length().samples(), 480);
-        assert_eq!(session.document.clip_track(clip).unwrap(), vox);
+        assert_eq!(session.memory.clip_track(clip).unwrap(), vox);
         assert!(session.needs_rebuild);
         assert!(
             add(&mut session, vox, "missing.wav", TimePosition::ZERO).is_err(),
@@ -168,7 +168,7 @@ mod tests {
             TimePosition::from_samples(48_000),
         )
         .unwrap();
-        let c = session.document.clip(clip).unwrap();
+        let c = session.memory.clip(clip).unwrap();
         assert_eq!(c.name, "keys");
         assert_eq!(c.length().samples(), 60_000);
         assert!(matches!(c.source, ClipSource::Midi { .. }));
@@ -197,8 +197,8 @@ mod tests {
         move_to(&mut session, clip, TimePosition::from_samples(100)).unwrap();
         move_to(&mut session, clip, TimePosition::from_samples(200)).unwrap();
         assert_eq!(session.history.undo_len(), steps + 1, "a drag coalesces");
-        assert_eq!(session.document.clip(clip).unwrap().start().samples(), 200);
-        assert_eq!(session.document.end_position().samples(), 600);
+        assert_eq!(session.memory.clip(clip).unwrap().start().samples(), 200);
+        assert_eq!(session.memory.end_position().samples(), 600);
         session.history.seal();
 
         transport::start(&mut session).unwrap();
@@ -210,10 +210,10 @@ mod tests {
         );
 
         archive(&mut session, clip).unwrap();
-        assert!(session.document.clip(clip).unwrap().archived);
-        assert_eq!(session.document.clip_count(), 1, "still there");
+        assert!(session.memory.clip(clip).unwrap().archived);
+        assert_eq!(session.memory.clip_count(), 1, "still there");
         assert_eq!(
-            session.document.end_position().samples(),
+            session.memory.end_position().samples(),
             0,
             "an archived clip does not extend the session"
         );
@@ -225,12 +225,12 @@ mod tests {
 
         // Undo restores it; so does `restore`.
         assert!(session::undo(&mut session).unwrap());
-        assert!(!session.document.clip(clip).unwrap().archived);
+        assert!(!session.memory.clip(clip).unwrap().archived);
         archive(&mut session, clip).unwrap();
         archive(&mut session, clip).unwrap(); // already archived: no new step
         assert_eq!(session.history.undo_len(), steps + 3);
         restore(&mut session, clip).unwrap();
-        assert!(!session.document.clip(clip).unwrap().archived);
+        assert!(!session.memory.clip(clip).unwrap().archived);
         transport::rewind(&mut session).unwrap();
         assert!(
             session::steps::render_blocks(&mut session, 6)
@@ -241,8 +241,8 @@ mod tests {
 
         // Archived survives a save.
         archive(&mut session, clip).unwrap();
-        let json = session.document.to_json().unwrap();
-        let copy = Document::from_json(&json).unwrap();
+        let json = session.memory.to_json().unwrap();
+        let copy = Memory::from_json(&json).unwrap();
         assert!(copy.clip(clip).unwrap().archived);
     }
 }

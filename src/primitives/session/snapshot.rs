@@ -1,4 +1,4 @@
-//! Versioned, serialisable copies of a [`Document`].
+//! Versioned, serialisable copies of a [`Memory`].
 //!
 //! The snapshot types use only primitives (raw IDs, sample counts, Hz) so
 //! the file format does not change when in-memory types evolve.
@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::primitives::plugins::PluginFormat;
 use crate::primitives::session::{
-    Clip, ClipSource, Document, Input, Insert, Marker, PluginRef, Track, TrackKind, TrackSend,
+    Clip, ClipSource, Input, Insert, Marker, Memory, PluginRef, Track, TrackKind, TrackSend,
 };
 
 /// Version of the snapshot format written by this crate.
@@ -202,12 +202,12 @@ pub struct MarkerSnapshot {
     pub color: Option<u32>,
 }
 
-/// A whole document.
+/// A whole memory.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DocumentSnapshot {
+pub struct MemorySnapshot {
     /// [`FORMAT_VERSION`] of the writer.
     pub format_version: u32,
-    /// Document name.
+    /// Memory name.
     pub name: String,
     /// Sample rate in Hz.
     pub sample_rate_hz: u32,
@@ -219,7 +219,7 @@ pub struct DocumentSnapshot {
     pub tracks: Vec<TrackSnapshot>,
     /// Markers in position order.
     pub markers: Vec<MarkerSnapshot>,
-    /// Next raw ID the document will allocate.
+    /// Next raw ID the memory will allocate.
     pub next_id: RawId,
 }
 
@@ -324,8 +324,8 @@ impl From<&TempoMap> for TempoSnapshot {
     }
 }
 
-impl From<&Document> for DocumentSnapshot {
-    fn from(s: &Document) -> Self {
+impl From<&Memory> for MemorySnapshot {
+    fn from(s: &Memory) -> Self {
         s.snapshot()
     }
 }
@@ -334,10 +334,10 @@ fn io_err(context: &str, e: impl core::fmt::Display) -> SuperbError {
     SuperbError::Message(format!("{context}: {e}"))
 }
 
-impl Document {
-    /// Copies the document into a serialisable snapshot.
-    pub fn snapshot(&self) -> DocumentSnapshot {
-        DocumentSnapshot {
+impl Memory {
+    /// Copies the memory into a serialisable snapshot.
+    pub fn snapshot(&self) -> MemorySnapshot {
+        MemorySnapshot {
             format_version: FORMAT_VERSION,
             name: self.name().to_owned(),
             sample_rate_hz: self.sample_rate().hz(),
@@ -351,17 +351,17 @@ impl Document {
         }
     }
 
-    /// Rebuilds a document from a snapshot, validating IDs, lengths, tempo
+    /// Rebuilds a `Memory` from a snapshot, validating IDs, lengths, tempo
     /// and meter values. Newer format versions are refused.
-    pub fn from_snapshot(snap: &DocumentSnapshot) -> Result<Document> {
+    pub fn from_snapshot(snap: &MemorySnapshot) -> Result<Memory> {
         if snap.format_version > FORMAT_VERSION {
             return Err(SuperbError::Message(format!(
-                "document format version {} is newer than supported version {FORMAT_VERSION}",
+                "session file format version {} is newer than supported version {FORMAT_VERSION}",
                 snap.format_version
             )));
         }
         let rate = SampleRate::new(snap.sample_rate_hz)?;
-        let mut document = Document::new(snap.name.clone(), rate);
+        let mut memory = Memory::new(snap.name.clone(), rate);
 
         // Tempo map.
         let first = snap
@@ -377,7 +377,7 @@ impl Document {
             });
         }
         {
-            let map = document.tempo_map_mut();
+            let map = memory.tempo_map_mut();
             map.set_initial_tempo(first.bpm)?;
             map.set_tempo_ramp(BeatPosition::ZERO, first.ramp)?;
             for p in &snap.tempo.points[1..] {
@@ -393,7 +393,7 @@ impl Document {
         }
 
         if let Some((start, end)) = snap.loop_range {
-            document.set_loop_range(Some(LoopRange::new(
+            memory.set_loop_range(Some(LoopRange::new(
                 TimePosition::from_samples(start),
                 TimePosition::from_samples(end),
             )?));
@@ -462,8 +462,8 @@ impl Document {
                 insert.preset = i.preset.clone();
                 track.inserts.push(insert);
             }
-            let index = document.track_count();
-            document.insert_track(index, track)?;
+            let index = memory.track_count();
+            memory.insert_track(index, track)?;
         }
 
         // Routing is applied once every track exists, so a track may feed a
@@ -471,7 +471,7 @@ impl Document {
         for t in &snap.tracks {
             let id = TrackId::from_raw(t.id);
             if let Some(bus) = t.output {
-                document.set_track_output(id, Some(TrackId::from_raw(bus)))?;
+                memory.set_track_output(id, Some(TrackId::from_raw(bus)))?;
             }
             for s in &t.sends {
                 let send_id = SendId::from_raw(s.id);
@@ -482,7 +482,7 @@ impl Document {
                 send.state.level_db = s.level_db;
                 send.pre_fader = s.pre_fader;
                 send.state.enabled = s.enabled;
-                document.add_send(id, send)?;
+                memory.add_send(id, send)?;
             }
         }
 
@@ -496,38 +496,38 @@ impl Document {
             let mut marker =
                 Marker::with_id(id, m.name.clone(), TimePosition::from_samples(m.position));
             marker.color = m.color;
-            document.insert_marker(marker)?;
+            memory.insert_marker(marker)?;
         }
 
-        document.reserve(snap.next_id.saturating_sub(1));
-        Ok(document)
+        memory.reserve(snap.next_id.saturating_sub(1));
+        Ok(memory)
     }
 
-    /// Serialises the document as pretty-printed JSON.
+    /// Serialises the memory as pretty-printed JSON.
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string_pretty(&self.snapshot()).map_err(|e| io_err("serialise document", e))
+        serde_json::to_string_pretty(&self.snapshot()).map_err(|e| io_err("serialise session", e))
     }
 
-    /// Parses a document from JSON produced by [`to_json`](Self::to_json).
-    pub fn from_json(json: &str) -> Result<Document> {
-        let snap: DocumentSnapshot =
-            serde_json::from_str(json).map_err(|e| io_err("parse document", e))?;
-        Document::from_snapshot(&snap)
+    /// Parses a `Memory` from JSON produced by [`to_json`](Self::to_json).
+    pub fn from_json(json: &str) -> Result<Memory> {
+        let snap: MemorySnapshot =
+            serde_json::from_str(json).map_err(|e| io_err("parse session file", e))?;
+        Memory::from_snapshot(&snap)
     }
 
-    /// Writes the document as JSON to `path`.
+    /// Writes the memory as JSON to `path`.
     pub fn save(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         std::fs::write(path, self.to_json()?)
             .map_err(|e| io_err(&format!("write {}", path.display()), e))
     }
 
-    /// Reads a document written by [`save`](Self::save).
-    pub fn load(path: impl AsRef<Path>) -> Result<Document> {
+    /// Reads a `Memory` written by [`save`](Self::save).
+    pub fn load(path: impl AsRef<Path>) -> Result<Memory> {
         let path = path.as_ref();
         let text = std::fs::read_to_string(path)
             .map_err(|e| io_err(&format!("read {}", path.display()), e))?;
-        Document::from_json(&text)
+        Memory::from_json(&text)
     }
 }
 
@@ -538,8 +538,8 @@ mod tests {
 
     const R: SampleRate = SampleRate::HZ_48K;
 
-    fn rich_session() -> Document {
-        let mut s = Document::new("rich", R);
+    fn rich_session() -> Memory {
+        let mut s = Memory::new("rich", R);
         {
             let map = s.tempo_map_mut();
             map.set_initial_tempo(100.0).unwrap();
@@ -650,7 +650,7 @@ mod tests {
         let json = s.to_json().unwrap();
         assert!(json.contains("\"format_version\": 1"));
         assert!(json.contains("kick.wav"));
-        let back = Document::from_json(&json).unwrap();
+        let back = Memory::from_json(&json).unwrap();
         assert_eq!(back.snapshot(), s.snapshot());
         assert_eq!(back.name(), "rich");
         assert_eq!(
@@ -664,13 +664,13 @@ mod tests {
             .replace(",\n        \"ramp\": true", "")
             .replace(",\n        \"ramp\": false", "");
         assert!(!legacy.contains("ramp"), "{legacy}");
-        let old = Document::from_json(&legacy).unwrap();
+        let old = Memory::from_json(&legacy).unwrap();
         assert!(old.tempo_map().tempo_points().iter().all(|p| !p.ramp));
         // Files written when clips were still called items load unchanged.
         let renamed = json.replace("\"clips\":", "\"items\":");
         assert!(renamed.contains("\"items\":"));
         assert_eq!(
-            Document::from_json(&renamed).unwrap().snapshot(),
+            Memory::from_json(&renamed).unwrap().snapshot(),
             s.snapshot()
         );
         // Routing survives, and files written before routing existed load
@@ -694,7 +694,7 @@ mod tests {
             t.remove("sends");
             t.remove("inserts");
         }
-        let old = Document::from_json(&pre_routing.to_string()).unwrap();
+        let old = Memory::from_json(&pre_routing.to_string()).unwrap();
         assert!(old
             .tracks()
             .iter()
@@ -709,23 +709,23 @@ mod tests {
         let mut back = back;
         let t = back.add_track("new", TrackKind::Audio);
         assert!(s.tracks().iter().all(|x| x.id() != t));
-        let snap: DocumentSnapshot = (&s).into();
+        let snap: MemorySnapshot = (&s).into();
         assert_eq!(snap, s.snapshot());
     }
 
     #[test]
     fn save_and_load_files() {
         let s = rich_session();
-        let dir = std::env::temp_dir().join(format!("superb-document-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("superb-memory-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("document.superb.json");
+        let path = dir.join("memory.superb.json");
         s.save(&path).unwrap();
-        let loaded = Document::load(&path).unwrap();
+        let loaded = Memory::load(&path).unwrap();
         assert_eq!(loaded.snapshot(), s.snapshot());
-        assert!(Document::load(dir.join("missing.json")).is_err());
+        assert!(Memory::load(dir.join("missing.json")).is_err());
         std::fs::write(&path, "{ not json").unwrap();
-        assert!(Document::from_json("{ not json").is_err());
-        assert!(Document::load(&path).is_err());
+        assert!(Memory::from_json("{ not json").is_err());
+        assert!(Memory::load(&path).is_err());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -735,94 +735,94 @@ mod tests {
 
         let mut snap = good.clone();
         snap.format_version = FORMAT_VERSION + 1;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
 
         let mut snap = good.clone();
         snap.sample_rate_hz = 5;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
 
         let mut snap = good.clone();
         snap.tempo.points.clear();
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tempo.points[0].beat = 1.0;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tempo.points[0].bpm = -1.0;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tempo.meters[0].denominator = 3;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
 
         let mut snap = good.clone();
         snap.loop_range = Some((10, 10));
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
 
         let mut snap = good.clone();
         snap.tracks[1].id = snap.tracks[0].id;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tracks[0].id = 0;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tracks[0].clips[0].length = 0;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tracks[0].clips[0].id = 0;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         let dup = snap.tracks[0].clips[0].clone();
         snap.tracks[1].clips.push(dup);
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         let clip = snap.tracks[0].clips[0].clone();
         snap.tracks[2].clips.push(clip); // bus
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
 
         // Routing: unknown / non-bus targets, cycles, bad send ids, sends on buses.
         let mut snap = good.clone();
         snap.tracks[0].output = Some(999);
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tracks[0].output = Some(snap.tracks[1].id);
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tracks[3].output = Some(snap.tracks[2].id); // room → fx while fx → room
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tracks[1].sends[0].id = 0;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tracks[1].sends[0].id = snap.tracks[0].sends[0].id;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.tracks[1].sends[0].bus = snap.tracks[0].id;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         let send = snap.tracks[1].sends[0].clone();
         snap.tracks[2].sends.push(send); // bus
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
 
         let mut snap = good.clone();
         snap.markers[1].id = snap.markers[0].id;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
 
         // Inserts: id 0 and duplicate ids are rejected.
         let mut snap = good.clone();
         snap.tracks[3].inserts[0].id = 0;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         let dup = snap.tracks[3].inserts[0].clone();
         snap.tracks[0].inserts.push(dup);
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
         let mut snap = good.clone();
         snap.markers[0].id = 0;
-        assert!(Document::from_snapshot(&snap).is_err());
+        assert!(Memory::from_snapshot(&snap).is_err());
 
         // A stale next_id is corrected from the ids present.
         let mut snap = good.clone();
         snap.next_id = 1;
-        let s = Document::from_snapshot(&snap).unwrap();
+        let s = Memory::from_snapshot(&snap).unwrap();
         let max = snap
             .tracks
             .iter()
@@ -837,7 +837,7 @@ mod tests {
     fn older_versions_load() {
         let mut snap = rich_session().snapshot();
         snap.format_version = 0;
-        assert!(Document::from_snapshot(&snap).is_ok());
+        assert!(Memory::from_snapshot(&snap).is_ok());
     }
 
     #[test]
@@ -874,7 +874,7 @@ mod tests {
         }
         let json = v.to_string();
         assert!(!json.contains("monitor") && !json.contains("volume_db"));
-        let back = Document::from_json(&json).unwrap();
+        let back = Memory::from_json(&json).unwrap();
         for t in back.tracks() {
             let o = original.track(t.id()).unwrap();
             assert_eq!(t.state.volume_db, o.state.volume_db, "{}", t.name);

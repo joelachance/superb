@@ -37,7 +37,7 @@ struct OpenGroup<T: 'static> {
     steps: Vec<Box<dyn Command<T>>>,
 }
 
-/// Undo/redo history for a document of type `T`.
+/// Undo/redo history for a target of type `T`.
 ///
 /// * [`push`](UndoStack::push) applies a command and records it. Consecutive
 ///   commands with the same [`CoalesceKey`] collapse into one step until
@@ -47,11 +47,11 @@ struct OpenGroup<T: 'static> {
 ///   bundle any number of pushes into one step (groups nest; only the
 ///   outermost creates the step).
 /// * [`mark_clean`](UndoStack::mark_clean) / [`is_clean`](UndoStack::is_clean)
-///   track whether the document matches its last saved state.
+///   track whether the memory matches its last saved state.
 /// * [`set_limit`](UndoStack::set_limit) bounds the number of undo steps.
 ///
 /// A failed `apply` in `push` records nothing. A failed `revert`/`apply`
-/// during undo/redo leaves the document in an unknown state, so the whole
+/// during undo/redo leaves the memory in an unknown state, so the whole
 /// history is cleared before the error is returned.
 pub struct UndoStack<T: 'static> {
     undo: Vec<Entry<T>>,
@@ -355,12 +355,12 @@ impl<T: 'static> UndoStack<T> {
     // Clean state
     // ------------------------------------------------------------------
 
-    /// Records that the document was just saved.
+    /// Records that the memory was just saved.
     pub fn mark_clean(&mut self) {
         self.clean = Some(self.undo.len());
     }
 
-    /// Records that the document changed *outside* the history (a setting
+    /// Records that the memory changed *outside* the history (a setting
     /// flipped directly, not through a command). No amount of undo or redo
     /// reaches the saved state any more, so [`is_clean`](Self::is_clean)
     /// stays `false` until the next [`mark_clean`](Self::mark_clean).
@@ -368,7 +368,7 @@ impl<T: 'static> UndoStack<T> {
         self.clean = None;
     }
 
-    /// `true` if the document matches the state at the last
+    /// `true` if the memory matches the state at the last
     /// [`mark_clean`](Self::mark_clean) (or creation). Open groups count as
     /// dirty.
     pub fn is_clean(&self) -> bool {

@@ -1,7 +1,7 @@
-//! The engine side of a session: how the document becomes the mixer the
+//! The engine side of a session: how the memory becomes the mixer the
 //! engine runs, and how to run that engine by hand.
 //!
-//! [`rebuild`] turns the [`Document`] into a [`Mixer`] (a strip per track
+//! [`rebuild`] turns the [`Memory`] into a [`Mixer`] (a strip per track
 //! and bus, routing and sends, a node per clip, a live instrument per
 //! monitoring MIDI track) and publishes its graph to the engine, which
 //! swaps it in between two blocks without a glitch. The structural flows
@@ -20,12 +20,12 @@ use crate::primitives::graph::MidiPort;
 use crate::primitives::io::cache::AudioCache;
 use crate::primitives::io::EngineHandle;
 use crate::primitives::mixer::{Mixer, SendParams, SendTap, StripId, StripParams};
-use crate::primitives::session::{Clip, ClipSource, Document, MidiNote, TrackKind};
+use crate::primitives::session::{Clip, ClipSource, Memory, MidiNote, TrackKind};
 use crate::primitives::transport::TempoMap;
 use crate::primitives::{BeatPosition, Result, SendId, SuperbError, TrackId};
 use crate::session::{MixerHandles, Session};
 
-/// Rebuilds the mixer from the document and swaps it into the engine.
+/// Rebuilds the mixer from the memory and swaps it into the engine.
 ///
 /// The structural flows call this for you, at once while a device drives
 /// the engine and otherwise at the next start or render; call it yourself
@@ -38,7 +38,7 @@ use crate::session::{MixerHandles, Session};
 /// strip and send controls.
 pub fn rebuild(session: &mut Session) -> Result<()> {
     session.engine.reclaim();
-    let (mixer, handles) = build_mixer(&session.document, &session.audio, session.channels)?;
+    let (mixer, handles) = build_mixer(&session.memory, &session.audio, session.channels)?;
     publish(&mut session.engine, mixer)?;
     if let Some(audio_thread) = session.audio_thread.as_mut() {
         // Nothing is pulling audio yet, so nobody would swap the graph in
@@ -80,33 +80,33 @@ pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffe
     Ok(out)
 }
 
-/// Builds a fresh mixer for the document and returns it with the handles
+/// Builds a fresh mixer for the memory and returns it with the handles
 /// the control side keeps: a strip per track and bus carrying the track's
-/// state, each track's output routed where the document says, a send per
-/// document send, a node per audible clip, and a live instrument on every
+/// state, each track's output routed where the memory says, a send per
+/// send in the memory, a node per audible clip, and a live instrument on every
 /// monitoring MIDI track so it sounds when you play.
 ///
-/// The document's and the mixer's ids are separate namespaces; the handles
-/// are keyed by the document's, so a flow never sees a mixer id.
+/// The memory's and the mixer's ids are separate namespaces; the handles
+/// are keyed by the memory's, so a flow never sees a mixer id.
 ///
-/// Made of: `Mixer::new` → `Mixer::add_track` / `add_bus` per document
+/// Made of: `Mixer::new` → `Mixer::add_track` / `add_bus` per memory
 /// track, with `StripParams::set_volume_db` / `set_pan` / `set_mute` /
 /// `set_solo` from its state → `Mixer::set_track_output` / `set_bus_output`
-/// → `Mixer::add_send` per document send → a [`BufferPlayerNode`] (audio
+/// → `Mixer::add_send` per send in the memory → a [`BufferPlayerNode`] (audio
 /// held in memory) or [`ScheduledSynthNode`] (MIDI notes through the tempo
 /// map) per unmuted clip → a [`MonoSynthNode`] with a MIDI edge per
 /// monitoring MIDI track.
 pub fn build_mixer(
-    document: &Document,
+    memory: &Memory,
     cache: &AudioCache,
     channels: usize,
 ) -> Result<(Mixer, MixerHandles)> {
     let mut mixer = Mixer::new(channels);
-    let strips = add_strips(document, &mut mixer)?;
-    route(document, &mut mixer, &strips)?;
-    let sends = add_sends(document, &mut mixer, &strips)?;
-    add_clip_players(document, &mut mixer, &strips, cache)?;
-    add_monitor_instruments(document, &mut mixer, &strips)?;
+    let strips = add_strips(memory, &mut mixer)?;
+    route(memory, &mut mixer, &strips)?;
+    let sends = add_sends(memory, &mut mixer, &strips)?;
+    add_clip_players(memory, &mut mixer, &strips, cache)?;
+    add_monitor_instruments(memory, &mut mixer, &strips)?;
     let mut handles = MixerHandles {
         strips: Vec::with_capacity(strips.len()),
         sends,
@@ -126,7 +126,7 @@ pub fn publish(engine: &mut EngineHandle, mixer: Mixer) -> Result<()> {
     engine.publish(mixer.into_graph())
 }
 
-/// Document track → the strip or bus the mixer got for it, in document order.
+/// Each track in the memory → the strip or bus the mixer got for it, in order.
 type Strips = Vec<(TrackId, StripId)>;
 
 fn strip_of(strips: &Strips, track: TrackId) -> Option<StripId> {
@@ -142,9 +142,9 @@ fn strip_params(mixer: &Mixer, strip: StripId) -> Result<Arc<StripParams>> {
 
 /// A strip per audio or MIDI track and a bus per bus track, each carrying
 /// the track's volume, pan, mute and solo.
-fn add_strips(document: &Document, mixer: &mut Mixer) -> Result<Strips> {
-    let mut strips = Vec::with_capacity(document.track_count());
-    for track in document.tracks() {
+fn add_strips(memory: &Memory, mixer: &mut Mixer) -> Result<Strips> {
+    let mut strips = Vec::with_capacity(memory.track_count());
+    for track in memory.tracks() {
         let strip = match track.kind {
             TrackKind::Audio | TrackKind::Midi => {
                 StripId::Track(mixer.add_track(track.name.clone()))
@@ -161,10 +161,10 @@ fn add_strips(document: &Document, mixer: &mut Mixer) -> Result<Strips> {
     Ok(strips)
 }
 
-/// Every strip feeds the bus its document track outputs to, or the master.
-fn route(document: &Document, mixer: &mut Mixer, strips: &Strips) -> Result<()> {
+/// Every strip feeds the bus its track outputs to, or the master.
+fn route(memory: &Memory, mixer: &mut Mixer, strips: &Strips) -> Result<()> {
     let master = mixer.master();
-    for track in document.tracks() {
+    for track in memory.tracks() {
         let Some(strip) = strip_of(strips, track.id()) else {
             continue;
         };
@@ -180,14 +180,14 @@ fn route(document: &Document, mixer: &mut Mixer, strips: &Strips) -> Result<()> 
     Ok(())
 }
 
-/// A mixer send per document send, at its level, tap and on/off.
+/// A mixer send per send in the memory, at its level, tap and on/off.
 fn add_sends(
-    document: &Document,
+    memory: &Memory,
     mixer: &mut Mixer,
     strips: &Strips,
 ) -> Result<Vec<(SendId, Arc<SendParams>)>> {
     let mut sends = Vec::new();
-    for track in document.tracks() {
+    for track in memory.tracks() {
         let Some(StripId::Track(from)) = strip_of(strips, track.id()) else {
             continue;
         };
@@ -214,14 +214,14 @@ fn add_sends(
 /// a [`ScheduledSynthNode`] for MIDI notes converted through the tempo map.
 /// Muted, archived and empty clips get nothing.
 fn add_clip_players(
-    document: &Document,
+    memory: &Memory,
     mixer: &mut Mixer,
     strips: &Strips,
     cache: &AudioCache,
 ) -> Result<()> {
     let channels = mixer.channels();
-    let tempo = document.tempo_map();
-    for track in document.tracks() {
+    let tempo = memory.tempo_map();
+    for track in memory.tracks() {
         let Some(StripId::Track(strip)) = strip_of(strips, track.id()) else {
             continue;
         };
@@ -257,9 +257,9 @@ fn add_clip_players(
 
 /// A [`MonoSynthNode`] fed by the engine's MIDI input on every monitoring
 /// MIDI track, so notes you play sound on that track's strip.
-fn add_monitor_instruments(document: &Document, mixer: &mut Mixer, strips: &Strips) -> Result<()> {
+fn add_monitor_instruments(memory: &Memory, mixer: &mut Mixer, strips: &Strips) -> Result<()> {
     let channels = mixer.channels();
-    for track in document.tracks() {
+    for track in memory.tracks() {
         if track.kind != TrackKind::Midi || !track.state.monitor {
             continue;
         }
@@ -380,22 +380,22 @@ mod tests {
     /// Builds a mixer and renders `frames` from `start` offline, the way
     /// `export::bounce` does.
     fn render(
-        document: &Document,
+        memory: &Memory,
         cache: &AudioCache,
         start: TimePosition,
         frames: usize,
     ) -> PlanarBuffer {
-        let (mixer, _) = build_mixer(document, cache, 2).unwrap();
-        let mut transport = Transport::with_tempo_map(document.tempo_map().clone());
+        let (mixer, _) = build_mixer(memory, cache, 2).unwrap();
+        let mut transport = Transport::with_tempo_map(memory.tempo_map().clone());
         transport.seek(start);
         transport.play();
         let mut engine = Engine::new(mixer, transport);
-        offline::render(&mut engine, document.sample_rate(), 64, frames).unwrap()
+        offline::render(&mut engine, memory.sample_rate(), 64, frames).unwrap()
     }
 
     /// Level of the last sample of a 400-frame render: ramps have settled.
-    fn steady_level(document: &Document, cache: &AudioCache) -> f32 {
-        render(document, cache, TimePosition::ZERO, 400).channel(0)[399].abs()
+    fn steady_level(memory: &Memory, cache: &AudioCache) -> f32 {
+        render(memory, cache, TimePosition::ZERO, 400).channel(0)[399].abs()
     }
 
     #[test]
@@ -404,12 +404,12 @@ mod tests {
         transport::start(&mut session).unwrap();
         let before = render_blocks(&mut session, 2).unwrap();
         assert!(before.peak() > 0.3);
-        // Mute the track in the document directly: mirrored on rebuild.
-        let vox = session.document.tracks()[0].id();
+        // Mute the track in the memory directly: mirrored on rebuild.
+        let vox = session.memory.tracks()[0].id();
         session
             .history
             .push(
-                &mut session.document,
+                &mut session.memory,
                 crate::primitives::session::commands::set_track_mute(vox, true),
             )
             .unwrap();
@@ -429,21 +429,21 @@ mod tests {
 
     #[test]
     fn handles_carry_the_document_state_onto_the_strips_and_sends() {
-        let mut document = Document::new("demo", R);
-        let lead = document.add_track("lead", TrackKind::Audio);
-        let fx = document.add_track("fx", TrackKind::Bus);
+        let mut memory = Memory::new("demo", R);
+        let lead = memory.add_track("lead", TrackKind::Audio);
+        let fx = memory.add_track("fx", TrackKind::Bus);
         {
-            let state = &mut document.track_mut(lead).unwrap().state;
+            let state = &mut memory.track_mut(lead).unwrap().state;
             state.volume_db = -6.0;
             state.pan = -0.5;
             state.mute = true;
         }
-        let send = document
+        let send = memory
             .add_send(lead, TrackSend::new(fx).level_db(-12.0))
             .unwrap();
-        document.send_mut(send).unwrap().state.enabled = false;
+        memory.send_mut(send).unwrap().state.enabled = false;
 
-        let (mixer, handles) = build_mixer(&document, &AudioCache::new(), 2).unwrap();
+        let (mixer, handles) = build_mixer(&memory, &AudioCache::new(), 2).unwrap();
         assert_eq!(handles.strips.len(), 2, "one handle per track and bus");
         assert_eq!(mixer.tracks().len(), 1);
         assert_eq!(mixer.buses().len(), 2, "fx and the master");
@@ -461,9 +461,9 @@ mod tests {
 
     #[test]
     fn only_unmuted_clips_with_audio_get_a_node() {
-        let mut document = Document::new("demo", R);
-        let vox = document.add_track("vox", TrackKind::Audio);
-        document
+        let mut memory = Memory::new("demo", R);
+        let vox = memory.add_track("vox", TrackKind::Audio);
+        memory
             .add_clip(
                 vox,
                 Clip::new(
@@ -485,17 +485,17 @@ mod tests {
             },
         )
         .unwrap();
-        document.add_clip(vox, missing).unwrap();
+        memory.add_clip(vox, missing).unwrap();
         let mut muted = audio_clip("muted", 200, 100);
         muted.muted = true;
-        document.add_clip(vox, muted).unwrap();
-        document
+        memory.add_clip(vox, muted).unwrap();
+        memory
             .add_clip(vox, audio_clip("present", 300, 100))
             .unwrap();
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(100, 0.5));
 
-        let (mixer, _) = build_mixer(&document, &cache, 2).unwrap();
+        let (mixer, _) = build_mixer(&memory, &cache, 2).unwrap();
         assert_eq!(
             mixer.graph().node_count(),
             5,
@@ -505,15 +505,15 @@ mod tests {
 
     #[test]
     fn an_audio_clip_plays_in_its_place() {
-        let mut document = Document::new("demo", R);
-        let track = document.add_track("vox", TrackKind::Audio);
-        document
+        let mut memory = Memory::new("demo", R);
+        let track = memory.add_track("vox", TrackKind::Audio);
+        memory
             .add_clip(track, audio_clip("take", 100, 200))
             .unwrap();
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(200, 0.25));
 
-        let audio = render(&document, &cache, TimePosition::ZERO, 400);
+        let audio = render(&memory, &cache, TimePosition::ZERO, 400);
         assert_eq!(audio.frames(), 400);
         assert!(
             audio.channel(0)[..100].iter().all(|&s| s == 0.0),
@@ -533,8 +533,8 @@ mod tests {
 
     #[test]
     fn a_midi_clip_plays_through_the_scheduled_synth() {
-        let mut document = Document::new("demo", R);
-        let track = document.add_track("keys", TrackKind::Midi);
+        let mut memory = Memory::new("demo", R);
+        let track = memory.add_track("keys", TrackKind::Midi);
         let notes = vec![MidiNote {
             beat: 0.0,
             length: 0.25,
@@ -550,9 +550,9 @@ mod tests {
             ClipSource::Midi { notes },
         )
         .unwrap();
-        document.add_clip(track, clip).unwrap();
+        memory.add_clip(track, clip).unwrap();
 
-        let audio = render(&document, &AudioCache::new(), TimePosition::ZERO, 12_000);
+        let audio = render(&memory, &AudioCache::new(), TimePosition::ZERO, 12_000);
         assert!(audio.peak() > 0.2, "peak {}", audio.peak());
         let tail = &audio.channel(0)[7000..];
         assert!(tail.iter().all(|&s| s.abs() < 1e-5), "tail not silent");
@@ -560,57 +560,57 @@ mod tests {
 
     #[test]
     fn routing_and_sends_follow_the_document() {
-        let mut document = Document::new("routing", R);
-        let vox = document.add_track("vox", TrackKind::Audio);
-        document.add_clip(vox, audio_clip("take", 0, 400)).unwrap();
+        let mut memory = Memory::new("routing", R);
+        let vox = memory.add_track("vox", TrackKind::Audio);
+        memory.add_clip(vox, audio_clip("take", 0, 400)).unwrap();
         let mut cache = AudioCache::new();
         cache.insert("tone.wav", tone_buffer(400, 0.5));
-        let direct = steady_level(&document, &cache);
+        let direct = steady_level(&memory, &cache);
         assert!(direct > 0.1, "direct {direct}");
 
         // Through a bus at -6.02 dB: half the level.
-        let sub = document.add_track("sub", TrackKind::Bus);
-        document.track_mut(sub).unwrap().state.volume_db = -6.0206;
-        document.set_track_output(vox, Some(sub)).unwrap();
-        let through_bus = steady_level(&document, &cache);
+        let sub = memory.add_track("sub", TrackKind::Bus);
+        memory.track_mut(sub).unwrap().state.volume_db = -6.0206;
+        memory.set_track_output(vox, Some(sub)).unwrap();
+        let through_bus = steady_level(&memory, &cache);
         assert!(
             (through_bus - direct * 0.5).abs() < 1e-3,
             "bus {through_bus} vs direct {direct}"
         );
 
         // Plus a unity post-fader send into a second bus: 1.5×.
-        let fx = document.add_track("fx", TrackKind::Bus);
-        let send = document.add_send(vox, TrackSend::new(fx)).unwrap();
-        let with_send = steady_level(&document, &cache);
+        let fx = memory.add_track("fx", TrackKind::Bus);
+        let send = memory.add_send(vox, TrackSend::new(fx)).unwrap();
+        let with_send = steady_level(&memory, &cache);
         assert!(
             (with_send - direct * 1.5).abs() < 1e-3,
             "send {with_send} vs direct {direct}"
         );
 
         // A send that is off adds nothing; a muted bus is silent.
-        document.send_mut(send).unwrap().state.enabled = false;
-        assert!((steady_level(&document, &cache) - through_bus).abs() < 1e-3);
-        document.send_mut(send).unwrap().state.enabled = true;
-        document.track_mut(fx).unwrap().state.mute = true;
-        assert!((steady_level(&document, &cache) - through_bus).abs() < 1e-3);
+        memory.send_mut(send).unwrap().state.enabled = false;
+        assert!((steady_level(&memory, &cache) - through_bus).abs() < 1e-3);
+        memory.send_mut(send).unwrap().state.enabled = true;
+        memory.track_mut(fx).unwrap().state.mute = true;
+        assert!((steady_level(&memory, &cache) - through_bus).abs() < 1e-3);
 
         // A bus chain, and a pre-fader send ignores the track fader.
-        let room = document.add_track("room", TrackKind::Bus);
-        document.set_track_output(sub, Some(room)).unwrap();
-        document.track_mut(room).unwrap().state.volume_db = -6.0206;
-        assert!((steady_level(&document, &cache) - direct * 0.25).abs() < 1e-3);
-        document.track_mut(fx).unwrap().state.mute = false;
-        document.send_mut(send).unwrap().pre_fader = true;
-        document.track_mut(vox).unwrap().state.volume_db = -100.0;
+        let room = memory.add_track("room", TrackKind::Bus);
+        memory.set_track_output(sub, Some(room)).unwrap();
+        memory.track_mut(room).unwrap().state.volume_db = -6.0206;
+        assert!((steady_level(&memory, &cache) - direct * 0.25).abs() < 1e-3);
+        memory.track_mut(fx).unwrap().state.mute = false;
+        memory.send_mut(send).unwrap().pre_fader = true;
+        memory.track_mut(vox).unwrap().state.volume_db = -100.0;
         // The pre-fader tap skips the track's fader and its constant-power
         // pan law; the bus's balance law is unity at centre, so the raw tone
         // comes through at 0.5.
-        let pre = steady_level(&document, &cache);
+        let pre = steady_level(&memory, &cache);
         assert!(
             (pre - 0.5).abs() < 1e-2,
             "only the pre-fader send is heard: {pre}"
         );
-        let (mixer, handles) = build_mixer(&document, &cache, 2).unwrap();
+        let (mixer, handles) = build_mixer(&memory, &cache, 2).unwrap();
         assert_eq!(mixer.sends().len(), 1);
         assert_eq!(handles.sends.len(), 1);
     }
@@ -620,14 +620,14 @@ mod tests {
         let mut session = session::create("keys", R, 64).unwrap();
         let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         transport::start(&mut session).unwrap();
-        let (mixer, _) = build_mixer(&session.document, &session.audio, 2).unwrap();
+        let (mixer, _) = build_mixer(&session.memory, &session.audio, 2).unwrap();
         assert_eq!(
             mixer.graph().node_count(),
             4,
             "master pair + track pair, no instrument"
         );
-        session.document.track_mut(keys).unwrap().state.monitor = true;
-        let (mixer, _) = build_mixer(&session.document, &session.audio, 2).unwrap();
+        session.memory.track_mut(keys).unwrap().state.monitor = true;
+        let (mixer, _) = build_mixer(&session.memory, &session.audio, 2).unwrap();
         assert_eq!(mixer.graph().node_count(), 5, "plus the live synth");
         assert_eq!(mixer.graph().midi_edges().len(), 1);
     }

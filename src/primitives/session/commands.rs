@@ -1,5 +1,5 @@
-//! Undoable edits of a [`Document`], for use with
-//! [`UndoStack<Document>`](crate::primitives::undo::UndoStack).
+//! Undoable edits of a [`Memory`], for use with
+//! [`UndoStack<Memory>`](crate::primitives::undo::UndoStack).
 //!
 //! Structural commands (`AddTrack`, `RemoveClip`, ...) restore removed
 //! objects under their original IDs and positions, so IDs held by the UI
@@ -13,33 +13,33 @@
 //! ```
 //! use superb::primitives::{SampleRate, TimeDuration, TimePosition};
 //! use superb::primitives::session::commands::{AddClip, AddTrack, MoveClip};
-//! use superb::primitives::session::{Clip, ClipSource, Document, Track, TrackKind};
+//! use superb::primitives::session::{Clip, ClipSource, Memory, Track, TrackKind};
 //! use superb::primitives::undo::UndoStack;
 //!
-//! let mut document = Document::new("demo", SampleRate::HZ_48K);
+//! let mut memory = Memory::new("demo", SampleRate::HZ_48K);
 //! let mut history = UndoStack::new();
 //!
-//! let track = document.allocate_track_id();
-//! history.push(&mut document, AddTrack::new(Track::with_id(track, "vox", TrackKind::Audio))).unwrap();
+//! let track = memory.allocate_track_id();
+//! history.push(&mut memory, AddTrack::new(Track::with_id(track, "vox", TrackKind::Audio))).unwrap();
 //!
-//! let clip = document.allocate_clip_id();
+//! let clip = memory.allocate_clip_id();
 //! let take = Clip::with_id(clip, "take 1", TimePosition::ZERO, TimeDuration::from_samples(1_000), ClipSource::Empty).unwrap();
-//! history.push(&mut document, AddClip::new(track, take)).unwrap();
+//! history.push(&mut memory, AddClip::new(track, take)).unwrap();
 //!
 //! // A drag: many small moves, one undo step.
 //! for x in [100, 200, 300] {
-//!     history.push(&mut document, MoveClip::new(clip, TimePosition::from_samples(x))).unwrap();
+//!     history.push(&mut memory, MoveClip::new(clip, TimePosition::from_samples(x))).unwrap();
 //! }
 //! history.seal();
 //! assert_eq!(history.undo_len(), 3);
-//! assert_eq!(document.clip(clip).unwrap().start().samples(), 300);
+//! assert_eq!(memory.clip(clip).unwrap().start().samples(), 300);
 //!
-//! history.undo(&mut document).unwrap();
-//! assert_eq!(document.clip(clip).unwrap().start().samples(), 0);
-//! history.undo(&mut document).unwrap();
-//! assert!(document.clip(clip).is_err());
-//! history.redo(&mut document).unwrap();
-//! assert!(document.clip(clip).is_ok(), "restored under the same id");
+//! history.undo(&mut memory).unwrap();
+//! assert_eq!(memory.clip(clip).unwrap().start().samples(), 0);
+//! history.undo(&mut memory).unwrap();
+//! assert!(memory.clip(clip).is_err());
+//! history.redo(&mut memory).unwrap();
+//! assert!(memory.clip(clip).is_ok(), "restored under the same id");
 //! ```
 
 use crate::primitives::transport::LoopRange;
@@ -49,7 +49,7 @@ use crate::primitives::{
     TimePosition, TrackId,
 };
 
-use crate::primitives::session::{Clip, Document, Insert, Marker, Track, TrackKind, TrackSend};
+use crate::primitives::session::{Clip, Insert, Marker, Memory, Track, TrackKind, TrackSend};
 
 /// `kind` values of the [`CoalesceKey`]s used by this module.
 pub mod keys {
@@ -112,8 +112,8 @@ fn not_applied() -> SuperbError {
 
 /// Adds a track (at the end, or at [`at`](AddTrack::at)).
 ///
-/// Give the track a pre-allocated ID (`Document::allocate_track_id`) to know
-/// it before pushing; otherwise the document assigns one on first apply and
+/// Give the track a pre-allocated ID (`Memory::allocate_track_id`) to know
+/// it before pushing; otherwise the memory assigns one on first apply and
 /// redo keeps it.
 pub struct AddTrack {
     track: Option<Track>,
@@ -143,32 +143,32 @@ impl AddTrack {
     }
 }
 
-impl Command<Document> for AddTrack {
+impl Command<Memory> for AddTrack {
     fn label(&self) -> &str {
         "Add track"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
         let track = self.track.as_ref().ok_or_else(not_applied)?.clone();
         let index = self
             .index
-            .unwrap_or(document.track_count())
-            .min(document.track_count());
-        self.id = document.insert_track(index, track)?;
+            .unwrap_or(memory.track_count())
+            .min(memory.track_count());
+        self.id = memory.insert_track(index, track)?;
         self.track = None;
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        self.index = Some(document.track_index(self.id)?);
-        self.track = Some(document.remove_track(self.id)?);
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        self.index = Some(memory.track_index(self.id)?);
+        self.track = Some(memory.remove_track(self.id)?);
         Ok(())
     }
 }
 
 /// Removes a track with its clips and sends; undo restores it at its old
 /// position. Removing a bus also detaches the tracks and sends routed into
-/// it (see [`Document::remove_track`]); undo re-attaches them.
+/// it (see [`Memory::remove_track`]); undo re-attaches them.
 pub struct RemoveTrack {
     id: TrackId,
     removed: Option<(usize, Track)>,
@@ -188,32 +188,32 @@ impl RemoveTrack {
     }
 }
 
-impl Command<Document> for RemoveTrack {
+impl Command<Memory> for RemoveTrack {
     fn label(&self) -> &str {
         "Remove track"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        let index = document.track_index(self.id)?;
-        if document.track(self.id)?.kind == TrackKind::Bus {
-            self.routed = document.tracks_routed_to(self.id).collect();
-            self.sends = document
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let index = memory.track_index(self.id)?;
+        if memory.track(self.id)?.kind == TrackKind::Bus {
+            self.routed = memory.tracks_routed_to(self.id).collect();
+            self.sends = memory
                 .sends_to(self.id)
                 .map(|(t, s)| (t, s.clone()))
                 .collect();
         }
-        self.removed = Some((index, document.remove_track(self.id)?));
+        self.removed = Some((index, memory.remove_track(self.id)?));
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
         let (index, track) = self.removed.take().ok_or_else(not_applied)?;
-        document.insert_track(index.min(document.track_count()), track)?;
+        memory.insert_track(index.min(memory.track_count()), track)?;
         for t in self.routed.drain(..) {
-            document.set_track_output(t, Some(self.id))?;
+            memory.set_track_output(t, Some(self.id))?;
         }
         for (t, send) in self.sends.drain(..) {
-            document.add_send(t, send)?;
+            memory.add_send(t, send)?;
         }
         Ok(())
     }
@@ -233,18 +233,18 @@ impl MoveTrack {
     }
 }
 
-impl Command<Document> for MoveTrack {
+impl Command<Memory> for MoveTrack {
     fn label(&self) -> &str {
         "Move track"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        self.from = Some(document.track_index(self.id)?);
-        document.move_track(self.id, self.to)
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        self.from = Some(memory.track_index(self.id)?);
+        memory.move_track(self.id, self.to)
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        document.move_track(self.id, self.from.ok_or_else(not_applied)?)
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        memory.move_track(self.id, self.from.ok_or_else(not_applied)?)
     }
 }
 
@@ -253,7 +253,7 @@ impl Command<Document> for MoveTrack {
 // ---------------------------------------------------------------------------
 
 /// Routes a track's output into a bus track (`None` = master). Validated
-/// by [`Document::set_track_output`]; undo restores the previous output.
+/// by [`Memory::set_track_output`]; undo restores the previous output.
 pub struct SetTrackOutput {
     track: TrackId,
     output: Option<TrackId>,
@@ -271,20 +271,20 @@ impl SetTrackOutput {
     }
 }
 
-impl Command<Document> for SetTrackOutput {
+impl Command<Memory> for SetTrackOutput {
     fn label(&self) -> &str {
         "Route track"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        let before = document.track(self.track)?.output();
-        document.set_track_output(self.track, self.output)?;
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let before = memory.track(self.track)?.output();
+        memory.set_track_output(self.track, self.output)?;
         self.previous = Some(before);
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        document.set_track_output(self.track, self.previous.ok_or_else(not_applied)?)
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        memory.set_track_output(self.track, self.previous.ok_or_else(not_applied)?)
     }
 }
 
@@ -297,7 +297,7 @@ pub struct AddSend {
 
 impl AddSend {
     /// Creates the command. Give the send a pre-allocated ID
-    /// (`Document::allocate_send_id`) to know it before pushing.
+    /// (`Memory::allocate_send_id`) to know it before pushing.
     pub fn new(track: TrackId, send: TrackSend) -> Self {
         Self {
             track,
@@ -312,20 +312,20 @@ impl AddSend {
     }
 }
 
-impl Command<Document> for AddSend {
+impl Command<Memory> for AddSend {
     fn label(&self) -> &str {
         "Add send"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
         let send = self.send.as_ref().ok_or_else(not_applied)?.clone();
-        self.id = document.add_send(self.track, send)?;
+        self.id = memory.add_send(self.track, send)?;
         self.send = None;
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        let (track, send) = document.remove_send(self.id)?;
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let (track, send) = memory.remove_send(self.id)?;
         self.track = track;
         self.send = Some(send);
         Ok(())
@@ -345,19 +345,19 @@ impl RemoveSend {
     }
 }
 
-impl Command<Document> for RemoveSend {
+impl Command<Memory> for RemoveSend {
     fn label(&self) -> &str {
         "Remove send"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        self.removed = Some(document.remove_send(self.id)?);
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        self.removed = Some(memory.remove_send(self.id)?);
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
         let (track, send) = self.removed.take().ok_or_else(not_applied)?;
-        document.add_send(track, send)?;
+        memory.add_send(track, send)?;
         Ok(())
     }
 }
@@ -377,7 +377,7 @@ pub struct AddInsert {
 
 impl AddInsert {
     /// Creates the command. Give the insert a pre-allocated ID
-    /// (`Document::allocate_insert_id`) to know it before pushing.
+    /// (`Memory::allocate_insert_id`) to know it before pushing.
     pub fn new(track: TrackId, insert: Insert) -> Self {
         Self {
             track,
@@ -399,23 +399,23 @@ impl AddInsert {
     }
 }
 
-impl Command<Document> for AddInsert {
+impl Command<Memory> for AddInsert {
     fn label(&self) -> &str {
         "Add insert"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
         let insert = self.insert.as_ref().ok_or_else(not_applied)?.clone();
         self.id = match self.index {
-            Some(index) => document.add_insert_at(self.track, index, insert)?,
-            None => document.add_insert(self.track, insert)?,
+            Some(index) => memory.add_insert_at(self.track, index, insert)?,
+            None => memory.add_insert(self.track, insert)?,
         };
         self.insert = None;
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        let (track, index, insert) = document.remove_insert(self.id)?;
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let (track, index, insert) = memory.remove_insert(self.id)?;
         self.track = track;
         self.index = Some(index);
         self.insert = Some(insert);
@@ -436,21 +436,21 @@ impl RemoveInsert {
     }
 }
 
-impl Command<Document> for RemoveInsert {
+impl Command<Memory> for RemoveInsert {
     fn label(&self) -> &str {
         "Remove insert"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        self.removed = Some(document.remove_insert(self.id)?);
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        self.removed = Some(memory.remove_insert(self.id)?);
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
         let (track, index, insert) = self.removed.take().ok_or_else(not_applied)?;
-        document.add_insert_at(
+        memory.add_insert_at(
             track,
-            index.min(document.track(track)?.inserts().len()),
+            index.min(memory.track(track)?.inserts().len()),
             insert,
         )?;
         Ok(())
@@ -471,26 +471,26 @@ impl MoveInsert {
     }
 }
 
-impl Command<Document> for MoveInsert {
+impl Command<Memory> for MoveInsert {
     fn label(&self) -> &str {
         "Move insert"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        let track = document.insert_owner(self.id)?;
-        let from = document
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let track = memory.insert_owner(self.id)?;
+        let from = memory
             .track(track)?
             .inserts()
             .iter()
             .position(|i| i.id() == self.id)
             .ok_or_else(not_applied)?;
-        document.move_insert(self.id, self.to)?;
+        memory.move_insert(self.id, self.to)?;
         self.from = Some(from);
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        document.move_insert(self.id, self.from.ok_or_else(not_applied)?)
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        memory.move_insert(self.id, self.from.ok_or_else(not_applied)?)
     }
 }
 
@@ -507,7 +507,7 @@ pub struct AddClip {
 
 impl AddClip {
     /// Creates the command. Give the clip a pre-allocated ID
-    /// (`Document::allocate_clip_id`) to know it before pushing.
+    /// (`Memory::allocate_clip_id`) to know it before pushing.
     pub fn new(track: TrackId, clip: Clip) -> Self {
         Self {
             track,
@@ -522,20 +522,20 @@ impl AddClip {
     }
 }
 
-impl Command<Document> for AddClip {
+impl Command<Memory> for AddClip {
     fn label(&self) -> &str {
         "Add clip"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
         let clip = self.clip.as_ref().ok_or_else(not_applied)?.clone();
-        self.id = document.add_clip(self.track, clip)?;
+        self.id = memory.add_clip(self.track, clip)?;
         self.clip = None;
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        let (track, clip) = document.remove_clip(self.id)?;
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let (track, clip) = memory.remove_clip(self.id)?;
         self.track = track;
         self.clip = Some(clip);
         Ok(())
@@ -555,19 +555,19 @@ impl RemoveClip {
     }
 }
 
-impl Command<Document> for RemoveClip {
+impl Command<Memory> for RemoveClip {
     fn label(&self) -> &str {
         "Remove clip"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        self.removed = Some(document.remove_clip(self.id)?);
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        self.removed = Some(memory.remove_clip(self.id)?);
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
         let (track, clip) = self.removed.take().ok_or_else(not_applied)?;
-        document.add_clip(track, clip)?;
+        memory.add_clip(track, clip)?;
         Ok(())
     }
 }
@@ -592,7 +592,7 @@ impl ArchiveClip {
     }
 }
 
-impl Command<Document> for ArchiveClip {
+impl Command<Memory> for ArchiveClip {
     fn label(&self) -> &str {
         if self.archived {
             "Archive clip"
@@ -601,16 +601,16 @@ impl Command<Document> for ArchiveClip {
         }
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        let clip = document.clip_mut(self.id)?;
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let clip = memory.clip_mut(self.id)?;
         self.previous = Some(clip.archived);
         clip.archived = self.archived;
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
         let previous = self.previous.ok_or_else(not_applied)?;
-        document.clip_mut(self.id)?.archived = previous;
+        memory.clip_mut(self.id)?.archived = previous;
         Ok(())
     }
 }
@@ -641,26 +641,26 @@ impl MoveClip {
     }
 }
 
-impl Command<Document> for MoveClip {
+impl Command<Memory> for MoveClip {
     fn label(&self) -> &str {
         "Move clip"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        let track = document.clip_track(self.id)?;
-        let start = document.clip(self.id)?.start();
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let track = memory.clip_track(self.id)?;
+        let start = memory.clip(self.id)?.start();
         if let Some(t) = self.track {
-            document.move_clip_to_track(self.id, t)?;
+            memory.move_clip_to_track(self.id, t)?;
         }
-        document.move_clip(self.id, self.start)?;
+        memory.move_clip(self.id, self.start)?;
         self.from = Some((track, start));
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
         let (track, start) = self.from.ok_or_else(not_applied)?;
-        document.move_clip_to_track(self.id, track)?;
-        document.move_clip(self.id, start)
+        memory.move_clip_to_track(self.id, track)?;
+        memory.move_clip(self.id, start)
     }
 
     fn coalesce_key(&self) -> Option<CoalesceKey> {
@@ -669,8 +669,8 @@ impl Command<Document> for MoveClip {
 
     fn merge(
         &mut self,
-        next: Box<dyn Command<Document>>,
-    ) -> core::result::Result<(), Box<dyn Command<Document>>> {
+        next: Box<dyn Command<Memory>>,
+    ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
         let next = next.downcast::<Self>()?;
         self.start = next.start;
         if next.track.is_some() {
@@ -698,20 +698,20 @@ impl ResizeClip {
     }
 }
 
-impl Command<Document> for ResizeClip {
+impl Command<Memory> for ResizeClip {
     fn label(&self) -> &str {
         "Resize clip"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        let before = document.clip(self.id)?.length();
-        document.resize_clip(self.id, self.length)?;
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let before = memory.clip(self.id)?.length();
+        memory.resize_clip(self.id, self.length)?;
         self.from = Some(before);
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        document.resize_clip(self.id, self.from.ok_or_else(not_applied)?)
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        memory.resize_clip(self.id, self.from.ok_or_else(not_applied)?)
     }
 
     fn coalesce_key(&self) -> Option<CoalesceKey> {
@@ -720,8 +720,8 @@ impl Command<Document> for ResizeClip {
 
     fn merge(
         &mut self,
-        next: Box<dyn Command<Document>>,
-    ) -> core::result::Result<(), Box<dyn Command<Document>>> {
+        next: Box<dyn Command<Memory>>,
+    ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
         let next = next.downcast::<Self>()?;
         self.length = next.length;
         Ok(())
@@ -740,7 +740,7 @@ pub struct AddMarker {
 
 impl AddMarker {
     /// Creates the command. Give the marker a pre-allocated ID
-    /// (`Document::allocate_marker_id`) to know it before pushing.
+    /// (`Memory::allocate_marker_id`) to know it before pushing.
     pub fn new(marker: Marker) -> Self {
         Self {
             id: marker.id(),
@@ -754,20 +754,20 @@ impl AddMarker {
     }
 }
 
-impl Command<Document> for AddMarker {
+impl Command<Memory> for AddMarker {
     fn label(&self) -> &str {
         "Add marker"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
         let marker = self.marker.as_ref().ok_or_else(not_applied)?.clone();
-        self.id = document.insert_marker(marker)?;
+        self.id = memory.insert_marker(marker)?;
         self.marker = None;
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        self.marker = Some(document.remove_marker(self.id)?);
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        self.marker = Some(memory.remove_marker(self.id)?);
         Ok(())
     }
 }
@@ -785,18 +785,18 @@ impl RemoveMarker {
     }
 }
 
-impl Command<Document> for RemoveMarker {
+impl Command<Memory> for RemoveMarker {
     fn label(&self) -> &str {
         "Remove marker"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        self.removed = Some(document.remove_marker(self.id)?);
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        self.removed = Some(memory.remove_marker(self.id)?);
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        document.insert_marker(self.removed.take().ok_or_else(not_applied)?)?;
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        memory.insert_marker(self.removed.take().ok_or_else(not_applied)?)?;
         Ok(())
     }
 }
@@ -819,20 +819,20 @@ impl MoveMarker {
     }
 }
 
-impl Command<Document> for MoveMarker {
+impl Command<Memory> for MoveMarker {
     fn label(&self) -> &str {
         "Move marker"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        let before = document.marker(self.id)?.position();
-        document.move_marker(self.id, self.position)?;
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let before = memory.marker(self.id)?.position();
+        memory.move_marker(self.id, self.position)?;
         self.from = Some(before);
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        document.move_marker(self.id, self.from.ok_or_else(not_applied)?)
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        memory.move_marker(self.id, self.from.ok_or_else(not_applied)?)
     }
 
     fn coalesce_key(&self) -> Option<CoalesceKey> {
@@ -841,8 +841,8 @@ impl Command<Document> for MoveMarker {
 
     fn merge(
         &mut self,
-        next: Box<dyn Command<Document>>,
-    ) -> core::result::Result<(), Box<dyn Command<Document>>> {
+        next: Box<dyn Command<Memory>>,
+    ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
         let next = next.downcast::<Self>()?;
         self.position = next.position;
         Ok(())
@@ -881,19 +881,19 @@ impl SetTempo {
     }
 }
 
-impl Command<Document> for SetTempo {
+impl Command<Memory> for SetTempo {
     fn label(&self) -> &str {
         "Set tempo"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        let before = document
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let before = memory
             .tempo_map()
             .tempo_points()
             .iter()
             .find(|p| p.beat == self.beat)
             .map(|p| (p.bpm, p.ramp));
-        let map = document.tempo_map_mut();
+        let map = memory.tempo_map_mut();
         if self.ramp {
             map.add_tempo_ramp(self.beat, self.bpm)?;
         } else {
@@ -903,8 +903,8 @@ impl Command<Document> for SetTempo {
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        let map = document.tempo_map_mut();
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let map = memory.tempo_map_mut();
         match self.previous.ok_or_else(not_applied)? {
             Some((bpm, true)) => map.add_tempo_ramp(self.beat, bpm),
             Some((bpm, false)) => map.add_tempo(self.beat, bpm),
@@ -918,8 +918,8 @@ impl Command<Document> for SetTempo {
 
     fn merge(
         &mut self,
-        next: Box<dyn Command<Document>>,
-    ) -> core::result::Result<(), Box<dyn Command<Document>>> {
+        next: Box<dyn Command<Memory>>,
+    ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
         let next = next.downcast::<Self>()?;
         self.bpm = next.bpm;
         self.ramp = next.ramp;
@@ -943,19 +943,19 @@ impl SetLoopRange {
     }
 }
 
-impl Command<Document> for SetLoopRange {
+impl Command<Memory> for SetLoopRange {
     fn label(&self) -> &str {
         "Set loop range"
     }
 
-    fn apply(&mut self, document: &mut Document) -> Result<()> {
-        self.previous = Some(document.loop_range());
-        document.set_loop_range(self.range);
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        self.previous = Some(memory.loop_range());
+        memory.set_loop_range(self.range);
         Ok(())
     }
 
-    fn revert(&mut self, document: &mut Document) -> Result<()> {
-        document.set_loop_range(self.previous.ok_or_else(not_applied)?);
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        memory.set_loop_range(self.previous.ok_or_else(not_applied)?);
         Ok(())
     }
 
@@ -965,8 +965,8 @@ impl Command<Document> for SetLoopRange {
 
     fn merge(
         &mut self,
-        next: Box<dyn Command<Document>>,
-    ) -> core::result::Result<(), Box<dyn Command<Document>>> {
+        next: Box<dyn Command<Memory>>,
+    ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
         let next = next.downcast::<Self>()?;
         self.range = next.range;
         Ok(())
@@ -984,14 +984,14 @@ fn track_property<V: Clone + Send + Sync + 'static>(
     value: V,
     get: impl Fn(&Track) -> V + Send + Sync + 'static,
     set: impl Fn(&mut Track, V) -> Result<()> + Send + Sync + 'static,
-) -> PropertyEdit<Document, V> {
+) -> PropertyEdit<Memory, V> {
     let fallback = value.clone();
     PropertyEdit::new(
         label,
         Some(CoalesceKey::new(kind, id.raw())),
         value,
-        move |s: &Document| s.track(id).map(&get).unwrap_or_else(|_| fallback.clone()),
-        move |s: &mut Document, v| set(s.track_mut(id)?, v),
+        move |s: &Memory| s.track(id).map(&get).unwrap_or_else(|_| fallback.clone()),
+        move |s: &mut Memory, v| set(s.track_mut(id)?, v),
     )
 }
 
@@ -1002,28 +1002,28 @@ fn clip_property<V: Clone + Send + Sync + 'static>(
     value: V,
     get: impl Fn(&Clip) -> V + Send + Sync + 'static,
     set: impl Fn(&mut Clip, V) + Send + Sync + 'static,
-) -> PropertyEdit<Document, V> {
+) -> PropertyEdit<Memory, V> {
     let fallback = value.clone();
     PropertyEdit::new(
         label,
         Some(CoalesceKey::new(kind, id.raw())),
         value,
-        move |s: &Document| s.clip(id).map(&get).unwrap_or_else(|_| fallback.clone()),
-        move |s: &mut Document, v| {
+        move |s: &Memory| s.clip(id).map(&get).unwrap_or_else(|_| fallback.clone()),
+        move |s: &mut Memory, v| {
             set(s.clip_mut(id)?, v);
             Ok(())
         },
     )
 }
 
-/// Renames the document.
-pub fn set_session_name(name: impl Into<String>) -> PropertyEdit<Document, String> {
+/// Renames the session (the memory's name).
+pub fn set_session_name(name: impl Into<String>) -> PropertyEdit<Memory, String> {
     PropertyEdit::new(
-        "Rename document",
+        "Rename session",
         Some(CoalesceKey::new(keys::SESSION_NAME, 0)),
         name.into(),
-        |s: &Document| s.name().to_owned(),
-        |s: &mut Document, v| {
+        |s: &Memory| s.name().to_owned(),
+        |s: &mut Memory, v| {
             s.set_name(v);
             Ok(())
         },
@@ -1031,7 +1031,7 @@ pub fn set_session_name(name: impl Into<String>) -> PropertyEdit<Document, Strin
 }
 
 /// Renames a track.
-pub fn set_track_name(id: TrackId, name: impl Into<String>) -> PropertyEdit<Document, String> {
+pub fn set_track_name(id: TrackId, name: impl Into<String>) -> PropertyEdit<Memory, String> {
     track_property(
         "Rename track",
         keys::TRACK_NAME,
@@ -1046,7 +1046,7 @@ pub fn set_track_name(id: TrackId, name: impl Into<String>) -> PropertyEdit<Docu
 }
 
 /// Sets a track's fader gain in dB. Rejects non-finite values.
-pub fn set_track_volume_db(id: TrackId, gain_db: f32) -> PropertyEdit<Document, f32> {
+pub fn set_track_volume_db(id: TrackId, gain_db: f32) -> PropertyEdit<Memory, f32> {
     track_property(
         "Set track gain",
         keys::TRACK_VOLUME,
@@ -1064,7 +1064,7 @@ pub fn set_track_volume_db(id: TrackId, gain_db: f32) -> PropertyEdit<Document, 
 }
 
 /// Sets a track's pan (`-1.0..=1.0`).
-pub fn set_track_pan(id: TrackId, pan: f32) -> PropertyEdit<Document, f32> {
+pub fn set_track_pan(id: TrackId, pan: f32) -> PropertyEdit<Memory, f32> {
     track_property(
         "Set track pan",
         keys::TRACK_PAN,
@@ -1082,7 +1082,7 @@ pub fn set_track_pan(id: TrackId, pan: f32) -> PropertyEdit<Document, f32> {
 }
 
 /// Mutes or unmutes a track.
-pub fn set_track_mute(id: TrackId, muted: bool) -> PropertyEdit<Document, bool> {
+pub fn set_track_mute(id: TrackId, muted: bool) -> PropertyEdit<Memory, bool> {
     track_property(
         "Mute track",
         keys::TRACK_MUTE,
@@ -1097,7 +1097,7 @@ pub fn set_track_mute(id: TrackId, muted: bool) -> PropertyEdit<Document, bool> 
 }
 
 /// Solos or unsolos a track.
-pub fn set_track_solo(id: TrackId, soloed: bool) -> PropertyEdit<Document, bool> {
+pub fn set_track_solo(id: TrackId, soloed: bool) -> PropertyEdit<Memory, bool> {
     track_property(
         "Solo track",
         keys::TRACK_SOLO,
@@ -1112,7 +1112,7 @@ pub fn set_track_solo(id: TrackId, soloed: bool) -> PropertyEdit<Document, bool>
 }
 
 /// Arms or disarms a track for recording.
-pub fn set_track_arm(id: TrackId, arm: bool) -> PropertyEdit<Document, bool> {
+pub fn set_track_arm(id: TrackId, arm: bool) -> PropertyEdit<Memory, bool> {
     track_property(
         "Arm track",
         keys::TRACK_ARM,
@@ -1127,7 +1127,7 @@ pub fn set_track_arm(id: TrackId, arm: bool) -> PropertyEdit<Document, bool> {
 }
 
 /// Turns a MIDI track's live monitoring on or off.
-pub fn set_track_monitor(id: TrackId, monitor: bool) -> PropertyEdit<Document, bool> {
+pub fn set_track_monitor(id: TrackId, monitor: bool) -> PropertyEdit<Memory, bool> {
     track_property(
         "Monitor track",
         keys::TRACK_MONITOR,
@@ -1142,7 +1142,7 @@ pub fn set_track_monitor(id: TrackId, monitor: bool) -> PropertyEdit<Document, b
 }
 
 /// Sets a track's colour.
-pub fn set_track_color(id: TrackId, color: Option<u32>) -> PropertyEdit<Document, Option<u32>> {
+pub fn set_track_color(id: TrackId, color: Option<u32>) -> PropertyEdit<Memory, Option<u32>> {
     track_property(
         "Set track colour",
         keys::TRACK_COLOR,
@@ -1163,19 +1163,19 @@ fn send_property<V: Clone + Send + Sync + 'static>(
     value: V,
     get: impl Fn(&TrackSend) -> V + Send + Sync + 'static,
     set: impl Fn(&mut TrackSend, V) -> Result<()> + Send + Sync + 'static,
-) -> PropertyEdit<Document, V> {
+) -> PropertyEdit<Memory, V> {
     let fallback = value.clone();
     PropertyEdit::new(
         label,
         Some(CoalesceKey::new(kind, id.raw())),
         value,
-        move |s: &Document| s.send(id).map(&get).unwrap_or_else(|_| fallback.clone()),
-        move |s: &mut Document, v| set(s.send_mut(id)?, v),
+        move |s: &Memory| s.send(id).map(&get).unwrap_or_else(|_| fallback.clone()),
+        move |s: &mut Memory, v| set(s.send_mut(id)?, v),
     )
 }
 
 /// Sets a send's level in dB. Rejects non-finite values. Coalesces.
-pub fn set_send_level_db(id: SendId, level_db: f32) -> PropertyEdit<Document, f32> {
+pub fn set_send_level_db(id: SendId, level_db: f32) -> PropertyEdit<Memory, f32> {
     send_property(
         "Set send level",
         keys::SEND_LEVEL,
@@ -1193,7 +1193,7 @@ pub fn set_send_level_db(id: SendId, level_db: f32) -> PropertyEdit<Document, f3
 }
 
 /// Enables or disables a send.
-pub fn set_send_enabled(id: SendId, enabled: bool) -> PropertyEdit<Document, bool> {
+pub fn set_send_enabled(id: SendId, enabled: bool) -> PropertyEdit<Memory, bool> {
     send_property(
         "Enable send",
         keys::SEND_ENABLED,
@@ -1208,7 +1208,7 @@ pub fn set_send_enabled(id: SendId, enabled: bool) -> PropertyEdit<Document, boo
 }
 
 /// Switches a send between pre-fader (`true`) and post-fader.
-pub fn set_send_pre_fader(id: SendId, pre_fader: bool) -> PropertyEdit<Document, bool> {
+pub fn set_send_pre_fader(id: SendId, pre_fader: bool) -> PropertyEdit<Memory, bool> {
     send_property(
         "Set send tap",
         keys::SEND_PRE_FADER,
@@ -1229,14 +1229,14 @@ fn insert_property<V: Clone + Send + Sync + 'static>(
     value: V,
     get: impl Fn(&Insert) -> V + Send + Sync + 'static,
     set: impl Fn(&mut Insert, V) + Send + Sync + 'static,
-) -> PropertyEdit<Document, V> {
+) -> PropertyEdit<Memory, V> {
     let fallback = value.clone();
     PropertyEdit::new(
         label,
         Some(CoalesceKey::new(kind, id.raw())),
         value,
-        move |s: &Document| s.insert(id).map(&get).unwrap_or_else(|_| fallback.clone()),
-        move |s: &mut Document, v| {
+        move |s: &Memory| s.insert(id).map(&get).unwrap_or_else(|_| fallback.clone()),
+        move |s: &mut Memory, v| {
             set(s.insert_mut(id)?, v);
             Ok(())
         },
@@ -1244,7 +1244,7 @@ fn insert_property<V: Clone + Send + Sync + 'static>(
 }
 
 /// Bypasses or re-enables an insert.
-pub fn set_insert_bypass(id: InsertId, bypass: bool) -> PropertyEdit<Document, bool> {
+pub fn set_insert_bypass(id: InsertId, bypass: bool) -> PropertyEdit<Memory, bool> {
     insert_property(
         "Bypass insert",
         keys::INSERT_BYPASS,
@@ -1258,11 +1258,7 @@ pub fn set_insert_bypass(id: InsertId, bypass: bool) -> PropertyEdit<Document, b
 /// Sets one plugin parameter on an insert. Consecutive edits of the same
 /// parameter coalesce (a knob drag is one undo step); undoing an edit of a
 /// parameter that had no stored value clears it again.
-pub fn set_insert_param(
-    id: InsertId,
-    param: u32,
-    value: f64,
-) -> PropertyEdit<Document, Option<f64>> {
+pub fn set_insert_param(id: InsertId, param: u32, value: f64) -> PropertyEdit<Memory, Option<f64>> {
     insert_property(
         "Set plugin parameter",
         keys::INSERT_PARAM_BASE + param as u64,
@@ -1279,7 +1275,7 @@ pub fn set_insert_param(
 }
 
 /// Renames a clip.
-pub fn set_clip_name(id: ClipId, name: impl Into<String>) -> PropertyEdit<Document, String> {
+pub fn set_clip_name(id: ClipId, name: impl Into<String>) -> PropertyEdit<Memory, String> {
     clip_property(
         "Rename clip",
         keys::CLIP_NAME,
@@ -1291,7 +1287,7 @@ pub fn set_clip_name(id: ClipId, name: impl Into<String>) -> PropertyEdit<Docume
 }
 
 /// Sets a clip's gain in dB.
-pub fn set_clip_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Document, f32> {
+pub fn set_clip_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Memory, f32> {
     clip_property(
         "Set clip gain",
         keys::CLIP_GAIN,
@@ -1303,7 +1299,7 @@ pub fn set_clip_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Document, f32>
 }
 
 /// Mutes or unmutes a clip.
-pub fn set_clip_mute(id: ClipId, muted: bool) -> PropertyEdit<Document, bool> {
+pub fn set_clip_mute(id: ClipId, muted: bool) -> PropertyEdit<Memory, bool> {
     clip_property(
         "Mute clip",
         keys::CLIP_MUTE,
@@ -1315,19 +1311,19 @@ pub fn set_clip_mute(id: ClipId, muted: bool) -> PropertyEdit<Document, bool> {
 }
 
 /// Renames a marker.
-pub fn set_marker_name(id: MarkerId, name: impl Into<String>) -> PropertyEdit<Document, String> {
+pub fn set_marker_name(id: MarkerId, name: impl Into<String>) -> PropertyEdit<Memory, String> {
     let name = name.into();
     let fallback = name.clone();
     PropertyEdit::new(
         "Rename marker",
         Some(CoalesceKey::new(keys::MARKER_NAME, id.raw())),
         name,
-        move |s: &Document| {
+        move |s: &Memory| {
             s.marker(id)
                 .map(|m| m.name.clone())
                 .unwrap_or_else(|_| fallback.clone())
         },
-        move |s: &mut Document, v| {
+        move |s: &mut Memory, v| {
             s.marker_mut(id)?.name = v;
             Ok(())
         },
@@ -1354,8 +1350,8 @@ mod tests {
         .unwrap()
     }
 
-    fn base() -> (Document, UndoStack<Document>, TrackId, ClipId) {
-        let mut s = Document::new("t", R);
+    fn base() -> (Memory, UndoStack<Memory>, TrackId, ClipId) {
+        let mut s = Memory::new("t", R);
         let t = s.add_track("a", TrackKind::Audio);
         let c = s.allocate_clip_id();
         s.add_clip(t, make_clip(c, 100, 50)).unwrap();
@@ -1376,7 +1372,7 @@ mod tests {
         assert_eq!(s.track_index(b).unwrap(), 0);
         assert_eq!(s.track(b).unwrap().name, "b");
 
-        // Without a pre-allocated id the document assigns one; redo keeps it.
+        // Without a pre-allocated id the memory assigns one; redo keeps it.
         h.push(&mut s, AddTrack::new(Track::new("c", TrackKind::Bus)))
             .unwrap();
         let c = s.tracks().last().unwrap().id();
@@ -1606,7 +1602,7 @@ mod tests {
     #[test]
     fn property_edits_validate_and_coalesce() {
         let (mut s, mut h, a, clip) = base();
-        h.push(&mut s, set_session_name("document")).unwrap();
+        h.push(&mut s, set_session_name("memory")).unwrap();
         h.push(&mut s, set_track_name(a, "vox")).unwrap();
         h.push(&mut s, set_track_volume_db(a, -3.0)).unwrap();
         h.push(&mut s, set_track_volume_db(a, -6.0)).unwrap();
@@ -1636,7 +1632,7 @@ mod tests {
         );
         let i = s.clip(clip).unwrap();
         assert_eq!((i.name.as_str(), i.gain_db, i.muted), ("take", -2.0, true));
-        assert_eq!(s.name(), "document");
+        assert_eq!(s.name(), "memory");
         while h.undo(&mut s).unwrap() {}
         let t = s.track(a).unwrap();
         assert_eq!(
@@ -1784,7 +1780,7 @@ mod tests {
         h.push(&mut s, AddInsert::new(a, Insert::new(plugin("gate"))).at(0))
             .unwrap();
         let gate = s.track(a).unwrap().inserts()[0].id();
-        let chain = |s: &Document| -> Vec<InsertId> {
+        let chain = |s: &Memory| -> Vec<InsertId> {
             s.track(a)
                 .unwrap()
                 .inserts()
