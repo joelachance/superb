@@ -11,6 +11,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
 use super::{stream_instant_us, validate_io_config, DeviceInfo};
+use crate::primitives::io::BlockStart;
 use crate::primitives::io::Engine;
 
 /// Lists output devices of the default host.
@@ -76,23 +77,25 @@ impl OutputStream {
     /// `block` arrives with the callback's frame count (never more than
     /// `config.max_block_frames`) and `config.channels` channels; write
     /// planar audio into it. Use [`open_timed`](OutputStream::open_timed) to
-    /// also receive the callback's stream timestamp.
+    /// also receive the block's start on the stream clock.
     pub fn open<F>(config: &OutputConfig, mut render: F) -> Result<Self>
     where
         F: FnMut(&mut PlanarBuffer) + Send + 'static,
     {
-        Self::open_timed(config, move |block, _block_start_us| render(block))
+        Self::open_timed(config, move |block, _start| render(block))
     }
 
     /// Like [`open`](OutputStream::open) but the closure also receives the
-    /// block's start time in microseconds on cpal's stream clock
-    /// (`OutputCallbackInfo::timestamp().callback`, advanced per chunk when a
-    /// callback is split at `max_block_frames`). Pass it to
-    /// [`Engine::set_midi_block_start_us`] before rendering to place queued
-    /// MIDI stamped on the same clock.
+    /// block's [`BlockStart`]: `OutputCallbackInfo::timestamp().callback`
+    /// and `.playback` in microseconds on cpal's stream clock, both advanced
+    /// per chunk when a callback is split at `max_block_frames`. Pass the
+    /// callback instant to [`Engine::set_midi_block_start_us`] before
+    /// rendering to place queued MIDI stamped on the same clock; the
+    /// playback instant is where the block meets the converter, which a
+    /// recording lines captured audio up with.
     pub fn open_timed<F>(config: &OutputConfig, render: F) -> Result<Self>
     where
-        F: FnMut(&mut PlanarBuffer, u64) + Send + 'static,
+        F: FnMut(&mut PlanarBuffer, BlockStart) + Send + 'static,
     {
         let load = Arc::new(LoadMeter::new());
         Self::open_with_meter(config, render, load)
@@ -104,7 +107,7 @@ impl OutputStream {
         load: Arc<LoadMeter>,
     ) -> Result<Self>
     where
-        F: FnMut(&mut PlanarBuffer, u64) + Send + 'static,
+        F: FnMut(&mut PlanarBuffer, BlockStart) + Send + 'static,
     {
         validate_io_config(config.channels, config.max_block_frames, "output config")?;
         let host = cpal::default_host();
@@ -256,7 +259,7 @@ fn build<T, F>(
 ) -> Result<cpal::Stream>
 where
     T: SizedSample + FromSample<f32>,
-    F: FnMut(&mut PlanarBuffer, u64) + Send + 'static,
+    F: FnMut(&mut PlanarBuffer, BlockStart) + Send + 'static,
 {
     let mut planar = PlanarBuffer::new(channels, max_block);
     let mut marked = false;
@@ -267,6 +270,7 @@ where
             marked = true;
         }
         let callback_us = stream_instant_us(info.timestamp().callback);
+        let playback_us = stream_instant_us(info.timestamp().playback);
         let total = data.len() / channels;
         let mut done = 0;
         while done < total {
@@ -274,8 +278,14 @@ where
             // Capacity is max_block, so this never fails.
             let _ = planar.set_frames(n);
             planar.clear();
-            let chunk_start_us = callback_us.saturating_add((done as u128 * 1_000_000 / hz) as u64);
-            render(&mut planar, chunk_start_us);
+            let chunk_us = (done as u128 * 1_000_000 / hz) as u64;
+            render(
+                &mut planar,
+                BlockStart {
+                    callback_us: callback_us.saturating_add(chunk_us),
+                    playback_us: playback_us.saturating_add(chunk_us),
+                },
+            );
             let out = &mut data[done * channels..(done + n) * channels];
             for ch in 0..channels {
                 let plane = planar.channel(ch);
@@ -305,8 +315,8 @@ where
     let load = engine.load();
     OutputStream::open_with_meter(
         config,
-        move |block: &mut PlanarBuffer, block_start_us: u64| {
-            engine.set_midi_block_start_us(Some(block_start_us));
+        move |block: &mut PlanarBuffer, start: BlockStart| {
+            engine.set_midi_block_start_us(Some(start.callback_us));
             if engine.render(block).is_err() {
                 block.clear();
             }

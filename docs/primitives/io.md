@@ -33,12 +33,12 @@ resampling and bounce/export helpers.
   (transport commands over a queue, `publish` of prepared graphs, software
   MIDI, position and state atomics, `reclaim` of retired graphs) and
   `AudioThread` is the audio side (`tick` renders one block, `tick_timed`
-  one that starts at a device-clock instant; with `devices`,
+  one that starts at a `BlockStart` on the device clock; with `devices`,
   `run_on_device` moves it into an output callback). When the transport
   starts rolling under a device clock the audio thread publishes a
-  `RollStart` (position and instant) that `EngineHandle::roll_start`
-  reads, and a recording lines its first frame up with it. This is what
-  the `transport` flow drives.
+  `RollStart` (position and playback instant) that
+  `EngineHandle::roll_start` reads, and a recording lines its first frame
+  up with it. This is what the `transport` flow drives.
 * `LiveInput` — captured audio on its way into a running engine:
   `Engine::set_live_input` (or `EngineCommand::LiveInput(Some(..))` on a
   live engine, `None` to detach; a replaced or detached input comes back
@@ -260,13 +260,16 @@ is `sort_by_frame`d, so explicit `midi_mut().push(MidiEvent { frame, .. })`
 still works alongside the queue. Nothing here allocates.
 
 **cpal wiring (feature `devices`).** `device::build`'s data callback reads
-`OutputCallbackInfo::timestamp().callback` (a `StreamInstant`), converts it
-to microseconds and passes it to the render closure; `OutputStream::open_timed`
-exposes that `(block, block_start_us)` closure publicly and `open` wraps it
-for callers that don't care. `run_engine` calls
-`engine.set_midi_block_start_us(Some(block_start_us))` before every
-`engine.render`. Callbacks larger than `max_block_frames` are rendered in
-chunks and each chunk's start is advanced by `chunk_offset * 1e6 / hz`.
+`OutputCallbackInfo::timestamp().callback` and `.playback` (both
+`StreamInstant`s), converts them to microseconds and passes them to the
+render closure as a `BlockStart`; `OutputStream::open_timed` exposes that
+`(block, start)` closure publicly and `open` wraps it for callers that
+don't care. `run_engine` calls
+`engine.set_midi_block_start_us(Some(start.callback_us))` before every
+`engine.render`; `AudioThread::tick_timed` does the same and publishes
+`start.playback_us` as the `RollStart` when the transport begins rolling.
+Callbacks larger than `max_block_frames` are rendered in chunks and each
+chunk's instants are advanced by `chunk_offset * 1e6 / hz`.
 
 **Clock limitation (intentional).** cpal's `StreamInstant` counts from the
 stream's own epoch; midir's `TimestampedMessage::timestamp_us` counts from

@@ -10,9 +10,6 @@
 //!   strip, so you hear yourself while recording
 //! - `record::stop` writes the audio as a WAV file into the session folder,
 //!   places the clips as one undo step and stops the transport
-//! - `record::offset` moves every take earlier by the interface's round
-//!   trip, which `record::calibrate` measures with a loopback (feature
-//!   `devices`)
 //!
 //! ```text
 //! cargo run --example record_take
@@ -37,12 +34,6 @@ fn main() -> Result<()> {
     track::arm(&mut session, vox, true)?;
     track::input(&mut session, vox, Some(Input::Mono(0)))?;
     println!("vox armed: {}", session.memory.track(vox)?.state.arm);
-
-    // A take comes back late by the trip through the interface. The
-    // recording offset moves it earlier by that much: measure it once with
-    // `record::calibrate` (a loopback cable, feature `devices`) or type it
-    // in. Here 2 ms, so the first 96 frames we feed are left out.
-    record::offset(&mut session, TimeDuration::from_seconds(0.002, rate))?;
 
     // Hear yourself: a monitoring audio track plays the session's audio
     // input through its strip. With a real interface `devices::input` opens
@@ -150,8 +141,10 @@ fn main() -> Result<()> {
             println!("no input device to record from");
         } else {
             track::arm(&mut session, vox, true)?;
-            // With `devices::output` playing too, `record::calibrate` would
-            // first measure the round trip through a loopback cable.
+            // Through a device the take is lined up with the transport by the
+            // stream clock; `record::calibrate` (an output looped into the
+            // input, `devices::output` playing) measures what the clock
+            // cannot know and keeps it with the session.
             // The default input; a thread gathers the audio.
             record::start(&mut session, record::Source::Device(None))?;
             std::thread::sleep(std::time::Duration::from_millis(500));

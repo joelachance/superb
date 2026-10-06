@@ -13,10 +13,13 @@
 //!
 //! # MIDI / capture clocks
 //!
-//! Output callbacks stamp MIDI via cpal's `OutputCallbackInfo::timestamp().callback`
-//! (see [`OutputStream::open_timed`]). Input callbacks stamp blocks with
+//! Output callbacks receive a `BlockStart`: cpal's
+//! `OutputCallbackInfo::timestamp().callback`, which stamps MIDI, and
+//! `.playback`, where the block meets the converter (see
+//! [`OutputStream::open_timed`]). Input callbacks stamp blocks with
 //! `InputCallbackInfo::timestamp().capture` — the ADC capture instant — via
-//! [`InputStream::open_timed`]. cpal stream clocks and midir's connection clock
+//! [`InputStream::open_timed`]. A recording lines the two up, so the
+//! buffers in and out fall out of where a take lands. cpal stream clocks and midir's connection clock
 //! are different epochs; see the crate docs for the MIDI caveat.
 
 use crate::primitives::buffers::PlanarBuffer;

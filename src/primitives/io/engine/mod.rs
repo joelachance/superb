@@ -6,8 +6,9 @@ mod live;
 
 pub use input::LiveInput;
 pub use live::{
-    AudioThread, EngineCommand, EngineHandle, RollStart, COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS,
-    MIDI_CAPACITY, RETIRED_INPUT_CAPACITY, RETIRED_MAP_CAPACITY, SWAP_CAPACITY,
+    AudioThread, BlockStart, EngineCommand, EngineHandle, RollStart, COMMAND_CAPACITY,
+    MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY, RETIRED_INPUT_CAPACITY, RETIRED_MAP_CAPACITY,
+    SWAP_CAPACITY,
 };
 
 use std::sync::atomic::{AtomicUsize, Ordering};

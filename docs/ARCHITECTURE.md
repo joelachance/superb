@@ -185,9 +185,11 @@ audio thread. The swap queue holds two graphs; `session::steps::rebuild` reclaim
 retired graphs before building and, while the audio thread is still owned
 by the `Session`, applies the swap itself so repeated rebuilds never back
 up. When a device drives it, the audio thread publishes where and when
-the transport began rolling on the device clock (`RollStart`); a recording
-lines its first captured frame up with that, and the session's recording
-offset then moves the take earlier by the measured round trip.
+the transport began rolling on the device clock (`RollStart`, at the
+block's playback instant); captured blocks carry their capture instant, so
+a recording that lines its first frame up with the roll start has taken
+the buffers in and out back without a setting. What the clock cannot know
+is measured once by `record::calibrate` and kept with the session.
 
 **Automation.** Envelope edits allocate and belong on the control thread.
 The read path evaluates into atomics or a caller's scratch buffer without

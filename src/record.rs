@@ -12,11 +12,13 @@
 //! you fill yourself waits for [`collect`], which
 //! [`session::steps::render_blocks`] calls after every block it renders.
 //!
-//! A take comes back late by the trip through the interface: [`offset`]
-//! says how much earlier to place it, and `calibrate` (feature `devices`)
-//! measures that once with a loopback cable. A device recording also
-//! lines its first frame up with where the transport began rolling, on
-//! the device clock, so the capture's own start never shifts the take.
+//! A device take lands where it was played: its first frame is lined up
+//! with where the transport began rolling, comparing the input's capture
+//! instants with the output's playback instants on the device clock, so
+//! the buffers in and out are taken back by themselves. What that clock
+//! cannot know (converters, a USB hop) `calibrate` (feature `devices`)
+//! measures once with a loopback cable and keeps as the session's
+//! recording offset.
 //!
 //! Made of `superb::primitives::io::capture` (the queue), the session's
 //! audio input (`devices::input`, feature `devices`), the audio held on the
@@ -357,31 +359,18 @@ pub fn punch_out(session: &mut Session, at: Option<TimePosition>) -> Result<()> 
     session::edit(session, SetPunch::new(PunchPoint::Out, at))
 }
 
-/// Sets the recording offset: how much earlier than it arrived a take is
-/// placed, taking back the trip through the interface (what you hear
-/// leaves late, what you play comes back late, and the take lands late by
-/// both). Positive moves takes earlier; `TimeDuration::ZERO` places them
-/// where they arrived. Measure it with `calibrate` (feature `devices`), or
-/// type in a number you know. State, like arm: saved with the session, not
-/// an undo step. Applies from the next [`stop`].
-///
-/// Made of: `Memory::set_recording_offset` through `session::set_state`.
-pub fn offset(session: &mut Session, offset: TimeDuration) -> Result<()> {
-    session::set_state(session, |m| {
-        m.set_recording_offset(offset);
-        Ok(())
-    })
-}
-
-/// Measures the recording offset with a loopback and sets it. Connect an
-/// output of the interface to an input (a cable, or a microphone at the
+/// Measures what the device clock cannot know about the trip through the
+/// interface, and keeps it as the session's recording offset. A device
+/// take is already lined up by the stream clock, which takes back the
+/// buffers in and out; converters and a USB hop add a little more. Connect
+/// an output of the interface to an input (a cable, or a microphone at the
 /// speaker), play the session through a device (`devices::output`) with the
 /// input open (`devices::input`), and call this: it plays one click through
 /// a bare mixer, records what comes back, finds the click in it and stores
-/// how late it arrived as the [`offset`]. Takes about two seconds and
-/// returns the measurement. The session's mixer, tempo map and playhead are
-/// put back afterwards. Measure again after changing the interface or its
-/// buffer size.
+/// how late it still arrived. Takes about two seconds and returns the
+/// measurement; a few samples on a good interface. The session's mixer,
+/// tempo map and playhead are put back afterwards. Measure again after
+/// changing the interface.
 ///
 /// Made of: a throwaway `Memory` with the metronome on at 30 bpm →
 /// `session::steps::build_mixer` → `publish` and
@@ -389,7 +378,8 @@ pub fn offset(session: &mut Session, offset: TimeDuration) -> Result<()> {
 /// recording queue and a collector thread → `Seek` to one second before
 /// beat zero → `Record`, wait, `Stop` → `Collector::finish` → frame 0 lined
 /// up with the `RollStart` → the click found → `session::steps::rebuild`
-/// and `Seek` back → [`offset`].
+/// and `Seek` back → `Memory::set_recording_offset` through
+/// `session::set_state`.
 #[cfg(feature = "devices")]
 pub fn calibrate(session: &mut Session) -> Result<TimeDuration> {
     if session.recording.is_some() {
@@ -416,7 +406,10 @@ pub fn calibrate(session: &mut Session) -> Result<TimeDuration> {
     session::steps::rebuild(session)?;
     session.engine.send(EngineCommand::Seek(playhead))?;
     let measured = measured?;
-    offset(session, measured)?;
+    session::set_state(session, |m| {
+        m.set_recording_offset(measured);
+        Ok(())
+    })?;
     Ok(measured)
 }
 
@@ -451,8 +444,8 @@ pub fn collect(session: &mut Session) -> usize {
 /// Made of: `EngineHandle::send(Stop)` → drain the queue or
 /// `Collector::finish` (and hand the audio input its queue back) → frame 0
 /// lined up with the `RollStart` when the device clock gives one → the take
-/// moved earlier by [`offset`] → trimmed to the punch points → the
-/// planes become one buffer → per
+/// moved earlier by the recording offset `calibrate` measured → trimmed to
+/// the punch points → the planes become one buffer → per
 /// track, a file name nothing uses yet and the channels its `Input`
 /// selects → `wav::write` into the session folder → `AudioCache::insert_shared`
 /// → [`clip::add`](crate::clip::add), inside one undo group; rebuilds the
@@ -498,7 +491,8 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         }
     };
     // Frame 0 of the capture is where the transport began rolling, when the
-    // device clock can say so; then the take moves earlier by the offset.
+    // device clock can say so; then the take moves earlier by what a
+    // calibration found the clock did not know.
     let lead = steps::capture_lead(
         first_us,
         session.engine.roll_start(),
@@ -1534,19 +1528,15 @@ mod tests {
     }
 
     #[test]
-    fn the_recording_offset_moves_a_take_earlier() {
+    fn a_measured_recording_offset_moves_a_take_earlier() {
         let folder = session::scratch("offset");
         let mut session = session::create(&folder, R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         track::arm(&mut session, vox, true).unwrap();
-        let steps_before = session.history.undo_len();
-        offset(&mut session, TimeDuration::from_samples(100)).unwrap();
-        assert_eq!(session.memory.recording_offset().samples(), 100);
-        assert_eq!(
-            session.history.undo_len(),
-            steps_before,
-            "state, not an edit"
-        );
+        // What a calibration would have found and kept.
+        session
+            .memory
+            .set_recording_offset(TimeDuration::from_samples(100));
 
         // Punch in at 640; feed five blocks that step 0.1, 0.2, ... 0.5.
         transport::start(&mut session).unwrap();
