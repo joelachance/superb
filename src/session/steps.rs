@@ -14,7 +14,8 @@ use std::sync::Arc;
 use crate::primitives::buffers::gain::db_to_linear;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::nodes::{
-    BufferPlayerNode, LiveInputNode, MonoSynthNode, ScheduledNoteEvent, ScheduledSynthNode,
+    BufferPlayerNode, ClickNode, ClickParams, LiveInputNode, MonoSynthNode, ScheduledNoteEvent,
+    ScheduledSynthNode,
 };
 use crate::primitives::graph::MidiPort;
 use crate::primitives::io::cache::AudioCache;
@@ -31,13 +32,13 @@ use crate::session::{MixerHandles, Session};
 /// the engine and otherwise at the next start or render; call it yourself
 /// only to pick the moment.
 ///
-/// The engine's loop range and looping switch are set from the memory at
-/// the same time, so an opened session and an undone loop edit reach the
-/// transport.
+/// The engine's tempo, loop range and looping switch are set from the
+/// memory at the same time, so an opened session and an undone edit reach
+/// the transport.
 ///
 /// Made of: `EngineHandle::reclaim` (frees graphs the engine has retired, on
 /// this thread) → [`build_mixer`] → [`publish`] →
-/// `EngineHandle::send(SetLoop, SetLoopEnabled)` from the memory, and
+/// `EngineHandle::send(SetTempo, SetLoop, SetLoopEnabled)` from the memory, and
 /// while the audio thread is still in the session, `LiveGraph::apply_pending`
 /// so the swap does not wait for a [`render_blocks`]. Afterwards
 /// [`Session::mixer`] holds the new strip and send controls.
@@ -45,6 +46,9 @@ pub fn rebuild(session: &mut Session) -> Result<()> {
     session.engine.reclaim();
     let (mixer, handles) = build_mixer(&session.memory, &session.audio, session.channels)?;
     publish(&mut session.engine, mixer)?;
+    session.engine.send(EngineCommand::SetTempo(
+        session.memory.tempo_map().tempo_at(BeatPosition::ZERO),
+    ))?;
     session
         .engine
         .send(EngineCommand::SetLoop(session.memory.loop_range()))?;
@@ -109,7 +113,8 @@ pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffe
 /// held in memory) or [`ScheduledSynthNode`] (MIDI notes through the tempo
 /// map) per unmuted clip → a [`MonoSynthNode`] with a MIDI edge per
 /// monitoring MIDI track → a [`LiveInputNode`] on the channel(s) its input
-/// names per monitoring audio track.
+/// names per monitoring audio track → a [`ClickNode`] on the master for
+/// the metronome.
 pub fn build_mixer(
     memory: &Memory,
     cache: &AudioCache,
@@ -121,9 +126,11 @@ pub fn build_mixer(
     let sends = add_sends(memory, &mut mixer, &strips)?;
     add_clip_players(memory, &mut mixer, &strips, cache)?;
     add_monitors(memory, &mut mixer, &strips)?;
+    let click = add_click(memory, &mut mixer)?;
     let mut handles = MixerHandles {
         strips: Vec::with_capacity(strips.len()),
         sends,
+        click,
     };
     for (track, strip) in &strips {
         handles.strips.push((*track, strip_params(&mixer, *strip)?));
@@ -306,6 +313,27 @@ fn add_monitors(memory: &Memory, mixer: &mut Mixer, strips: &Strips) -> Result<(
         }
     }
     Ok(())
+}
+
+/// The metronome: a [`ClickNode`] on the master bus, with the memory's
+/// metronome state as its live controls and the meter at the start of the
+/// session for its accent.
+fn add_click(memory: &Memory, mixer: &mut Mixer) -> Result<Arc<ClickParams>> {
+    let state = memory.metronome();
+    let params = Arc::new(ClickParams::new(
+        state.enabled,
+        db_to_linear(state.level_db),
+    ));
+    let beats_per_bar = u32::from(memory.tempo_map().meter_at(BeatPosition::ZERO).numerator());
+    let channels = mixer.channels();
+    let node = mixer.graph_mut().add_node(Box::new(ClickNode::new(
+        channels,
+        Arc::clone(&params),
+        beats_per_bar,
+    )));
+    let master_in = mixer.bus(mixer.master())?.input_node;
+    mixer.graph_mut().connect(node, master_in)?;
+    Ok(params)
 }
 
 /// Which live-input channel feeds each side of a monitoring audio track's
@@ -542,8 +570,8 @@ mod tests {
         let (mixer, _) = build_mixer(&memory, &cache, 2).unwrap();
         assert_eq!(
             mixer.graph().node_count(),
-            5,
-            "master pair + track pair + one player"
+            6,
+            "master pair + click + track pair + one player"
         );
     }
 
@@ -667,12 +695,12 @@ mod tests {
         let (mixer, _) = build_mixer(&session.memory, &session.audio, 2).unwrap();
         assert_eq!(
             mixer.graph().node_count(),
-            4,
-            "master pair + track pair, no instrument"
+            5,
+            "master pair + click + track pair, no instrument"
         );
         session.memory.track_mut(keys).unwrap().state.monitor = true;
         let (mixer, _) = build_mixer(&session.memory, &session.audio, 2).unwrap();
-        assert_eq!(mixer.graph().node_count(), 5, "plus the live synth");
+        assert_eq!(mixer.graph().node_count(), 6, "plus the live synth");
         assert_eq!(mixer.graph().midi_edges().len(), 1);
     }
 
@@ -723,8 +751,8 @@ mod tests {
         let (mixer, _) = build_mixer(&session.memory, &session.audio, 2).unwrap();
         assert_eq!(
             mixer.graph().node_count(),
-            5,
-            "master pair + strip pair + the input tap"
+            6,
+            "master pair + click + strip pair + the input tap"
         );
         assert_eq!(monitor_taps(None), [0, 1]);
         assert_eq!(monitor_taps(Some(Input::Stereo(2, 3))), [2, 3]);

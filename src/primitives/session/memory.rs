@@ -8,6 +8,29 @@ use crate::primitives::{
 
 use crate::primitives::session::{Clip, Insert, Marker, Track, TrackKind, TrackSend};
 
+/// The metronome's state: saved with the session.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MetronomeState {
+    /// Whether the click sounds while the transport rolls. State: saved,
+    /// never an undo step.
+    pub enabled: bool,
+    /// Click level in dB (0 = unity); an edit, coalescing.
+    pub level_db: f32,
+    /// Bars of count-in before a recording that starts at the playhead:
+    /// the transport rolls that many bars early with the click. State.
+    pub count_in: u32,
+}
+
+impl Default for MetronomeState {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            level_db: 0.0,
+            count_in: 0,
+        }
+    }
+}
+
 /// A memory: tracks, clips, markers, tempo map and loop range.
 ///
 /// All IDs are allocated from one per-memory counter and never reused, so
@@ -33,6 +56,7 @@ pub struct Memory {
     looping: bool,
     punch_in: Option<TimePosition>,
     punch_out: Option<TimePosition>,
+    metronome: MetronomeState,
     tracks: Vec<Track>,
     markers: Vec<Marker>,
     next_id: RawId,
@@ -50,6 +74,7 @@ impl Memory {
             looping: false,
             punch_in: None,
             punch_out: None,
+            metronome: MetronomeState::default(),
             tracks: Vec::new(),
             markers: Vec::new(),
             next_id: 1,
@@ -139,6 +164,17 @@ impl Memory {
     pub fn set_punch_out(&mut self, at: Option<TimePosition>) {
         self.punch_out = at;
         self.touch();
+    }
+
+    /// The metronome's state: on or off, level, bars of count-in.
+    pub fn metronome(&self) -> &MetronomeState {
+        &self.metronome
+    }
+
+    /// Mutable metronome state (bumps the revision).
+    pub fn metronome_mut(&mut self) -> &mut MetronomeState {
+        self.touch();
+        &mut self.metronome
     }
 
     /// Monotonic counter bumped by every mutation.

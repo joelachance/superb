@@ -7,7 +7,7 @@
 //!
 //! * **Flows** are top-level modules named after everyday tasks:
 //!   [`session`], [`track`], [`clip`], [`transport`], [`send`], [`midi`],
-//!   [`record`], [`export`] and [`devices`]. Each is a set of free functions over a
+//!   [`record`], [`metronome`], [`export`] and [`devices`]. Each is a set of free functions over a
 //!   [`Session`] (its memory, undo history, audio and running engine), and every function's docs
 //!   end with a "Made of:" list of the primitive calls it performs, so you
 //!   can call those yourself when the flow is not quite what you want.
@@ -71,6 +71,7 @@
 pub mod clip;
 pub mod devices;
 pub mod export;
+pub mod metronome;
 pub mod midi;
 pub mod primitives;
 pub mod record;
@@ -88,8 +89,8 @@ pub mod prelude {
     };
     pub use crate::primitives::buffers::{InterleavedBuffer, PlanarBuffer};
     pub use crate::primitives::graph::nodes::{
-        BufferPlayerNode, GainNode, LiveInputNode, MonoSynthNode, PassThroughNode,
-        ScheduledNoteEvent, ScheduledSynthNode, SineNode,
+        BufferPlayerNode, ClickNode, ClickParams, GainNode, LiveInputNode, MonoSynthNode,
+        PassThroughNode, ScheduledNoteEvent, ScheduledSynthNode, SineNode,
     };
     pub use crate::primitives::graph::{
         live_pair, AudioGraph, BlockProcessor, BlockTime, GraphCommand, GraphEditor, LiveGraph,
@@ -106,8 +107,8 @@ pub mod prelude {
     pub use crate::primitives::plugins::{PluginDescriptor, PluginInstance, PluginNode};
     pub use crate::primitives::realtime::{AtomicF32, LoadMeter};
     pub use crate::primitives::session::{
-        Clip, ClipSource, ClipState, Input, Marker, Memory, MemorySnapshot, Track, TrackKind,
-        TrackSend, TrackState,
+        Clip, ClipSource, ClipState, Input, Marker, Memory, MemorySnapshot, MetronomeState, Track,
+        TrackKind, TrackSend, TrackState,
     };
     pub use crate::primitives::transport::{LoopRange, TempoMap, Transport, TransportState};
     pub use crate::primitives::undo::{CoalesceKey, Command, PropertyEdit, UndoStack};

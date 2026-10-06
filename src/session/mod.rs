@@ -35,6 +35,7 @@ use crate::primitives::{
 
 use std::sync::Arc;
 
+use crate::primitives::graph::nodes::ClickParams;
 use crate::primitives::io::cache::AudioCache;
 use crate::primitives::io::{AudioThread, Engine, EngineHandle};
 use crate::primitives::mixer::{SendParams, StripParams};
@@ -163,6 +164,8 @@ pub struct MixerHandles {
     pub strips: Vec<(TrackId, Arc<StripParams>)>,
     /// A send in the memory → its level and on/off.
     pub sends: Vec<(SendId, Arc<SendParams>)>,
+    /// The metronome's click on the master: on/off, level, count-in.
+    pub click: Arc<ClickParams>,
 }
 
 impl MixerHandles {
@@ -258,11 +261,13 @@ pub fn add_marker(session: &mut Session, name: &str, at: TimePosition) -> Result
     Ok(id)
 }
 
-/// Sets the memory's tempo at the start. Consecutive changes are one undo step.
+/// Sets the memory's tempo at the start, and the running engine's.
+/// Consecutive changes are one undo step.
 ///
-/// Made of: push `SetTempo` at beat 0.
+/// Made of: push `SetTempo` at beat 0 → `EngineHandle::send(SetTempo)`.
 pub fn set_tempo(session: &mut Session, bpm: f64) -> Result<()> {
-    edit(session, SetTempo::new(BeatPosition::ZERO, bpm))
+    edit(session, SetTempo::new(BeatPosition::ZERO, bpm))?;
+    session.engine.send(EngineCommand::SetTempo(bpm))
 }
 
 /// Sets or clears the loop range in the memory and on the running engine.

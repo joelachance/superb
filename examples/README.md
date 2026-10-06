@@ -15,6 +15,7 @@ One per flow module, in the order you would use them to make a session.
 | `play_session` | `transport` | start, offline blocks, playhead, seek, loop, stop, rewind; device output with `devices` | `cargo run --example play_session` |
 | `mix_session` | `track`, `send` | a volume drag as one undo step, pan, mute, solo, a bus with sends, routing, meters | `cargo run --example mix_session` |
 | `midi_keys` | `midi` | a monitoring MIDI track, notes and a chord, release, any message; ports with `midi-io` | `cargo run --example midi_keys` |
+| `metronome_count_in` | `metronome` | the click while playing, a one-bar count-in before a recording, the clip starting at the punch-in | `cargo run --example metronome_count_in` |
 | `record_take` | `record` | arm, punch in, a recording from a synthetic microphone, clips, undo; a real input with `devices` | `cargo run --example record_take` |
 | `export_session` | `export` | bounce the session and a range; resample with `files` | `cargo run --example export_session` |
 | `session_steps` | `session::steps` | build the mixer from a `Memory` by hand (strips, a bus, a send, the live controls) and render it through an offline engine | `cargo run --example session_steps` |

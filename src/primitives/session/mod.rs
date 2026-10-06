@@ -57,10 +57,10 @@ mod track;
 
 pub use insert::{Insert, InsertState, PluginRef};
 pub use marker::Marker;
-pub use memory::Memory;
+pub use memory::{Memory, MetronomeState};
 pub use snapshot::{
-    ClipSnapshot, InsertSnapshot, MarkerSnapshot, MemorySnapshot, MeterSnapshot, SendSnapshot,
-    TempoPointSnapshot, TempoSnapshot, TrackSnapshot, FORMAT_VERSION,
+    ClipSnapshot, InsertSnapshot, MarkerSnapshot, MemorySnapshot, MeterSnapshot, MetronomeSnapshot,
+    SendSnapshot, TempoPointSnapshot, TempoSnapshot, TrackSnapshot, FORMAT_VERSION,
 };
 pub use track::{
     Clip, ClipSource, ClipState, Input, MidiNote, SendState, Track, TrackKind, TrackSend,

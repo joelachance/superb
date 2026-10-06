@@ -28,7 +28,7 @@ use crate::primitives::session::commands::{AddClip, PunchPoint, SetPunch};
 use crate::primitives::session::{Clip, ClipSource, Input, Memory, TrackKind};
 use crate::primitives::undo::Command;
 use crate::primitives::{
-    ClipId, Result, SampleRate, SuperbError, TimeDuration, TimePosition, TrackId,
+    BeatPosition, ClipId, Result, SampleRate, SuperbError, TimeDuration, TimePosition, TrackId,
 };
 use crate::session;
 use crate::session::Session;
@@ -212,7 +212,10 @@ impl core::fmt::Debug for Collector {
 /// at the playhead, or at the punch-in point when one is set ahead of it
 /// ([`punch_in`]): the transport rolls from where it is and drops into
 /// record there. With a punch-out point ([`punch_out`]) it drops out of
-/// record there and keeps playing; [`stop`] finishes either way.
+/// record there and keeps playing; [`stop`] finishes either way. A
+/// recording that starts at the playhead gets the metronome's count-in
+/// (`metronome::count_in`): the transport rolls that many bars early with
+/// the click sounding.
 ///
 /// Made of: [`track::arm`](crate::track::arm)ed tracks → for a device,
 /// `devices::input` if needed, its recording queue and a collector thread →
@@ -269,7 +272,7 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
         .filter(|p| *p > playhead)
         .unwrap_or(playhead);
     let punch_out = session.memory.punch_out().filter(|p| *p > punch_in);
-    let started_at = roll_from(session, punch_in, playhead);
+    let (started_at, count_in) = roll_from(session, punch_in, playhead);
     if started_at != playhead {
         session.engine.send(EngineCommand::Seek(started_at))?;
     }
@@ -290,13 +293,31 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
         tracks,
         channels,
     });
+    if count_in {
+        session.mixer.click.set_count_in_until(Some(punch_in));
+    }
     Ok(())
 }
 
 /// Where the transport starts rolling for a recording that begins at
-/// `punch_in`: the playhead, when it is at or before the punch-in.
-fn roll_from(_session: &Session, punch_in: TimePosition, playhead: TimePosition) -> TimePosition {
-    playhead.min(punch_in)
+/// `punch_in`, and whether that is a count-in: the metronome's bars of
+/// count-in before the playhead when the recording starts there, otherwise
+/// the playhead itself (or the punch-in, if the playhead is past it).
+fn roll_from(
+    session: &Session,
+    punch_in: TimePosition,
+    playhead: TimePosition,
+) -> (TimePosition, bool) {
+    let bars = session.memory.metronome().count_in;
+    if bars == 0 || punch_in != playhead {
+        return (playhead.min(punch_in), false);
+    }
+    let tempo = session.memory.tempo_map();
+    let beat = tempo.samples_to_beat(punch_in);
+    let per_bar = f64::from(tempo.meter_at(beat).numerator());
+    let from = BeatPosition::new((beat.beats() - f64::from(bars) * per_bar).max(0.0));
+    let from = tempo.beat_to_samples(from);
+    (from, from < punch_in)
 }
 
 /// Sets or clears the punch-in point: where the next recording begins when
@@ -357,6 +378,7 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         .recording
         .take()
         .ok_or_else(|| SuperbError::Message("nothing is being recorded".into()))?;
+    session.mixer.click.set_count_in_until(None);
     session.engine.send(EngineCommand::SetPunch {
         punch_in: None,
         punch_out: None,
@@ -1184,5 +1206,56 @@ mod tests {
             session.memory.punch_out(),
             Some(TimePosition::from_samples(960))
         );
+    }
+
+    #[test]
+    fn a_count_in_rolls_the_click_before_the_recording_begins() {
+        use crate::primitives::transport::TransportState;
+        let mut session = session::create(session::scratch("count-in"), R, 64).unwrap();
+        // 1200 bpm in 4/4: a beat is 2 400 samples, a bar 9 600.
+        session::set_tempo(&mut session, 1200.0).unwrap();
+        crate::metronome::count_in(&mut session, 1).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        track::arm(&mut session, vox, true).unwrap();
+        transport::seek(&mut session, TimePosition::from_samples(9_600)).unwrap();
+        session::steps::render_blocks(&mut session, 1).unwrap();
+
+        let (mut mic, blocks) = capture_queue(1, 64, 64).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
+        let recording = session.recording.as_ref().unwrap();
+        assert_eq!(recording.started_at(), TimePosition::ZERO, "one bar early");
+        assert_eq!(recording.punch_in(), TimePosition::from_samples(9_600));
+        assert_eq!(
+            session.mixer.click.count_in_until(),
+            Some(TimePosition::from_samples(9_600))
+        );
+        // The click sounds through the count-in although the metronome is off ...
+        feed(&mut mic, 1, 0.25);
+        let first = session::steps::render_blocks(&mut session, 1).unwrap();
+        assert!(first.peak() > 0.3, "the downbeat tick: {}", first.peak());
+        assert_eq!(transport::state(&session), TransportState::Playing);
+        for _ in 1..160 {
+            feed(&mut mic, 1, 0.25);
+            session::steps::render_blocks(&mut session, 1).unwrap();
+        }
+        assert_eq!(transport::state(&session), TransportState::Recording);
+        // ... and stops at the punch-in: well past it, nothing is heard.
+        feed(&mut mic, 1, 0.25);
+        assert!(session::steps::render_blocks(&mut session, 1)
+            .unwrap()
+            .is_silent());
+
+        let clips = stop(&mut session).unwrap();
+        assert!(session.mixer.click.count_in_until().is_none());
+        let clip = session.memory.clip(clips[0]).unwrap();
+        assert_eq!(clip.start(), TimePosition::from_samples(9_600));
+        assert_eq!(clip.length(), TimeDuration::from_samples(161 * 64 - 9_600));
     }
 }

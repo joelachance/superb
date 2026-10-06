@@ -20,7 +20,7 @@ every block.
 
 | verb | does |
 |---|---|
-| `start(session, Source)` | begin on every armed track at the playhead, or at the punch-in point when it lies ahead; the transport rolls from where it is |
+| `start(session, Source)` | begin on every armed track at the playhead, or at the punch-in point when it lies ahead; the transport rolls from where it is, or from `metronome::count_in` bars before the playhead with the click sounding |
 | `punch_in(session, Option<TimePosition>)` / `punch_out(session, Option<TimePosition>)` | where the next recording drops in and out; saved; edits that coalesce |
 | `collect(session) -> frames` | move waiting blocks into a queue recording (`session::steps::render_blocks` does this); nothing to do for a device recording |
 | `stop(session) -> Vec<ClipId>` | stop the transport, finish the recording, write the files, place clips ("Record") |
@@ -97,4 +97,7 @@ rebuild.
   redo writes them again. Nothing else deletes a file.
 * The transport reports `Recording` from the punch-in to the punch-out,
   at block granularity; the clip is cut at the exact samples.
-* Loop recording and pre-roll are not there yet.
+* A recording that starts at the playhead gets the metronome's count-in:
+  the transport rolls that many bars early with the click, which stops at
+  the punch-in; what was captured during the count-in is left out.
+* Loop recording is not there yet.

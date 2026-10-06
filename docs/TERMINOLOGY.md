@@ -31,7 +31,8 @@ a musician would use.
 | The transport | `transport` | Start, stop, locate, loop; where the playhead is |
 | A send | `send` | A copy of a track into a bus: add, remove, level, on/off |
 | MIDI, the keyboard | `midi` | Playing notes, connecting a controller |
-| Recording | `record` | Start, stop; a clip on every armed track |
+| Recording | `record` | Start, stop; a clip on every armed track; punch in and out |
+| The metronome, the click | `metronome` | A click while rolling; count-in before a recording |
 | Bounce, export, mixdown | `export` | Rendering the session, or a range of it, to a file |
 | Hardware, audio interface | `devices` | Which speakers, mics and MIDI ports exist |
 | The session (the thing you open) | `Session` | Its memory, the undo history, the audio clips play and the running engine |
@@ -55,7 +56,7 @@ column is what not to say in code, docs or UI text.
 | archive (a clip or a track; it stays, silent) | delete, remove (nothing in the memory is deleted) |
 | strip | channel (a strip's channel count is something else) |
 | insert | effect slot, plugin slot |
-| state (mute, solo, arm, monitor, input, clip mute, send on/off, looping) | switch, toggle, flag |
+| state (mute, solo, arm, monitor, input, clip mute, send on/off, looping, metronome on, count-in) | switch, toggle, flag |
 | edit | change, gesture (for anything the undo history records) |
 | volume (a strip's fader, dB) | gain (that is the engine's linear multiplier) |
 | level (a send, dB) | gain, amount |
@@ -70,6 +71,7 @@ column is what not to say in code, docs or UI text.
 - **Signal path (we also say "graph")** — The wiring of processors. Same idea as inserts, sends, and buses on a mixing desk.
 - **Rebuild** — In Superb, rebuilding the mixer from the memory and swapping it into the running engine. Happens for you: at once while a device is playing, otherwise when you next start.
 - **Monitor** — Hearing a track's input live through its strip: the audio input for an audio track, played MIDI through an instrument for a MIDI track. `track::monitor`; not the speakers.
+- **Metronome, click, count-in** — The click on every beat while the transport rolls (`metronome::enable`), and the bars it plays before a recording begins (`metronome::count_in`), during which the transport rolls early and the click sounds even when the metronome is off.
 - **Punch in / punch out** — Dropping into record at one timeline position and out at another while the transport rolls. `record::punch_in` and `record::punch_out` set the points; `record::start` honours them.
 - **Recording** — A recording in progress. When it stops, every armed track gets a clip named after it (`vox 1`); the clips share the audio.
 - **Insert** — An effect or instrument sitting in a track's signal path, in order. A primitive today (the memory stores it); the flow for it comes back with plugins.

@@ -8,8 +8,10 @@
 //!   it), [`DelayNode`] (a fixed delay that reports itself as latency),
 //!   [`MonoSynthNode`] (a one-voice synth driven by live MIDI),
 //!   [`BufferPlayerNode`] (plays audio held in memory at a timeline
-//!   position) and [`ScheduledSynthNode`] (plays a list of notes at
-//!   timeline positions).
+//!   position), [`ScheduledSynthNode`] (plays a list of notes at
+//!   timeline positions), [`LiveInputNode`] (plays the engine's live
+//!   input) and [`ClickNode`] (a metronome driven by the block's beat
+//!   position, with [`ClickParams`] as its live controls).
 //! * **Test fixtures** with no musical use: [`ConstantNode`] emits a DC
 //!   value and [`SilenceNode`] is always silent. They make graph behaviour
 //!   observable in tests.
@@ -19,6 +21,7 @@
 //! `Arc<AtomicF32>` handles so a control thread can change them without
 //! locks.
 
+use core::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 
 use crate::primitives::buffers::PlanarBuffer;
@@ -374,6 +377,197 @@ impl Node for SilenceNode {
 // ---------------------------------------------------------------------------
 // MonoSynthNode
 // ---------------------------------------------------------------------------
+
+/// The metronome's live controls, shared between a [`ClickNode`] and
+/// whoever sets them: on or off, how loud, and a count-in during which the
+/// click sounds even while off.
+#[derive(Debug)]
+pub struct ClickParams {
+    enabled: AtomicBool,
+    level: AtomicF32,
+    /// Timeline sample the count-in runs until; `i64::MIN` when none.
+    until: AtomicI64,
+}
+
+impl ClickParams {
+    /// Controls that start `enabled` at linear `level`, with no count-in.
+    pub fn new(enabled: bool, level: f32) -> Self {
+        Self {
+            enabled: AtomicBool::new(enabled),
+            level: AtomicF32::new(level),
+            until: AtomicI64::new(i64::MIN),
+        }
+    }
+
+    /// Whether the click sounds whenever the transport rolls.
+    pub fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::Relaxed)
+    }
+
+    /// Turns the click on or off; heard at the next block.
+    pub fn set_enabled(&self, on: bool) {
+        self.enabled.store(on, Ordering::Relaxed);
+    }
+
+    /// Click level, linear.
+    pub fn level(&self) -> f32 {
+        self.level.get()
+    }
+
+    /// Sets the click level, linear; heard at the next block.
+    pub fn set_level(&self, level: f32) {
+        self.level.set(level);
+    }
+
+    /// Makes the click sound until the playhead reaches `until`, on or
+    /// off: a count-in. `None` ends it.
+    pub fn set_count_in_until(&self, until: Option<crate::primitives::TimePosition>) {
+        self.until
+            .store(until.map_or(i64::MIN, |p| p.samples()), Ordering::Relaxed);
+    }
+
+    /// Where the running count-in ends, if one is set.
+    pub fn count_in_until(&self) -> Option<crate::primitives::TimePosition> {
+        match self.until.load(Ordering::Relaxed) {
+            i64::MIN => None,
+            samples => Some(crate::primitives::TimePosition::from_samples(samples)),
+        }
+    }
+}
+
+impl Default for ClickParams {
+    fn default() -> Self {
+        Self::new(false, 1.0)
+    }
+}
+
+/// A metronome: a short tick on every beat while the transport rolls,
+/// louder on the first beat of a bar, placed sample-accurately from the
+/// block's beat position and tempo. Silent while stopped, and while off
+/// unless a count-in is running ([`ClickParams`]).
+pub struct ClickNode {
+    params: Arc<ClickParams>,
+    channels: usize,
+    beats_per_bar: u32,
+    sample_rate: f64,
+    last_tick: Option<i64>,
+    remaining: usize,
+    phase: f64,
+    increment: f64,
+    amplitude: f32,
+    decay: f32,
+}
+
+impl ClickNode {
+    /// A click writing `channels` output channels, accenting every
+    /// `beats_per_bar`th beat from beat zero (`0` for no accent).
+    pub fn new(channels: usize, params: Arc<ClickParams>, beats_per_bar: u32) -> Self {
+        Self {
+            params,
+            channels,
+            beats_per_bar,
+            sample_rate: SampleRate::default().as_f64(),
+            last_tick: None,
+            remaining: 0,
+            phase: 0.0,
+            increment: 0.0,
+            amplitude: 0.0,
+            decay: 1.0,
+        }
+    }
+
+    /// The live controls.
+    pub fn params(&self) -> Arc<ClickParams> {
+        Arc::clone(&self.params)
+    }
+
+    /// Starts a tick: 50 ms of a decaying sine, higher and louder on an
+    /// accented beat.
+    fn tick(&mut self, beat: i64, level: f32) {
+        let accent = self.beats_per_bar > 0 && beat.rem_euclid(i64::from(self.beats_per_bar)) == 0;
+        let hz = if accent { 1500.0 } else { 1000.0 };
+        self.increment = hz / self.sample_rate;
+        self.phase = 0.0;
+        self.amplitude = level * if accent { 1.0 } else { 0.7 };
+        self.remaining = (self.sample_rate * 0.05) as usize;
+        self.decay = (-6.0 / self.remaining.max(1) as f32).exp();
+    }
+}
+
+impl Node for ClickNode {
+    fn name(&self) -> &str {
+        "click"
+    }
+
+    fn channels(&self) -> NodeChannels {
+        NodeChannels::generator(self.channels)
+    }
+
+    fn prepare(&mut self, sample_rate: SampleRate, _max_frames: usize) {
+        self.sample_rate = sample_rate.as_f64();
+    }
+
+    fn reset(&mut self) {
+        self.remaining = 0;
+        self.phase = 0.0;
+        self.last_tick = None;
+    }
+
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        _input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
+        let time = ctx.time;
+        let counting_in = self
+            .params
+            .count_in_until()
+            .is_some_and(|until| time.start < until);
+        if !time.rolling || !(self.params.is_enabled() || counting_in) {
+            self.remaining = 0;
+            self.last_tick = None;
+            return ProcessStatus::Silent;
+        }
+        let frames = ctx.frames;
+        let level = self.params.level();
+        let beats_per_sample = time.bpm / 60.0 / self.sample_rate;
+        let beat0 = time.beat_start.beats();
+        let end = beat0 + frames as f64 * beats_per_sample;
+        // A beat within half a sample of a block edge belongs to the block
+        // it is nearest to; `last_tick` keeps it from sounding twice when
+        // rounding puts it in both.
+        let edge = beats_per_sample / 2.0;
+        let mut next_beat = (beat0 - edge).ceil();
+        let frame_of = |beat: f64| {
+            (((beat - beat0) / beats_per_sample).round().max(0.0) as usize).min(frames - 1)
+        };
+        let mut next_frame = (next_beat < end - edge).then(|| frame_of(next_beat));
+        for i in 0..frames {
+            if next_frame == Some(i) {
+                if self.last_tick != Some(next_beat as i64) {
+                    self.tick(next_beat as i64, level);
+                    self.last_tick = Some(next_beat as i64);
+                }
+                next_beat += 1.0;
+                next_frame = (next_beat < end - edge).then(|| frame_of(next_beat));
+            }
+            let sample = if self.remaining > 0 {
+                let s = (self.phase * core::f64::consts::TAU).sin() as f32 * self.amplitude;
+                self.phase += self.increment;
+                self.amplitude *= self.decay;
+                self.remaining -= 1;
+                s
+            } else {
+                0.0
+            };
+            for ch in 0..self.channels {
+                output.channel_mut(ch)[i] = sample;
+            }
+        }
+        ProcessStatus::Normal
+    }
+}
 
 /// Plays the engine's live audio input ([`ProcessContext::input`]): output
 /// channel `i` carries input channel `taps[i]`, so `[0, 0]` puts a mono
@@ -1216,5 +1410,69 @@ mod tests {
         assert!(out.channel(0).iter().all(|&s| s == 0.5));
         assert!(out.channel(1).iter().all(|&s| s == 0.25));
         assert!(out.channel(2).iter().all(|&s| s == 0.0), "no such tap");
+    }
+
+    #[test]
+    fn the_click_ticks_on_the_beat_and_obeys_its_switch_and_count_in() {
+        let midi = MidiEventBuffer::with_capacity(0);
+        let params = Arc::new(ClickParams::new(true, 0.5));
+        let mut node = ClickNode::new(1, Arc::clone(&params), 4);
+        node.prepare(SampleRate::HZ_48K, 64);
+        let mut out = PlanarBuffer::new(1, 64);
+        let input = PlanarBuffer::new(1, 64);
+        // Stopped: nothing.
+        let stopped = ctx(64, &midi, true);
+        assert_eq!(
+            node.process(&stopped, &input, &mut out),
+            ProcessStatus::Silent
+        );
+        // Rolling at 120 bpm from beat 0.999: the beat lands 24 frames in
+        // (a beat is 24 000 samples), so the first 24 frames stay silent.
+        let rolling = ProcessContext {
+            time: BlockTime {
+                rolling: true,
+                beat_start: crate::primitives::BeatPosition::new(0.999),
+                ..BlockTime::free_running()
+            },
+            ..ctx(64, &midi, true)
+        };
+        assert_eq!(
+            node.process(&rolling, &input, &mut out),
+            ProcessStatus::Normal
+        );
+        assert!(out.channel(0)[..24].iter().all(|&s| s == 0.0));
+        assert!(
+            out.channel(0)[24..].iter().any(|&s| s.abs() > 0.1),
+            "a tick"
+        );
+        // Beat 1 of the bar is quieter than beat 0 (the accent).
+        let mut accented = PlanarBuffer::new(1, 64);
+        let on_beat_zero = ProcessContext {
+            time: BlockTime {
+                rolling: true,
+                beat_start: crate::primitives::BeatPosition::new(4.0),
+                ..BlockTime::free_running()
+            },
+            ..ctx(64, &midi, true)
+        };
+        node.process(&on_beat_zero, &input, &mut accented);
+        assert!(accented.peak() > out.peak());
+        // Off: silent, unless a count-in is running and the block is before its end.
+        params.set_enabled(false);
+        assert_eq!(
+            node.process(&on_beat_zero, &input, &mut out),
+            ProcessStatus::Silent
+        );
+        params.set_count_in_until(Some(crate::primitives::TimePosition::from_samples(1_000)));
+        assert_eq!(
+            node.process(&on_beat_zero, &input, &mut out),
+            ProcessStatus::Normal
+        );
+        params.set_count_in_until(None);
+        assert_eq!(
+            node.process(&on_beat_zero, &input, &mut out),
+            ProcessStatus::Silent
+        );
+        assert!(node.params().count_in_until().is_none());
     }
 }

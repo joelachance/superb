@@ -99,6 +99,8 @@ pub mod keys {
     pub const LOOP: u64 = 41;
     /// [`SetPunch`](super::SetPunch); the key's `id` is the point.
     pub const PUNCH: u64 = 42;
+    /// [`set_metronome_level_db`](super::set_metronome_level_db).
+    pub const METRONOME_LEVEL: u64 = 43;
     /// [`set_send_level_db`](super::set_send_level_db).
     pub const SEND_LEVEL: u64 = 50;
     /// [`set_send_enabled`](super::set_send_enabled).
@@ -1333,6 +1335,20 @@ pub fn set_session_name(name: impl Into<String>) -> PropertyEdit<Memory, String>
         |s: &Memory| s.name().to_owned(),
         |s: &mut Memory, v| {
             s.set_name(v);
+            Ok(())
+        },
+    )
+}
+
+/// Sets the metronome's level in dB.
+pub fn set_metronome_level_db(level_db: f32) -> PropertyEdit<Memory, f32> {
+    PropertyEdit::new(
+        "Set metronome level",
+        Some(CoalesceKey::new(keys::METRONOME_LEVEL, 0)),
+        level_db,
+        |m: &Memory| m.metronome().level_db,
+        |m: &mut Memory, v| {
+            m.metronome_mut().level_db = v;
             Ok(())
         },
     )

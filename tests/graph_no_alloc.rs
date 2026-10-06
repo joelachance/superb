@@ -1,8 +1,11 @@
 //! Proves that `AudioGraph::process` performs no heap operations once prepared.
 
+use std::sync::Arc;
 use superb::primitives::buffers::PlanarBuffer;
+
 use superb::primitives::graph::nodes::{
-    DelayNode, GainNode, LiveInputNode, MonoSynthNode, PassThroughNode, SineNode,
+    ClickNode, ClickParams, DelayNode, GainNode, LiveInputNode, MonoSynthNode, PassThroughNode,
+    SineNode,
 };
 use superb::primitives::graph::{AudioGraph, BlockTime, MidiPort};
 use superb::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
@@ -19,6 +22,12 @@ fn process_is_allocation_free() {
     let synth = graph.add_node(Box::new(MonoSynthNode::new(2)));
     // A monitoring node copying the engine's live input.
     let live = graph.add_node(Box::new(LiveInputNode::new([0, 1])));
+    // The metronome ticks on every beat of the rolling blocks below.
+    let click = graph.add_node(Box::new(ClickNode::new(
+        2,
+        Arc::new(ClickParams::new(true, 0.5)),
+        4,
+    )));
     let gain = graph.add_node(Box::new(GainNode::new(0.8, 2)));
     let bus = graph.add_node(Box::new(PassThroughNode::new(2)));
     // A parallel path with latency: the direct `gain -> bus` edge gets a
@@ -28,6 +37,7 @@ fn process_is_allocation_free() {
     graph.connect(sine, gain).unwrap();
     graph.connect(synth, gain).unwrap();
     graph.connect(live, gain).unwrap();
+    graph.connect(click, gain).unwrap();
     graph.connect(gain, bus).unwrap();
     graph.connect(gain, lookahead).unwrap();
     graph.connect(lookahead, bus).unwrap();

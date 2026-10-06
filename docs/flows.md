@@ -13,7 +13,8 @@ This page covers what they share; each flow has its own note in
 | `transport` — start, stop, seek, rewind, loop; where the playhead is | [transport.md](flows/transport.md) |
 | `send` — a copy of a track into a bus: add, remove, level, on/off | [send.md](flows/send.md) |
 | `midi` — send notes, connect a keyboard | [midi.md](flows/midi.md) |
-| `record` — start a recording, stop it, get clips | [record.md](flows/record.md) |
+| `record` — start a recording, stop it, get clips; punch points | [record.md](flows/record.md) |
+| `metronome` — a click while the transport rolls; its level; bars of count-in before a recording | [metronome.md](flows/metronome.md) |
 | `export` — bounce the session, or a range of it, to WAV | [export.md](flows/export.md) |
 | `devices` — audio and MIDI hardware; play through an output | [devices.md](flows/devices.md) |
 
@@ -67,8 +68,8 @@ name.
 
 Every *edit* to the memory is a command on `session.history`, so it can
 be undone. Structural edits (add, move, split, archive, restore) are one
-step each; a continuous edit (volume, pan, send level, clip gain and fades, a clip
-drag or trim) coalesces:
+step each; a continuous edit (volume, pan, send level, metronome level, clip gain and
+fades, a clip drag or trim, punch points) coalesces:
 moves of the same control within half a second
 (`Session::COALESCE_WINDOW`) merge into one step, so a drag is one step and
 not a hundred, and a pause starts the next. A UI that wants mouse-up
@@ -76,7 +77,8 @@ precision calls the primitive `session.history.seal()`. `record::stop`
 groups the clips it places into one step called "Record".
 
 *State* (a track's mute, solo, arm, monitor and input; a clip's mute; a
-send's on/off; whether playback loops) is not an edit. It is saved with the session and heard at the next block,
+send's on/off; whether playback loops; the metronome's switch and
+count-in) is not an edit. It is saved with the session and heard at the next block,
 but it never enters the undo history: nobody expects Undo to un-mute a
 track. Flows set it through `session::set_state`, which also
 tells the history its saved point is gone, so `session.history.is_clean()`

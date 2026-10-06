@@ -16,7 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::primitives::plugins::PluginFormat;
 use crate::primitives::session::{
-    Clip, ClipSource, Input, Insert, Marker, Memory, PluginRef, Track, TrackKind, TrackSend,
+    Clip, ClipSource, Input, Insert, Marker, Memory, MetronomeState, PluginRef, Track, TrackKind,
+    TrackSend,
 };
 
 /// Version of the snapshot format written by this crate.
@@ -74,6 +75,27 @@ pub struct TempoSnapshot {
     pub points: Vec<TempoPointSnapshot>,
     /// Meter points in bar order; the first is at bar 1.
     pub meters: Vec<MeterSnapshot>,
+}
+
+/// The metronome.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct MetronomeSnapshot {
+    /// On while the transport rolls.
+    pub enabled: bool,
+    /// Level in dB.
+    pub level_db: f32,
+    /// Bars of count-in before a recording.
+    pub count_in: u32,
+}
+
+impl Default for MetronomeSnapshot {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            level_db: 0.0,
+            count_in: 0,
+        }
+    }
 }
 
 /// A clip.
@@ -228,6 +250,9 @@ pub struct MemorySnapshot {
     /// Punch-out point in samples (absent in older files).
     #[serde(default)]
     pub punch_out: Option<i64>,
+    /// The metronome (absent in older files: off, unity, no count-in).
+    #[serde(default)]
+    pub metronome: MetronomeSnapshot,
     /// Tracks in order.
     pub tracks: Vec<TrackSnapshot>,
     /// Markers in position order.
@@ -359,6 +384,11 @@ impl Memory {
             looping: self.looping(),
             punch_in: self.punch_in().map(|p| p.samples()),
             punch_out: self.punch_out().map(|p| p.samples()),
+            metronome: MetronomeSnapshot {
+                enabled: self.metronome().enabled,
+                level_db: self.metronome().level_db,
+                count_in: self.metronome().count_in,
+            },
             loop_range: self
                 .loop_range()
                 .map(|r| (r.start().samples(), r.end().samples())),
@@ -412,6 +442,11 @@ impl Memory {
         memory.set_looping(snap.looping);
         memory.set_punch_in(snap.punch_in.map(TimePosition::from_samples));
         memory.set_punch_out(snap.punch_out.map(TimePosition::from_samples));
+        *memory.metronome_mut() = MetronomeState {
+            enabled: snap.metronome.enabled,
+            level_db: snap.metronome.level_db,
+            count_in: snap.metronome.count_in,
+        };
         if let Some((start, end)) = snap.loop_range {
             memory.set_loop_range(Some(LoopRange::new(
                 TimePosition::from_samples(start),

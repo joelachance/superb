@@ -82,6 +82,8 @@ pub enum EngineCommand {
     SetLoop(Option<LoopRange>),
     /// Enable or disable looping.
     SetLoopEnabled(bool),
+    /// Set the tempo at the start of the transport's tempo map, in bpm.
+    SetTempo(f64),
     /// Set or clear the punch points: while playing the transport drops
     /// into recording at `punch_in`, while recording it drops out at
     /// `punch_out`.
@@ -114,6 +116,7 @@ impl core::fmt::Debug for EngineCommand {
             EngineCommand::Seek(p) => write!(f, "Seek({p})"),
             EngineCommand::SetLoop(r) => write!(f, "SetLoop({r:?})"),
             EngineCommand::SetLoopEnabled(b) => write!(f, "SetLoopEnabled({b})"),
+            EngineCommand::SetTempo(bpm) => write!(f, "SetTempo({bpm})"),
             EngineCommand::SetPunch {
                 punch_in,
                 punch_out,
@@ -301,6 +304,14 @@ impl AudioThread {
                 EngineCommand::SetLoop(range) => self.engine.transport_mut().set_loop(range),
                 EngineCommand::SetLoopEnabled(on) => {
                     self.engine.transport_mut().set_loop_enabled(on)
+                }
+                EngineCommand::SetTempo(bpm) => {
+                    // Recomputes the map's cached seconds in place: no allocation.
+                    let _ = self
+                        .engine
+                        .transport_mut()
+                        .tempo_map_mut()
+                        .set_initial_tempo(bpm);
                 }
                 EngineCommand::SetPunch {
                     punch_in,

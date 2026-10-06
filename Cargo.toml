@@ -107,6 +107,10 @@ name = "record_take"
 path = "examples/flows/record_take.rs"
 
 [[example]]
+name = "metronome_count_in"
+path = "examples/flows/metronome_count_in.rs"
+
+[[example]]
 name = "export_session"
 path = "examples/flows/export_session.rs"
 

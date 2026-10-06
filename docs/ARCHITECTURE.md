@@ -16,7 +16,7 @@ and connects them deliberately.
 
 ```text
  flows (free functions over a Session)
- session · track · clip · transport · send · midi · record · export · devices
+ session · track · clip · transport · send · midi · record · metronome · export · devices
  ─────────────────────────────────────────────────────────────────────
  primitives
    memory side (UI thread)             engine side (audio thread)
@@ -96,8 +96,9 @@ Data crosses the thread boundary in exactly three ways:
      memory says, adds a send per send in the memory, and attaches one source
      node per audible clip: `BufferPlayerNode` for audio held in memory,
      `ScheduledSynthNode` for MIDI notes converted through the tempo map,
-     plus a live instrument for every monitoring MIDI track and a tap on
-     the engine's live input for every monitoring audio track. It returns
+     plus a live instrument for every monitoring MIDI track, a tap on the
+     engine's live input for every monitoring audio track, and the
+     metronome's click on the master. It returns
      the `MixerHandles` the control side keeps, keyed by the memory's ids (the
      mixer has its own id namespace, which the flows never see).
    * `publish` prepares the mixer's graph and sends it to the engine.
@@ -251,6 +252,6 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 
 Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
 A plugins flow (the host is a primitive). Incremental edits to a running mixer (a
-rebuild replaces it). Loop recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
+rebuild replaces it). Loop recording. VST3 hosting. SysEx, MIDI Time Code and
 Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes
 owned by the session. Multi-bus or sidechain nodes.

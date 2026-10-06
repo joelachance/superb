@@ -17,7 +17,7 @@ The crate is organised so you always know what a call will do.
 **Flows** are top-level modules named after the things you work with and
 the tasks you do. Each one is a set of free functions that take a
 `Session` and do the whole job: `session`, `track`, `clip`, `transport`,
-`send`, `midi`, `record`, `export`, `devices`. Every flow function
+`send`, `midi`, `record`, `metronome`, `export`, `devices`. Every flow function
 documents the primitive calls it is *made of*, so when one does not do
 exactly what you want, you call those primitives yourself. Nothing is
 hidden behind an object; the `Session` is a plain struct with public
@@ -49,7 +49,8 @@ They know nothing about flows or the `Session`.
 | `transport` | start, stop, seek, rewind, loop; where the playhead is | [transport.md](docs/flows/transport.md) |
 | `send` | a copy of a track into a bus: add, remove, level, on/off | [send.md](docs/flows/send.md) |
 | `midi` | send notes, connect a keyboard | [midi.md](docs/flows/midi.md) |
-| `record` | start a recording, stop it, get a clip on every armed track | [record.md](docs/flows/record.md) |
+| `record` | start a recording, stop it, get a clip on every armed track; punch points | [record.md](docs/flows/record.md) |
+| `metronome` | a click while the transport rolls, its level, bars of count-in before a recording | [metronome.md](docs/flows/metronome.md) |
 | `export` | bounce the session, or a range of it, to WAV, optionally resampled | [export.md](docs/flows/export.md) |
 | `devices` | list audio and MIDI hardware; play through an output; configurations that match the session | [devices.md](docs/flows/devices.md) |
 
@@ -89,6 +90,7 @@ cargo run --example play_session               # transport: start, seek, loop, o
 cargo run --example mix_session                # track and send: faders, a bus, sends, meters
 cargo run --example midi_keys                  # midi: notes into a monitoring track
 cargo run --example record_take                # record: a recording from a synthetic microphone
+cargo run --example metronome_count_in         # metronome: the click, and a count-in before recording
 cargo run --example export_session             # export: bounce to WAV, whole or a range
 cargo run --example list_devices --features devices
 ```
@@ -131,7 +133,8 @@ sends, swapped glitch-free into a running engine; bouncing to WAV; device
 output and input; recording into clips with per-track input selection,
 written as WAV files into the session folder, and hearing the input on
 the track's strip while recording;
-MIDI messages, live monitoring and hardware input. In the primitives
+MIDI messages, live monitoring and hardware input; punch in and out; a
+metronome with count-in. In the primitives
 only, for now: insert chains and CLAP plugin hosting, automation envelopes
 and modes, file decoding and resampling behind the `files` feature.
 
