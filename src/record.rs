@@ -9,9 +9,9 @@
 //! you fill yourself waits for [`collect`], which
 //! [`session::steps::render_blocks`] calls after every block it renders.
 //!
-//! Made of `superb::primitives::io::capture` (the queue),
-//! `superb::primitives::io::device` (hardware input, feature `devices`),
-//! the audio held on the `Session`, and [`clip::add`](crate::clip::add).
+//! Made of `superb::primitives::io::capture` (the queue), the session's
+//! audio input (`devices::input`, feature `devices`), the audio held on the
+//! `Session`, and [`clip::add`](crate::clip::add).
 
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::path::PathBuf;
@@ -21,7 +21,7 @@ use std::thread::JoinHandle;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
 use crate::primitives::io::EngineCommand;
-use crate::primitives::session::Input;
+use crate::primitives::session::{Input, TrackKind};
 use crate::primitives::{ClipId, Result, SuperbError, TimePosition, TrackId};
 use crate::session;
 use crate::session::Session;
@@ -29,10 +29,11 @@ use crate::transport;
 
 /// Where a recording's audio comes from.
 pub enum Source {
-    /// A hardware input: `None` for the default device, or a name from
-    /// `devices::inputs`. As many channels are captured as the armed
-    /// tracks' inputs need ([`track::input`](crate::track::input)), and a
-    /// thread gathers the audio until [`stop`].
+    /// The session's audio input (`devices::input`). If it is not open
+    /// yet, this opens it on the named device (`None` for the default).
+    /// Every channel the input carries is captured, and a thread gathers
+    /// the audio until [`stop`]; each track keeps the channel(s) its
+    /// [`track::input`](crate::track::input) names.
     #[cfg(feature = "devices")]
     Device(Option<String>),
     /// A capture queue you fill yourself (a file, a generator, a test) with
@@ -54,8 +55,6 @@ pub struct Recording {
     punch_in: TimePosition,
     tracks: Vec<TrackId>,
     channels: usize,
-    #[cfg(feature = "devices")]
-    stream: Option<crate::primitives::io::device::InputStream>,
 }
 
 impl Recording {
@@ -145,7 +144,7 @@ pub(crate) struct Collector {
     frames: Arc<AtomicUsize>,
     dropped: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
-    handle: Option<JoinHandle<Vec<Vec<f32>>>>,
+    handle: Option<JoinHandle<(Vec<Vec<f32>>, CaptureConsumer)>>,
 }
 
 impl Collector {
@@ -161,9 +160,9 @@ impl Collector {
     }
 
     /// Stops the thread after it has drained what is left on the queue and
-    /// returns the planes. Drop the input stream first so nothing new
-    /// arrives.
-    pub(crate) fn finish(mut self) -> Result<Vec<Vec<f32>>> {
+    /// returns the planes with the queue's consumer end. Stop the input
+    /// side first so nothing new arrives.
+    pub(crate) fn finish(mut self) -> Result<(Vec<Vec<f32>>, CaptureConsumer)> {
         self.stop.store(true, Ordering::Release);
         let handle = self.handle.take().expect("finish is called once");
         handle
@@ -192,10 +191,9 @@ impl core::fmt::Debug for Collector {
 /// current playhead position. The transport starts rolling (recording)
 /// at the engine's next block.
 ///
-/// Made of: [`track::arm`](crate::track::arm)ed tracks → for a device, an
-/// `InputConfig` matching the session with as many channels as their
-/// inputs need, `device::run_capture` with 64 queued blocks and a collector
-/// thread → [`session::steps::rebuild`] when needed →
+/// Made of: [`track::arm`](crate::track::arm)ed tracks → for a device,
+/// `devices::input` if the input is not open, then its recording queue and
+/// a collector thread → [`session::steps::rebuild`] when needed →
 /// `EngineHandle::send(Record)` → [`transport::playhead`] for the punch-in.
 pub fn start(session: &mut Session, source: Source) -> Result<()> {
     if session.recording.is_some() {
@@ -211,16 +209,17 @@ pub fn start(session: &mut Session, source: Source) -> Result<()> {
     match source {
         #[cfg(feature = "devices")]
         Source::Device(device) => {
-            let width = steps::input_width(session);
-            let config = crate::devices::input_config(session, device.as_deref(), width);
-            let (stream, blocks) = steps::open_input(&config, 64)?;
-            let channels = stream.channels();
-            let collector = steps::spawn_collector(blocks, channels)?;
-            begin(session, Capture::Threaded(collector), channels)?;
-            if let Some(recording) = session.recording.as_mut() {
-                recording.stream = Some(stream);
+            if session.input.is_none() {
+                crate::devices::input(session, device.as_deref())?;
             }
-            Ok(())
+            let input = session
+                .input
+                .as_mut()
+                .ok_or_else(|| SuperbError::Message("the audio input did not open".into()))?;
+            let channels = input.channels();
+            let blocks = input.begin_recording()?;
+            let collector = steps::spawn_collector(blocks, channels)?;
+            begin(session, Capture::Threaded(collector), channels)
         }
         Source::Queue { blocks, channels } => begin(
             session,
@@ -245,8 +244,6 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
         punch_in: transport::playhead(session),
         tracks,
         channels,
-        #[cfg(feature = "devices")]
-        stream: None,
     });
     Ok(())
 }
@@ -276,8 +273,9 @@ pub fn collect(session: &mut Session) -> usize {
 /// The whole placement is one undo step called "Record"; undo removes the
 /// clips, never the files.
 ///
-/// Made of: `EngineHandle::send(Stop)` → drop the input stream → drain the
-/// queue or `Collector::finish` → the planes become one buffer → per
+/// Made of: `EngineHandle::send(Stop)` → drain the queue or
+/// `Collector::finish` (and hand the audio input its queue back) → the
+/// planes become one buffer → per
 /// track, a file name nothing uses yet and the channels its `Input`
 /// selects → `wav::write` into the session folder → `AudioCache::insert_shared`
 /// → [`clip::add`](crate::clip::add), inside one undo group; rebuilds the
@@ -292,12 +290,8 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         capture,
         punch_in,
         tracks,
-        #[cfg(feature = "devices")]
-        stream,
         ..
     } = recording;
-    #[cfg(feature = "devices")]
-    drop(stream); // nothing new arrives from here
     let planes = match capture {
         Capture::Manual {
             mut blocks,
@@ -306,7 +300,16 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
             steps::append_blocks(&mut blocks, &mut planes);
             planes
         }
-        Capture::Threaded(collector) => collector.finish()?,
+        Capture::Threaded(collector) => {
+            let (planes, blocks) = collector.finish()?;
+            #[cfg(feature = "devices")]
+            if let Some(input) = session.input.as_mut() {
+                input.end_recording(blocks);
+            }
+            #[cfg(not(feature = "devices"))]
+            drop(blocks);
+            planes
+        }
     };
     let audio = steps::finish_recording(planes);
     if audio.frames() == 0 {
@@ -350,16 +353,6 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
 pub(crate) mod steps {
     use super::*;
 
-    /// Opens a hardware input as a capture queue with `slots` pre-allocated
-    /// blocks. Returns the stream (drop it to stop) and the consumer end.
-    #[cfg(feature = "devices")]
-    pub(crate) fn open_input(
-        config: &crate::primitives::io::device::InputConfig,
-        slots: usize,
-    ) -> Result<(crate::primitives::io::device::InputStream, CaptureConsumer)> {
-        crate::primitives::io::device::run_capture(config, slots)
-    }
-
     /// Starts a thread that empties `blocks` into memory as they arrive.
     /// The thread sleeps briefly when the queue is empty and exits after
     /// [`Collector::finish`].
@@ -380,10 +373,10 @@ pub(crate) mod steps {
                     let appended = append_blocks(&mut blocks, &mut planes);
                     frames_t.fetch_add(appended, Ordering::Release);
                     if stop_t.load(Ordering::Acquire) {
-                        // The input has been closed; take what is left.
+                        // The input has stopped feeding us; take what is left.
                         let rest = append_blocks(&mut blocks, &mut planes);
                         frames_t.fetch_add(rest, Ordering::Release);
-                        break planes;
+                        break (planes, blocks);
                     }
                     if appended == 0 {
                         std::thread::sleep(core::time::Duration::from_millis(2));
@@ -401,13 +394,16 @@ pub(crate) mod steps {
         })
     }
 
-    /// How many input channels the armed tracks need: one past the highest
-    /// channel any of their inputs names, and at least one.
+    /// How many input channels the audio tracks' inputs name: one past the
+    /// highest channel among them, and at least one.
     #[cfg_attr(not(feature = "devices"), allow(dead_code))]
     pub(crate) fn input_width(session: &Session) -> usize {
-        crate::track::armed(session)
-            .into_iter()
-            .filter_map(|t| session.memory.track(t).ok()?.state.input)
+        session
+            .memory
+            .tracks()
+            .iter()
+            .filter(|t| t.kind == TrackKind::Audio)
+            .filter_map(|t| t.state.input)
             .map(Input::width)
             .max()
             .unwrap_or(1)
@@ -497,7 +493,6 @@ pub(crate) mod steps {
 mod tests {
     use super::*;
     use crate::primitives::io::capture::capture_queue;
-    use crate::primitives::session::TrackKind;
     use crate::primitives::{SampleRate, TimeDuration};
     use crate::track;
     use crate::transport;

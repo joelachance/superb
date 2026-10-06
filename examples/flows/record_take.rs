@@ -6,6 +6,8 @@
 //! - `record::start` takes a `Source`: a hardware input (feature `devices`),
 //!   gathered on a thread, or a capture queue you fill yourself, which is
 //!   what this example does
+//! - A monitoring audio track plays the session's audio input through its
+//!   strip, so you hear yourself while recording
 //! - `record::stop` writes the audio as a WAV file into the session folder,
 //!   places the clips as one undo step and stops the transport
 //!
@@ -15,6 +17,7 @@
 
 use superb::prelude::*;
 use superb::primitives::io::capture::capture_queue;
+use superb::primitives::io::{EngineCommand, LiveInput};
 use superb::{record, session, track, transport};
 
 fn main() -> Result<()> {
@@ -31,6 +34,15 @@ fn main() -> Result<()> {
     track::arm(&mut session, vox, true)?;
     track::input(&mut session, vox, Some(Input::Mono(0)))?;
     println!("vox armed: {}", session.memory.track(vox)?.state.arm);
+
+    // Hear yourself: a monitoring audio track plays the session's audio
+    // input through its strip. With a real interface `devices::input` opens
+    // the input; offline we feed the engine's live input from a queue.
+    track::monitor(&mut session, vox, true)?;
+    let (mut ear, live) = capture_queue(1, block, 8)?;
+    session
+        .engine
+        .send(EngineCommand::LiveInput(LiveInput::new(live, 1, block)?))?;
 
     // Roll the transport a second in, then punch in there.
     transport::start(&mut session)?;
@@ -58,6 +70,7 @@ fn main() -> Result<()> {
     // has to be collected as it goes: `session::steps::render_blocks` does that for a
     // manual capture (a device capture has its own collector thread).
     let mut phase = 0.0f32;
+    let mut monitored = 0.0f32;
     let mut sung = PlanarBuffer::new(1, block);
     let blocks = rate.hz() as usize / 2 / block;
     for n in 0..blocks {
@@ -67,7 +80,9 @@ fn main() -> Result<()> {
         }
         let timestamp_us = (n * block) as u64 * 1_000_000 / rate.hz() as u64;
         mic.push(&sung, timestamp_us);
-        session::steps::render_blocks(&mut session, 1)?;
+        ear.push(&sung, timestamp_us);
+        let heard = session::steps::render_blocks(&mut session, 1)?;
+        monitored = monitored.max(heard.peak());
         if n == blocks / 2 {
             println!(
                 "half way ({:?}): {} frames collected, {} dropped",
@@ -77,6 +92,8 @@ fn main() -> Result<()> {
             );
         }
     }
+
+    println!("heard while recording: peak {monitored:.3} on the vox strip");
 
     // Stop: the recording is drained, written to the folder and placed on
     // every armed track, starting at the punch-in point.

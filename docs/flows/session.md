@@ -31,7 +31,7 @@ Tracks are added and set up in [`track`](track.md); clips are placed in
 |---|---|
 | `rebuild(session)` | build a fresh mixer from the memory and swap it into the engine; the structural flows call it for you |
 | `render_blocks(session, blocks) -> PlanarBuffer` | tick the audio thread for `blocks` blocks when no sound card is attached, and return the audio |
-| `build_mixer(&memory, &audio, channels) -> (Mixer, MixerHandles)` | strips carrying each track's state, routing, sends, a node per clip, a live instrument per monitoring MIDI track; and the live controls, keyed by the memory's ids |
+| `build_mixer(&memory, &audio, channels) -> (Mixer, MixerHandles)` | strips carrying each track's state, routing, sends, a node per clip, a live instrument per monitoring MIDI track, an input tap per monitoring audio track; and the live controls, keyed by the memory's ids |
 | `publish(&mut EngineHandle, Mixer)` | prepare the graph and hand it to the engine |
 
 `MixerHandles` is what `build_mixer` returns beside the mixer and what

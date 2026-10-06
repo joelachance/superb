@@ -26,7 +26,7 @@ every block.
 
 | source | does |
 |---|---|
-| `Source::Device(Option<name>)` (feature `devices`) | a hardware input matched to the session with as many channels as the armed tracks' inputs need, gathered by a thread |
+| `Source::Device(Option<name>)` (feature `devices`) | the session's audio input (`devices::input`), opened on that device if it is not open yet; every channel it carries, gathered by a thread |
 | `Source::Queue { blocks, channels }` | a capture queue you fill yourself (`capture_queue` gives both ends) |
 
 `Recording` is the recording in progress, held in `session.recording`:
@@ -65,9 +65,8 @@ let clips = record::stop(&mut session)?;
 
 ## Made of
 
-`start`: the armed tracks → for a device, an `InputConfig` at the
-session's rate and block size with the channels the inputs need,
-`device::run_capture` with 64 queued blocks, and a collector thread →
+`start`: the armed tracks → for a device, `devices::input` if needed, its
+recording queue (64 blocks) and a collector thread →
 `session::steps::rebuild` if needed → `EngineHandle::send(Record)` →
 `transport::playhead` for the punch-in. `stop`: `EngineHandle::send(Stop)`
 → drop the stream → drain the queue or finish the thread → one buffer from
@@ -79,6 +78,8 @@ rebuild.
 
 ## Notes
 
+* To hear yourself, `track::monitor` the armed track: it plays the same
+  input through its strip.
 * The queue holds only a fraction of a second (a device source uses 64
   blocks), which is why a device recording gets a thread. A queue
   recording relies on `render_blocks` collecting after every block; with a
@@ -89,5 +90,4 @@ rebuild.
   input get two copies of the capture on disk).
 * Undo removes a clip, never its file; a reopened session takes the next
   free name.
-* Input monitoring, punch-out, loop recording and pre-roll are not there
-  yet.
+* Punch-out, loop recording and pre-roll are not there yet.

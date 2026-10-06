@@ -14,13 +14,13 @@ use std::sync::Arc;
 use crate::primitives::buffers::gain::db_to_linear;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::nodes::{
-    BufferPlayerNode, MonoSynthNode, ScheduledNoteEvent, ScheduledSynthNode,
+    BufferPlayerNode, LiveInputNode, MonoSynthNode, ScheduledNoteEvent, ScheduledSynthNode,
 };
 use crate::primitives::graph::MidiPort;
 use crate::primitives::io::cache::AudioCache;
 use crate::primitives::io::{EngineCommand, EngineHandle};
 use crate::primitives::mixer::{Mixer, SendParams, SendTap, StripId, StripParams};
-use crate::primitives::session::{Clip, ClipSource, Memory, MidiNote, TrackKind};
+use crate::primitives::session::{Clip, ClipSource, Input, Memory, MidiNote, TrackKind};
 use crate::primitives::transport::TempoMap;
 use crate::primitives::{BeatPosition, Result, SendId, SuperbError, TrackId};
 use crate::session::{MixerHandles, Session};
@@ -94,8 +94,10 @@ pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffe
 /// Builds a fresh mixer for the memory and returns it with the handles
 /// the control side keeps: a strip per track and bus carrying the track's
 /// state, each track's output routed where the memory says, a send per
-/// send in the memory, a node per audible clip, and a live instrument on every
-/// monitoring MIDI track so it sounds when you play.
+/// send in the memory, a node per audible clip, a live instrument on every
+/// monitoring MIDI track so it sounds when you play, and a tap on the
+/// engine's live input on every monitoring audio track so you hear what it
+/// records.
 ///
 /// The memory's and the mixer's ids are separate namespaces; the handles
 /// are keyed by the memory's, so a flow never sees a mixer id.
@@ -106,7 +108,8 @@ pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffe
 /// → `Mixer::add_send` per send in the memory → a [`BufferPlayerNode`] (audio
 /// held in memory) or [`ScheduledSynthNode`] (MIDI notes through the tempo
 /// map) per unmuted clip → a [`MonoSynthNode`] with a MIDI edge per
-/// monitoring MIDI track.
+/// monitoring MIDI track → a [`LiveInputNode`] on the channel(s) its input
+/// names per monitoring audio track.
 pub fn build_mixer(
     memory: &Memory,
     cache: &AudioCache,
@@ -117,7 +120,7 @@ pub fn build_mixer(
     route(memory, &mut mixer, &strips)?;
     let sends = add_sends(memory, &mut mixer, &strips)?;
     add_clip_players(memory, &mut mixer, &strips, cache)?;
-    add_monitor_instruments(memory, &mut mixer, &strips)?;
+    add_monitors(memory, &mut mixer, &strips)?;
     let mut handles = MixerHandles {
         strips: Vec::with_capacity(strips.len()),
         sends,
@@ -267,23 +270,49 @@ fn add_clip_players(
 }
 
 /// A [`MonoSynthNode`] fed by the engine's MIDI input on every monitoring
-/// MIDI track, so notes you play sound on that track's strip.
-fn add_monitor_instruments(memory: &Memory, mixer: &mut Mixer, strips: &Strips) -> Result<()> {
+/// MIDI track, so notes you play sound on that track's strip; a
+/// [`LiveInputNode`] on every monitoring audio track, playing the
+/// channel(s) its input names from the engine's live input.
+fn add_monitors(memory: &Memory, mixer: &mut Mixer, strips: &Strips) -> Result<()> {
     let channels = mixer.channels();
     for track in memory.tracks() {
-        if track.kind != TrackKind::Midi || !track.state.monitor {
+        if !track.state.monitor {
             continue;
         }
         let Some(StripId::Track(strip)) = strip_of(strips, track.id()) else {
             continue;
         };
-        let synth = mixer
-            .graph_mut()
-            .add_node(Box::new(MonoSynthNode::new(channels)));
-        mixer.connect_source(synth, strip)?;
-        mixer.graph_mut().connect_midi(MidiPort::External, synth)?;
+        match track.kind {
+            TrackKind::Midi => {
+                let synth = mixer
+                    .graph_mut()
+                    .add_node(Box::new(MonoSynthNode::new(channels)));
+                mixer.connect_source(synth, strip)?;
+                mixer.graph_mut().connect_midi(MidiPort::External, synth)?;
+            }
+            TrackKind::Audio => {
+                let tap = mixer
+                    .graph_mut()
+                    .add_node(Box::new(LiveInputNode::new(monitor_taps(
+                        track.state.input,
+                    ))));
+                mixer.connect_source(tap, strip)?;
+            }
+            TrackKind::Bus => {}
+        }
     }
     Ok(())
+}
+
+/// Which live-input channel feeds each side of a monitoring audio track's
+/// strip: a mono input on both sides, a stereo pair as it is, the first
+/// two channels when no input is set.
+fn monitor_taps(input: Option<Input>) -> [usize; 2] {
+    match input {
+        None => [0, 1],
+        Some(Input::Mono(c)) => [c, c],
+        Some(Input::Stereo(l, r)) => [l, r],
+    }
 }
 
 /// Converts clip-relative MIDI notes into absolute-sample
@@ -677,5 +706,50 @@ mod tests {
             render_blocks(&mut session, 1),
             Err(SuperbError::Message(_))
         ));
+    }
+
+    #[test]
+    fn monitoring_audio_tracks_hear_the_live_input_on_their_strip() {
+        use crate::primitives::io::capture::capture_queue;
+        use crate::primitives::io::{EngineCommand, LiveInput};
+        let mut session = session::create(session::scratch("monitor"), R, 64).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        track::input(&mut session, vox, Some(Input::Mono(1))).unwrap();
+        track::monitor(&mut session, vox, true).unwrap();
+        let (mixer, _) = build_mixer(&session.memory, &session.audio, 2).unwrap();
+        assert_eq!(
+            mixer.graph().node_count(),
+            5,
+            "master pair + strip pair + the input tap"
+        );
+        assert_eq!(monitor_taps(None), [0, 1]);
+        assert_eq!(monitor_taps(Some(Input::Stereo(2, 3))), [2, 3]);
+
+        // Feed the engine's live input the way `devices::input` does.
+        let (mut mic, blocks) = capture_queue(2, 64, 8).unwrap();
+        session
+            .engine
+            .send(EngineCommand::LiveInput(
+                LiveInput::new(blocks, 2, 64).unwrap(),
+            ))
+            .unwrap();
+        let mut block = PlanarBuffer::new(2, 64);
+        block.channel_mut(1).fill(0.5); // the voice is on the second channel
+        for i in 0..4 {
+            assert!(mic.push(&block, i));
+        }
+        // Monitoring works with the transport stopped.
+        let heard = render_blocks(&mut session, 2).unwrap();
+        assert!(
+            heard.channel(0)[100].abs() > 0.2 && heard.channel(1)[100].abs() > 0.2,
+            "input channel 1 on both sides: {} {}",
+            heard.channel(0)[100],
+            heard.channel(1)[100]
+        );
+        track::monitor(&mut session, vox, false).unwrap();
+        for i in 0..4 {
+            assert!(mic.push(&block, i));
+        }
+        assert!(render_blocks(&mut session, 2).unwrap().is_silent());
     }
 }

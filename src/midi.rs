@@ -1,7 +1,7 @@
 //! MIDI: hearing what you play, sending notes, connecting a keyboard.
 //!
 //! A MIDI track that is *monitoring* gets a live instrument when the
-//! console is built, so notes arriving at the engine sound on that track's
+//! mixer is built, so notes arriving at the engine sound on that track's
 //! strip. Notes can come from your program ([`play_note`], [`send`]) or,
 //! with the `midi-io` feature, from a hardware port (`connect_input`;
 //! `devices::midi_inputs` lists them).
@@ -102,11 +102,11 @@ mod tests {
     }
 
     #[test]
-    fn only_midi_tracks_monitor_and_bad_notes_are_refused() {
+    fn buses_do_not_monitor_and_bad_notes_are_refused() {
         let mut session = session::create(session::scratch("keys"), R, 64).unwrap();
-        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        let fx = track::add(&mut session, "fx", TrackKind::Bus).unwrap();
         assert!(matches!(
-            track::monitor(&mut session, vox, true),
+            track::monitor(&mut session, fx, true),
             Err(SuperbError::InvalidArgument { .. })
         ));
         assert!(track::monitor(&mut session, TrackId::from_raw(99), true).is_err());

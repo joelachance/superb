@@ -24,7 +24,7 @@ shape, so they rebuild it.
 | `pan(session, track, pan)` | `-1.0` left to `1.0` right | drag |
 | `mute(session, track, on)` / `solo(session, track, on)` | state; memory + live strip | — |
 | `arm(session, track, on)` | state; audio tracks only; armed tracks get a clip when a recording stops | — |
-| `monitor(session, track, on)` | state; MIDI tracks only; the track carries a live instrument; rebuilds | — |
+| `monitor(session, track, on)` | state; a MIDI track carries a live instrument, an audio track plays the session's audio input (`devices::input`) on the channel(s) its input names; not for buses; rebuilds | — |
 | `input(session, track, Option<Input>)` | state; audio tracks only; which input channel(s) feed the track when it records: `Input::Mono(0)`, `Input::Stereo(0, 1)`, or `None` for everything captured | — |
 | `route(session, track, Some(bus) or None)` | output into a bus or the master; loops refused | one |
 | `peak(session, track) -> Option<[f32; 2]>` | the strip's peak meter, read and reset; `None` before the first rebuild | |
@@ -45,6 +45,7 @@ track::mute(&mut session, vox, true)?;       // state: saved, not undoable
 track::arm(&mut session, vox, true)?;
 track::input(&mut session, vox, Some(Input::Mono(0)))?;   // records the first input, mono
 track::monitor(&mut session, keys, true)?;   // the keys track now sounds when MIDI arrives
+track::monitor(&mut session, vox, true)?;    // and vox plays the audio input (hear yourself)
 assert_eq!(session.memory.track(vox)?.state.volume_db, -3.0);
 ```
 
@@ -56,7 +57,7 @@ through `session::structural`. `volume` / `pan`: `set_track_volume_db` /
 / `set_pan` on the live strip. `mute` / `solo` / `arm` / `monitor`:
 `TrackState::{mute, solo, arm, monitor, input}` through `session::set_state`,
 then `StripParams::set_mute` / `set_solo` for the first two and a rebuild
-for `monitor`. `route`: `SetTrackOutput` through `session::structural`.
+for `monitor` (a `MonoSynthNode` or a `LiveInputNode` on the strip). `route`: `SetTrackOutput` through `session::structural`.
 `peak`: `StripParams::take_peak` for channels 0 and 1.
 
 ## Notes
@@ -69,4 +70,5 @@ for `monitor`. `route`: `SetTrackOutput` through `session::structural`.
   other track; buses ignore solo.
 * The instrument a monitoring MIDI track gets is `MonoSynthNode`, a simple
   synth for hearing that MIDI arrives; instrument plugins come later.
-* Not yet: hearing a track's input through its strip while recording.
+* Monitoring an audio track needs the audio input open
+  (`devices::input`); without it the tap is silent.

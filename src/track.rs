@@ -1,7 +1,9 @@
 //! Tracks: add them, name them, set their state, read their meters.
 //!
 //! A track's *state* (mute, solo, arm, monitor, input, volume, pan, where
-//! its output goes) is what the strip shows. Switches (mute, solo, arm,
+//! its output goes) is what the strip shows. Monitoring is hearing the
+//! track's input live: MIDI through an instrument, audio through the
+//! session's audio input. Switches (mute, solo, arm,
 //! monitor) are saved with the session, heard at the next block and never
 //! undo steps. Volume and pan are edits: they coalesce in the undo history
 //! and reach the live strip at once. Adding, removing and routing change
@@ -125,17 +127,20 @@ pub(crate) fn armed(session: &Session) -> Vec<TrackId> {
         .collect()
 }
 
-/// Turns live monitoring on or off for a MIDI track. While on, the track
-/// carries an instrument that plays whatever MIDI reaches the engine.
-/// State, saved as the track's arm flag; it changes the mixer's shape, so
-/// it rebuilds.
+/// Turns monitoring on or off. A monitoring MIDI track carries a live
+/// instrument that plays whatever MIDI reaches the engine. A monitoring
+/// audio track plays the session's audio input (`devices::input`, feature
+/// `devices`) through its strip, on the channel(s) its [`input`] names (the
+/// first two when none is set), so you hear yourself while recording.
+/// State, saved with the session; it changes the mixer's shape, so it
+/// rebuilds. Buses do not monitor.
 ///
-/// Made of: `TrackState::arm` through `session::set_state` → rebuild (the
-/// instrument is a node in the mixer).
+/// Made of: `TrackState::monitor` through `session::set_state` → rebuild
+/// (the instrument or the input tap is a node in the mixer).
 pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    if session.memory.track(track)?.kind != TrackKind::Midi {
+    if session.memory.track(track)?.kind == TrackKind::Bus {
         return Err(SuperbError::InvalidArgument {
-            what: "only MIDI tracks monitor live MIDI",
+            what: "buses do not monitor",
         });
     }
     crate::session::set_state(session, |d| {

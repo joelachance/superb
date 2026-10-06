@@ -52,7 +52,7 @@ fn main() -> Result<()> {
     let mut render = |live: &mut LiveGraph, label: &str, blocks: usize| -> Result<()> {
         let mut peak = 0.0f32;
         for _ in 0..blocks {
-            live.process(time, block, &midi)?;
+            live.process(time, block, &midi, None)?;
             time = time.advanced_by(block, sample_rate);
             // output() is the PlanarBuffer from the last process; peak() = max |sample|.
             peak = peak.max(live.output().peak());

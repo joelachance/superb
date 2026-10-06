@@ -85,6 +85,10 @@ pub struct Session {
     /// The running output stream, once started.
     #[cfg(feature = "devices")]
     pub output: Option<crate::primitives::io::device::OutputStream>,
+    /// The audio input, once `devices::input` opened it: what monitoring
+    /// audio tracks hear and device recordings capture.
+    #[cfg(feature = "devices")]
+    pub input: Option<crate::devices::AudioInput>,
     /// Hardware MIDI inputs connected so far. Dropping one disconnects it.
     #[cfg(feature = "midi-io")]
     pub midi_inputs: Vec<crate::primitives::midi::input::MidiInputBridge>,
@@ -119,6 +123,8 @@ impl Session {
             needs_rebuild: true,
             #[cfg(feature = "devices")]
             output: None,
+            #[cfg(feature = "devices")]
+            input: None,
             #[cfg(feature = "midi-io")]
             midi_inputs: Vec::new(),
         })

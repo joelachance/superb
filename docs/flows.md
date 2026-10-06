@@ -48,6 +48,7 @@ pub struct Session {
     pub recording: Option<Recording>,
     pub channels: usize,             // 2 = stereo
     pub output: Option<OutputStream>,          // feature devices
+    pub input: Option<AudioInput>,             // feature devices: the audio input, once opened
     pub midi_inputs: Vec<MidiInputBridge>,      // feature midi-io
 }
 ```
@@ -88,7 +89,7 @@ undo.
 
 The engine runs a mixer built from the memory. Edits that change its
 *shape* (a new track, a clip added, moved or archived, a send, a route,
-monitoring on a MIDI track) rebuild it: at once while a device is playing
+monitoring on a track) rebuild it: at once while a device is playing
 (so the change is heard within a block), otherwise at the next `transport::start`
 or `session::steps::render_blocks`, which is cheaper when many edits
 arrive together (opening a file). You never call `rebuild` yourself unless
@@ -119,7 +120,8 @@ that is how the tests and most examples hear the session. `export` renders throu
 its own offline engine. `record::start` with a `Source::Queue` records
 from any capture producer, so a recording can come from a file or a
 generator. With the `devices` feature, `devices::output` moves the audio
-thread into a real output stream and `Source::Device` opens a real input.
+thread into a real output stream and `devices::input` opens the input that
+monitoring tracks hear and `Source::Device` records from.
 
 ## Writing a new flow
 

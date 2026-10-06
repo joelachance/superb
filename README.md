@@ -127,16 +127,16 @@ Working today, through the flows: the session's memory with tracks and
 their state, clips (archived rather than deleted), markers, routing, JSON
 files and undo; a mixer built from the memory with faders, buses and
 sends, swapped glitch-free into a running engine; bouncing to WAV; device
-output and capture; recording into clips with per-track input selection,
-written as WAV files into the session folder;
+output and input; recording into clips with per-track input selection,
+written as WAV files into the session folder, and hearing the input on
+the track's strip while recording;
 MIDI messages, live monitoring and hardware input. In the primitives
 only, for now: insert chains and CLAP plugin hosting, automation envelopes
 and modes, file decoding and resampling behind the `files` feature.
 
 Not yet: a plugins flow, duplex device streams, aligning hardware MIDI
 timestamps with the audio clock, updating a running mixer incrementally (a
-rebuild replaces it), monitoring a live input through a strip, punch-in/out
-and loop recording, VST3 hosting, SysEx and Standard MIDI Files, and
+rebuild replaces it), punch-in/out and loop recording, VST3 hosting, SysEx and Standard MIDI Files, and
 encoders other than WAV.
 
 ## Licence

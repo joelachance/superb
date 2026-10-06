@@ -96,7 +96,8 @@ Data crosses the thread boundary in exactly three ways:
      memory says, adds a send per send in the memory, and attaches one source
      node per audible clip: `BufferPlayerNode` for audio held in memory,
      `ScheduledSynthNode` for MIDI notes converted through the tempo map,
-     plus a live instrument for every monitoring MIDI track. It returns
+     plus a live instrument for every monitoring MIDI track and a tap on
+     the engine's live input for every monitoring audio track. It returns
      the `MixerHandles` the control side keeps, keyed by the memory's ids (the
      mixer has its own id namespace, which the flows never see).
    * `publish` prepares the mixer's graph and sends it to the engine.
@@ -120,9 +121,10 @@ Data crosses the thread boundary in exactly three ways:
    queued MIDI at sample-accurate frames, runs the processor and copies the
    result out. `offline::render` drives a private engine for `export`.
 
-Recording runs the other way: a device (or any producer) fills a capture
-queue, a collector thread (or `record::collect`, for a queue you fill
-yourself) moves blocks into memory on the control thread, and
+Recording runs the other way: the audio input (`devices::input`, or any
+producer) fills a capture queue, a collector thread (or `record::collect`,
+for a queue you fill yourself) moves blocks into memory on the control
+thread, and
 `record::stop` writes each track's audio as a WAV file into the session
 folder, keeps it in memory, and places one clip per armed track as a
 single undo step.
@@ -167,8 +169,10 @@ Inserts sit between the input node and the strip node; pre-fader sends
 tap after the last insert.
 
 **Live engine.** Commands and graphs go one way, position and transport
-state come
-back as atomics. A published graph must be prepared for the engine's
+state come back as atomics. Captured audio enters the same way: a
+`LiveInput` attached by command, pulled into a ring before each block and
+handed to every node as `ProcessContext::input`, so monitoring is a node
+on the strip and nothing locks. A published graph must be prepared for the engine's
 sample rate and block size or it is rejected, never re-prepared on the
 audio thread. The swap queue holds two graphs; `session::steps::rebuild` reclaims
 retired graphs before building and, while the audio thread is still owned
@@ -247,7 +251,7 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 
 Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
 A plugins flow (the host is a primitive). Incremental edits to a running mixer (a
-rebuild replaces it). Monitoring a live input through a strip. Punch-in/out
-and loop recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
+rebuild replaces it). Closing the audio input. Punch-in/out and loop
+recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
 Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes
 owned by the session. Multi-bus or sidechain nodes.
