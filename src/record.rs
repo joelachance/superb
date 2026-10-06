@@ -21,8 +21,12 @@ use std::thread::JoinHandle;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
 use crate::primitives::io::EngineCommand;
-use crate::primitives::session::{Input, TrackKind};
-use crate::primitives::{ClipId, Result, SuperbError, TimePosition, TrackId};
+use crate::primitives::session::commands::AddClip;
+use crate::primitives::session::{Clip, ClipSource, Input, Memory, TrackKind};
+use crate::primitives::undo::Command;
+use crate::primitives::{
+    ClipId, Result, SampleRate, SuperbError, TimeDuration, TimePosition, TrackId,
+};
 use crate::session;
 use crate::session::Session;
 use crate::transport;
@@ -270,8 +274,9 @@ pub fn collect(session: &mut Session) -> usize {
 /// and refers to `audio/<track> <n>.wav` (`audio/vox 1.wav`), so it is
 /// named `vox 1`; the file is written into [`Session::folder`] before the
 /// clip is placed. Returns the new clips (none if nothing was captured).
-/// The whole placement is one undo step called "Record"; undo removes the
-/// clips, never the files.
+/// The whole placement is one undo step called "Record": undoing it
+/// removes the clips and deletes the files it wrote, redo writes them
+/// again; the audio stays in memory either way.
 ///
 /// Made of: `EngineHandle::send(Stop)` → drain the queue or
 /// `Collector::finish` (and hand the audio input its queue back) → the
@@ -331,22 +336,79 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
             None => Arc::clone(&whole),
             Some(input) => Arc::new(steps::select_input(&whole, input)),
         };
-        if let Err(e) = crate::session::folder::write_audio(&session.folder, &key, &audio, rate) {
+        session.audio.insert_shared(key.clone(), Arc::clone(&audio));
+        let id = session.memory.allocate_clip_id();
+        let name = key
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let length = TimeDuration::from_samples(audio.frames() as i64);
+        let placed = Clip::with_id(
+            id,
+            name,
+            punch_in,
+            length,
+            ClipSource::Audio {
+                path: key.clone(),
+                offset: TimeDuration::ZERO,
+            },
+        )
+        .and_then(|clip| {
+            let folder = session.folder.clone();
+            session::structural(
+                session,
+                RecordClip {
+                    add: AddClip::new(*track, clip),
+                    folder,
+                    key,
+                    audio,
+                    rate,
+                },
+            )
+        });
+        if let Err(e) = placed {
             session.history.cancel_group(&mut session.memory)?;
             return Err(e);
         }
-        session.audio.insert_shared(key.clone(), audio);
-        match crate::clip::add(session, *track, key.as_path(), punch_in) {
-            Ok(clip) => clips.push(clip),
-            Err(e) => {
-                session.history.cancel_group(&mut session.memory)?;
-                return Err(e);
-            }
-        }
+        clips.push(id);
     }
     session.history.end_group();
     session.needs_rebuild = true;
     Ok(clips)
+}
+
+/// Places a recorded clip and owns its file: applying writes the WAV, so a
+/// redo brings the file back; reverting deletes it, so an undone recording
+/// leaves nothing on disk. The audio stays in `Session::audio` either way.
+struct RecordClip {
+    add: AddClip,
+    folder: PathBuf,
+    key: PathBuf,
+    audio: Arc<PlanarBuffer>,
+    rate: SampleRate,
+}
+
+impl Command<Memory> for RecordClip {
+    fn label(&self) -> &str {
+        "Record"
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        crate::session::folder::write_audio(&self.folder, &self.key, &self.audio, self.rate)?;
+        self.add.apply(memory)
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        self.add.revert(memory)?;
+        match std::fs::remove_file(self.folder.join(&self.key)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(SuperbError::Message(format!(
+                "cannot delete {}: {e}",
+                self.key.display()
+            ))),
+        }
+    }
 }
 
 /// The parts `start`, `collect` and `stop` are made of.
@@ -897,10 +959,14 @@ mod tests {
                 if path == std::path::Path::new("audio/vox 1.wav")
         ));
 
-        // Undo removes the clip and keeps the file; the next recording
-        // takes the next name even after a reopen that knows nothing of it.
-        session::undo(&mut session).unwrap();
-        assert!(file.is_file());
+        // Undoing the recording deletes its file; redo writes it again. After
+        // an undo nothing refers to the name, so a reopened session reuses it.
+        assert!(session::undo(&mut session).unwrap());
+        assert!(!file.exists(), "undo deletes the recording's file");
+        assert!(session::redo(&mut session).unwrap());
+        assert!(file.is_file(), "redo writes it again");
+        assert!(session::undo(&mut session).unwrap());
+        assert!(!file.exists());
         session::save(&mut session).unwrap();
         let mut again = session::open(&dir, 64).unwrap();
         assert!(
@@ -919,8 +985,8 @@ mod tests {
         .unwrap();
         feed(&mut mic, 2, 0.5);
         let clips = stop(&mut again).unwrap();
-        assert_eq!(again.memory.clip(clips[0]).unwrap().name, "vox 2");
-        assert!(dir.join("audio/vox 2.wav").is_file());
+        assert_eq!(again.memory.clip(clips[0]).unwrap().name, "vox 1");
+        assert!(file.is_file());
 
         // Reopening loads the recording and it plays.
         session::save(&mut again).unwrap();

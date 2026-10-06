@@ -206,8 +206,8 @@ a cycle), and removing a bus detaches what fed it instead of failing.
 
 **Files.** A session is a folder from its creation: `memory.json` beside `audio/`,
 where recordings land as 32-bit float WAV at the session's rate, named
-`<track> <n>.wav`; clips refer to them by relative path, and nothing is
-ever deleted. The MPL-2.0 decoder is imported from exactly one source file and
+`<track> <n>.wav`; clips refer to them by relative path. Undoing a
+recording deletes the files it wrote; nothing else does. The MPL-2.0 decoder is imported from exactly one source file and
 returns Superb types only; a default-feature test scans the crate for stray
 mentions. Decoding is whole-file and lenient: a truncated file yields the
 frames it has, a corrupt packet is skipped, an unrecognised container is

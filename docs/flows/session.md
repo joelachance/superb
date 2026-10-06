@@ -73,9 +73,9 @@ path relative to the folder, which is also its key in `session.audio`.
 is placed; `save` writes `memory.json` and any audio a program put in
 `session.audio` under a key that is not on disk yet. `open` reads every
 referenced WAV back; a missing file leaves its clip silent rather than
-failing. Files are never deleted: undoing a recording removes the clip,
-not the file. Archived clips keep their files in place; `memory.json`
-marks them `"archived": true`.
+failing. The only thing that deletes a file is undoing the recording that
+wrote it; redo writes it again. Archived clips keep their files in place;
+`memory.json` marks them `"archived": true`.
 
 ## Made of
 

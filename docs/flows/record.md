@@ -88,6 +88,6 @@ rebuild.
 * Every armed track gets a clip at the punch-in position holding the
   channels its input selects, and its own file (two tracks without an
   input get two copies of the capture on disk).
-* Undo removes a clip, never its file; a reopened session takes the next
-  free name.
+* Undoing a recording removes its clips and deletes the files it wrote;
+  redo writes them again. Nothing else deletes a file.
 * Punch-out, loop recording and pre-roll are not there yet.

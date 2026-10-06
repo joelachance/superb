@@ -3,7 +3,8 @@
 //! A clip's audio key is a path relative to this folder. Recordings are
 //! written there as they stop (`audio/vox 1.wav`), `save` writes whatever a
 //! clip refers to that is not on disk yet, and `open` reads it all back.
-//! Files are never deleted: an undone recording keeps its file.
+//! Undoing a recording deletes the files it wrote; nothing else deletes a
+//! file.
 
 use std::path::{Path, PathBuf};
 
