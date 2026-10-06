@@ -52,7 +52,7 @@ column is what not to say in code, docs or UI text.
 | sync (reserved: aligning to a clock) | anything else |
 | recording (in progress) and clip (the result) | take |
 | clip | item, region, event |
-| archive (a clip; it stays, silent) | delete, remove (clips are never deleted) |
+| archive (a clip or a track; it stays, silent) | delete, remove (nothing in the memory is deleted) |
 | strip | channel (a strip's channel count is something else) |
 | insert | effect slot, plugin slot |
 | state (mute, solo, arm, monitor, input, clip mute, send on/off, looping) | switch, toggle, flag |

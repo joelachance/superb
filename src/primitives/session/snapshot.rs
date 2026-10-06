@@ -172,6 +172,9 @@ pub struct TrackSnapshot {
     /// Which input channels the track records from (absent in older files).
     #[serde(default)]
     pub input: Option<Input>,
+    /// Archived: kept with its clips but no strip (absent in older files).
+    #[serde(default)]
+    pub archived: bool,
     /// Raw ID of the bus track the output feeds (`None` = master; absent
     /// in files written before routing existed).
     #[serde(default)]
@@ -284,6 +287,7 @@ impl From<&Track> for TrackSnapshot {
             arm: t.state.arm,
             monitor: t.state.monitor,
             input: t.state.input,
+            archived: t.state.archived,
             output: t.output.map(TrackId::raw),
             sends: t.sends.iter().map(SendSnapshot::from).collect(),
             inserts: t.inserts.iter().map(InsertSnapshot::from).collect(),
@@ -424,6 +428,7 @@ impl Memory {
                 track.state.monitor = t.monitor;
             }
             track.state.input = t.input;
+            track.state.archived = t.archived;
             if t.kind == TrackKind::Bus && !t.clips.is_empty() {
                 return Err(SuperbError::InvalidArgument {
                     what: "bus tracks hold no clips",

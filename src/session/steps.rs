@@ -155,10 +155,14 @@ fn strip_params(mixer: &Mixer, strip: StripId) -> Result<Arc<StripParams>> {
 }
 
 /// A strip per audio or MIDI track and a bus per bus track, each carrying
-/// the track's volume, pan, mute and solo.
+/// the track's volume, pan, mute and solo. Archived tracks get none, so
+/// nothing on them plays and nothing routes into them.
 fn add_strips(memory: &Memory, mixer: &mut Mixer) -> Result<Strips> {
     let mut strips = Vec::with_capacity(memory.track_count());
     for track in memory.tracks() {
+        if track.state.archived {
+            continue;
+        }
         let strip = match track.kind {
             TrackKind::Audio | TrackKind::Midi => {
                 StripId::Track(mixer.add_track(track.name.clone()))
@@ -457,8 +461,8 @@ mod tests {
         rebuild(&mut session).unwrap();
         let after = render_blocks(&mut session, 3).unwrap();
         assert!(after.channel(0)[150..].iter().all(|&s| s.abs() < 1e-6));
-        // Removing the track marks a rebuild; `render_blocks` runs it.
-        track::remove(&mut session, vox).unwrap();
+        // Archiving the track marks a rebuild; `render_blocks` runs it.
+        track::archive(&mut session, vox).unwrap();
         assert!(session.needs_rebuild);
         transport::rewind(&mut session).unwrap();
         let gone = render_blocks(&mut session, 2).unwrap();

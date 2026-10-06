@@ -124,7 +124,8 @@ are published as whole prepared graphs and swapped in between two blocks.
 ## Status
 
 Working today, through the flows: the session's memory with tracks and
-their state, clips (archived rather than deleted), markers, routing, JSON
+their state, clips, markers and routing (tracks and clips are archived, never
+deleted), JSON
 files and undo; a mixer built from the memory with faders, buses and
 sends, swapped glitch-free into a running engine; bouncing to WAV; device
 output and input; recording into clips with per-track input selection,

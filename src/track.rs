@@ -1,4 +1,5 @@
-//! Tracks: add them, name them, set their state, read their meters.
+//! Tracks: add them, name them, set their state, read their meters, archive
+//! them.
 //!
 //! A track's *state* (mute, solo, arm, monitor, input, volume, pan, where
 //! its output goes) is what the strip shows. Monitoring is hearing the
@@ -6,14 +7,14 @@
 //! session's audio input. Switches (mute, solo, arm,
 //! monitor) are saved with the session, heard at the next block and never
 //! undo steps. Volume and pan are edits: they coalesce in the undo history
-//! and reach the live strip at once. Adding, removing and routing change
+//! and reach the live strip at once. Adding, archiving and routing change
 //! the mixer's shape, so they rebuild it (at once while a device is
 //! playing, otherwise at the next start).
 //!
 //! Made of `superb::primitives::session` (the memory's tracks and their
 //! commands) and `superb::primitives::mixer` (`StripParams`, the live side).
 
-use crate::primitives::session::commands::{self, AddTrack, RemoveTrack, SetTrackOutput};
+use crate::primitives::session::commands::{self, AddTrack, ArchiveTrack, SetTrackOutput};
 use crate::primitives::session::{Input, Track, TrackKind};
 use crate::primitives::{Result, SuperbError, TrackId};
 use crate::session::Session;
@@ -28,11 +29,22 @@ pub fn add(session: &mut Session, name: &str, kind: TrackKind) -> Result<TrackId
     Ok(id)
 }
 
-/// Removes a track with everything on it. Undo brings it all back.
+/// Takes a track off the mixer without deleting it: it keeps its clips and
+/// their files but gets no strip, so nothing on it plays, nothing routes
+/// into it, it neither records nor monitors, and it no longer counts
+/// toward the session's end. [`restore`] brings it back. Nothing is ever
+/// removed: this is the one way a track leaves.
 ///
-/// Made of: push `RemoveTrack`; rebuilds the mixer.
-pub fn remove(session: &mut Session, track: TrackId) -> Result<()> {
-    crate::session::structural(session, RemoveTrack::new(track))
+/// Made of: `ArchiveTrack` through `session::structural`.
+pub fn archive(session: &mut Session, track: TrackId) -> Result<()> {
+    crate::session::structural(session, ArchiveTrack::new(track, true))
+}
+
+/// Puts an archived track back on the mixer.
+///
+/// Made of: `ArchiveTrack` (restoring) through `session::structural`.
+pub fn restore(session: &mut Session, track: TrackId) -> Result<()> {
+    crate::session::structural(session, ArchiveTrack::new(track, false))
 }
 
 /// Renames a track. Quick successive renames of one track are one undo step.
@@ -122,7 +134,7 @@ pub(crate) fn armed(session: &Session) -> Vec<TrackId> {
         .memory
         .tracks()
         .iter()
-        .filter(|t| t.kind == TrackKind::Audio && t.state.arm)
+        .filter(|t| t.kind == TrackKind::Audio && t.state.arm && !t.state.archived)
         .map(|t| t.id())
         .collect()
 }
@@ -211,5 +223,80 @@ mod tests {
         assert!(l > 0.3 && r > 0.3, "{l} {r}");
         // Reading resets the hold; nothing rendered since, so zero.
         assert_eq!(peak(&session, vox).unwrap(), [0.0, 0.0]);
+    }
+
+    #[test]
+    fn an_archived_track_has_no_strip_and_comes_back_whole() {
+        use crate::primitives::session::{Memory, TrackSend};
+        use crate::{clip, send};
+        let mut session =
+            session::create(session::scratch("archive"), SampleRate::HZ_48K, 64).unwrap();
+        let vox = add(&mut session, "vox", TrackKind::Audio).unwrap();
+        let room = add(&mut session, "room", TrackKind::Bus).unwrap();
+        let mut tone = PlanarBuffer::new(2, 400);
+        tone.fill(0.5);
+        session.audio.insert("tone.wav", tone);
+        let take = clip::add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
+        let fx = send::add(
+            &mut session,
+            vox,
+            room,
+            0.0,
+            crate::primitives::mixer::SendTap::PostFader,
+        )
+        .unwrap();
+        arm(&mut session, vox, true).unwrap();
+        transport::start(&mut session).unwrap();
+        assert!(
+            session::steps::render_blocks(&mut session, 2)
+                .unwrap()
+                .peak()
+                > 0.3
+        );
+        assert_eq!(session.mixer.sends.len(), 1);
+
+        // Archive the bus: the send into it is skipped; the track still plays.
+        archive(&mut session, room).unwrap();
+        transport::rewind(&mut session).unwrap();
+        let out = session::steps::render_blocks(&mut session, 2).unwrap();
+        assert!(out.peak() > 0.3);
+        assert!(session.mixer.strip(room).is_none());
+        assert!(session.mixer.send(fx).is_none());
+        assert!(session.memory.track(room).is_ok(), "still in the memory");
+        assert!(session.memory.send(fx).is_ok());
+
+        // Archive the track: silent, no strip, not armed, not counted.
+        archive(&mut session, vox).unwrap();
+        transport::rewind(&mut session).unwrap();
+        assert!(session::steps::render_blocks(&mut session, 2)
+            .unwrap()
+            .is_silent());
+        assert!(session.mixer.strip(vox).is_none());
+        assert!(armed(&session).is_empty());
+        assert_eq!(session.memory.end_position().samples(), 0);
+        assert!(session.memory.clip(take).is_ok(), "the clip is still there");
+        assert!(session.memory.track(vox).unwrap().state.archived);
+
+        // Restore, and undo, each one step.
+        let steps = session.history.undo_len();
+        restore(&mut session, vox).unwrap();
+        assert_eq!(session.history.undo_len(), steps + 1);
+        transport::rewind(&mut session).unwrap();
+        assert!(
+            session::steps::render_blocks(&mut session, 2)
+                .unwrap()
+                .peak()
+                > 0.3
+        );
+        assert_eq!(armed(&session), [vox]);
+        assert!(session::undo(&mut session).unwrap());
+        assert!(session.memory.track(vox).unwrap().state.archived);
+
+        // Archived survives a save.
+        let json = session.memory.to_json().unwrap();
+        let copy = Memory::from_json(&json).unwrap();
+        assert!(copy.track(vox).unwrap().state.archived);
+        assert!(!copy.track(vox).unwrap().sends().is_empty());
+        let _ = TrackSend::new(room);
     }
 }

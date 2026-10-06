@@ -402,7 +402,7 @@ pub(crate) mod steps {
             .memory
             .tracks()
             .iter()
-            .filter(|t| t.kind == TrackKind::Audio)
+            .filter(|t| t.kind == TrackKind::Audio && !t.state.archived)
             .filter_map(|t| t.state.input)
             .map(Input::width)
             .max()

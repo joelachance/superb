@@ -82,7 +82,8 @@ exists because its absence cost a rename.
   *session*; what it remembers and saves is its *memory*; the buffers
   clips play are its *audio*; what the engine runs is the *mixer*;
   rebuilding it is *rebuild*; a recording in progress is a *recording*
-  and its result a *clip*, which is *archived*, never deleted. Never song,
+  and its result a *clip*; clips and tracks are *archived*, never deleted.
+  Never song,
   project, document, console, cache or take. If two words are in use for one thing, pick one and rename the
   other.
 * **A word with a DAW meaning keeps it.** *Sync* is clock synchronisation,

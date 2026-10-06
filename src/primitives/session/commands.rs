@@ -623,6 +623,48 @@ impl Command<Memory> for ArchiveClip {
     }
 }
 
+/// Archives a track (keeps it and its clips, but the mixer builds no strip
+/// for it) or restores it. One undo step each; never coalesces.
+pub struct ArchiveTrack {
+    id: TrackId,
+    archived: bool,
+    previous: Option<bool>,
+}
+
+impl ArchiveTrack {
+    /// `archived = true` archives, `false` restores.
+    pub fn new(id: TrackId, archived: bool) -> Self {
+        Self {
+            id,
+            archived,
+            previous: None,
+        }
+    }
+}
+
+impl Command<Memory> for ArchiveTrack {
+    fn label(&self) -> &str {
+        if self.archived {
+            "Archive track"
+        } else {
+            "Restore track"
+        }
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let track = memory.track_mut(self.id)?;
+        self.previous = Some(track.state.archived);
+        track.state.archived = self.archived;
+        Ok(())
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let previous = self.previous.ok_or_else(not_applied)?;
+        memory.track_mut(self.id)?.state.archived = previous;
+        Ok(())
+    }
+}
+
 /// Moves a clip in time and optionally to another track. Coalesces.
 pub struct MoveClip {
     id: ClipId,

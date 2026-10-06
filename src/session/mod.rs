@@ -395,8 +395,8 @@ mod tests {
         assert_eq!(session.memory.clip(clip).unwrap().start().samples(), 300);
         clip::archive(&mut session, clip).unwrap();
         assert!(session.memory.clip(clip).unwrap().state.archived);
-        track::remove(&mut session, vox).unwrap();
-        assert!(session.memory.track(vox).is_err());
+        track::archive(&mut session, vox).unwrap();
+        assert!(session.memory.track(vox).unwrap().state.archived);
         while undo(&mut session).unwrap() {}
         assert!(
             session.memory.track(vox).is_err(),

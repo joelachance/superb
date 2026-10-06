@@ -238,6 +238,10 @@ pub struct TrackState {
     /// Which channel(s) of the audio input feed this track when it records.
     /// `None` takes everything the recording captures.
     pub input: Option<Input>,
+    /// Archived tracks stay in the session with their clips but have no
+    /// strip: nothing on them plays, they neither record nor monitor, and
+    /// they do not count toward the session's end.
+    pub archived: bool,
 }
 
 /// Which channels of the audio input a track records from, by zero-based
@@ -271,6 +275,7 @@ impl Default for TrackState {
             arm: false,
             monitor: false,
             input: None,
+            archived: false,
         }
     }
 }
@@ -441,8 +446,12 @@ impl Track {
         self.clips.iter().filter(move |i| i.contains(position))
     }
 
-    /// End of the last clip that is not archived, or zero for an empty track.
+    /// End of the last clip that is not archived, or zero for an empty or
+    /// archived track.
     pub fn end(&self) -> TimePosition {
+        if self.state.archived {
+            return TimePosition::ZERO;
+        }
         self.clips
             .iter()
             .filter(|c| !c.state.archived)

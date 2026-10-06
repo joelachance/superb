@@ -1,6 +1,7 @@
 # track
 
-Tracks: add them, name them, set their state, read their meters.
+Tracks: add them, name them, set their state, read their meters, archive
+them.
 
 ## Purpose
 
@@ -10,15 +11,17 @@ monitor, and where its output goes. It lives in the memory as
 and monitor are switches in the UI sense: heard at the next block, never
 undo steps.
 Volume and pan are continuous: they coalesce in the undo history and reach
-the live strip at once. Adding, removing and routing change the mixer's
-shape, so they rebuild it.
+the live strip at once. Adding, archiving and routing change the mixer's
+shape, so they rebuild it. Nothing is deleted: a track that leaves is
+archived, and comes back whole.
 
 ## Verbs
 
 | verb | does | undo |
 |---|---|---|
 | `add(session, name, kind) -> TrackId` | an Audio, Midi or Bus track | one |
-| `remove(session, track)` | with everything on it; undo brings it back | one |
+| `archive(session, track)` | off the mixer, kept with its clips and files: no strip, silent, nothing routes into it, neither records nor monitors, not counted toward the session's end | one |
+| `restore(session, track)` | back on the mixer | one |
 | `rename(session, track, name)` | | quick renames merge |
 | `volume(session, track, db)` | the fader, in dB; memory + live strip | drag (coalesces) |
 | `pan(session, track, pan)` | `-1.0` left to `1.0` right | drag |
@@ -52,6 +55,7 @@ assert_eq!(session.memory.track(vox)?.state.volume_db, -3.0);
 ## Made of
 
 `add`: `Memory::allocate_track_id` → `Track::with_id` → `AddTrack`
+through `session::structural`. `archive` / `restore`: `ArchiveTrack`
 through `session::structural`. `volume` / `pan`: `set_track_volume_db` /
 `set_track_pan` through `session::edit`, then `StripParams::set_volume_db`
 / `set_pan` on the live strip. `mute` / `solo` / `arm` / `monitor`:
