@@ -32,9 +32,13 @@ resampling and bounce/export helpers.
   running engine split in two: `EngineHandle` is the control side
   (transport commands over a queue, `publish` of prepared graphs, software
   MIDI, position and state atomics, `reclaim` of retired graphs) and
-  `AudioThread` is the audio side (`tick` renders one block; with
-  `devices`, `run_on_device` moves it into an output callback). This is
-  what the `transport` flow drives.
+  `AudioThread` is the audio side (`tick` renders one block, `tick_timed`
+  one that starts at a device-clock instant; with `devices`,
+  `run_on_device` moves it into an output callback). When the transport
+  starts rolling under a device clock the audio thread publishes a
+  `RollStart` (position and instant) that `EngineHandle::roll_start`
+  reads, and a recording lines its first frame up with it. This is what
+  the `transport` flow drives.
 * `LiveInput` — captured audio on its way into a running engine:
   `Engine::set_live_input` (or `EngineCommand::LiveInput(Some(..))` on a
   live engine, `None` to detach; a replaced or detached input comes back

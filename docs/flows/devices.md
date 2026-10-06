@@ -56,3 +56,6 @@ reads as its `LiveInput`, one a recording drains while it runs) →
   something in.
 * The input's channel count comes from the tracks' inputs when it opens;
   to widen it, close and open it again.
+* `record::calibrate` measures the round trip through a loopback (an
+  output into an input) and stores it as the recording offset. It needs
+  `output` playing and `input` open.

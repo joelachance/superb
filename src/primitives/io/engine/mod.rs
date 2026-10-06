@@ -6,7 +6,7 @@ mod live;
 
 pub use input::LiveInput;
 pub use live::{
-    AudioThread, EngineCommand, EngineHandle, COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS,
+    AudioThread, EngineCommand, EngineHandle, RollStart, COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS,
     MIDI_CAPACITY, RETIRED_INPUT_CAPACITY, RETIRED_MAP_CAPACITY, SWAP_CAPACITY,
 };
 

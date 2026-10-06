@@ -57,6 +57,7 @@ pub struct Memory {
     punch_in: Option<TimePosition>,
     punch_out: Option<TimePosition>,
     metronome: MetronomeState,
+    recording_offset: TimeDuration,
     tracks: Vec<Track>,
     markers: Vec<Marker>,
     next_id: RawId,
@@ -75,6 +76,7 @@ impl Memory {
             punch_in: None,
             punch_out: None,
             metronome: MetronomeState::default(),
+            recording_offset: TimeDuration::ZERO,
             tracks: Vec::new(),
             markers: Vec::new(),
             next_id: 1,
@@ -163,6 +165,18 @@ impl Memory {
     /// Sets or clears the punch-out point.
     pub fn set_punch_out(&mut self, at: Option<TimePosition>) {
         self.punch_out = at;
+        self.touch();
+    }
+
+    /// How much earlier than it arrived a recording is placed: the trip
+    /// through the interface, out and back. Positive moves takes earlier.
+    pub fn recording_offset(&self) -> TimeDuration {
+        self.recording_offset
+    }
+
+    /// Sets the recording offset.
+    pub fn set_recording_offset(&mut self, offset: TimeDuration) {
+        self.recording_offset = offset;
         self.touch();
     }
 

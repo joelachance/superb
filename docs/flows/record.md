@@ -16,6 +16,13 @@ something empties it as it fills: a hardware source gets a thread; a queue
 you fill yourself waits for `collect`, which `render_blocks` calls after
 every block.
 
+A take comes back late by the trip through the interface: what you hear
+leaves late, what you play arrives late. `offset` says how much earlier to
+place every take, and `calibrate` measures it once with a loopback cable
+(feature `devices`). A device recording also lines its first frame up with
+where the transport began rolling, on the device clock (`RollStart`), so
+the capture's own start never shifts the take.
+
 ## Verbs
 
 | verb | does |
@@ -24,6 +31,8 @@ every block.
 | `punch_in(session, Option<TimePosition>)` / `punch_out(session, Option<TimePosition>)` | where the next recording drops in and out; saved; edits that coalesce |
 | `collect(session) -> frames` | move waiting blocks into a queue recording (`session::steps::render_blocks` does this); nothing to do for a device recording |
 | `stop(session) -> Vec<ClipId>` | stop the transport, finish the recording, write the files, place clips ("Record") |
+| `offset(session, TimeDuration)` | how much earlier than it arrived a take is placed; positive is earlier; state, saved |
+| `calibrate(session) -> TimeDuration` (feature `devices`) | with an output looped back into the input, `devices::output` playing and `devices::input` open: play one click, record it, store how late it came back as the offset; about two seconds |
 
 `Source` says where the audio comes from:
 
@@ -74,8 +83,10 @@ recording queue (64 blocks) and a collector thread →
 `EngineHandle::send(Record)`, or `Play` when the punch-in lies ahead →
 `transport::playhead` for where it started. `punch_in` / `punch_out`:
 `SetPunch` through `session::edit`. `stop`: `EngineHandle::send(SetPunch` cleared`)` → `EngineHandle::send(Stop)`
-→ drain the queue or finish the thread → drop what came before the
-punch-in and after the punch-out → one buffer from the planes → per track a file name nothing uses yet and the channels its
+→ drain the queue or finish the thread → frame 0 lined up with the
+`RollStart` when the device clock gives one → the take moved earlier by
+the recording offset → drop what came before the punch-in and after the
+punch-out → one buffer from the planes → per track a file name nothing uses yet and the channels its
 `Input` selects (the whole capture, shared, when none is set) →
 `wav::write` into the session folder → `AudioCache::insert_shared` →
 `clip::add` (the clip takes the audio's length), inside one undo group →
@@ -100,4 +111,14 @@ rebuild.
 * A recording that starts at the playhead gets the metronome's count-in:
   the transport rolls that many bars early with the click, which stops at
   the punch-in; what was captured during the count-in is left out.
+* Hearing yourself late while playing is a different problem from the
+  take landing late. Nothing in software can move sound earlier, so the
+  cures for monitoring latency are small buffers or the interface's own
+  direct monitoring; the offset fixes where the take lands.
+* The offset is one number per session. Measure it again after changing
+  the interface or its buffer size.
+* Lining frame 0 up with the roll start needs a device clock on both
+  sides: blocks stamped by the input stream and the audio thread driven
+  by `devices::output`. Otherwise frame 0 is where the recording started,
+  as before. The offset applies either way, to `Source::Queue` too.
 * Loop recording is not there yet.

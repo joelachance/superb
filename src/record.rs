@@ -12,6 +12,12 @@
 //! you fill yourself waits for [`collect`], which
 //! [`session::steps::render_blocks`] calls after every block it renders.
 //!
+//! A take comes back late by the trip through the interface: [`offset`]
+//! says how much earlier to place it, and `calibrate` (feature `devices`)
+//! measures that once with a loopback cable. A device recording also
+//! lines its first frame up with where the transport began rolling, on
+//! the device clock, so the capture's own start never shifts the take.
+//!
 //! Made of `superb::primitives::io::capture` (the queue), the session's
 //! audio input (`devices::input`, feature `devices`), the audio held on the
 //! `Session`, and [`clip::add`](crate::clip::add).
@@ -23,7 +29,7 @@ use std::thread::JoinHandle;
 
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
-use crate::primitives::io::EngineCommand;
+use crate::primitives::io::{EngineCommand, RollStart};
 use crate::primitives::session::commands::{AddClip, PunchPoint, SetPunch};
 use crate::primitives::session::{Clip, ClipSource, Input, Memory, TrackKind};
 use crate::primitives::undo::Command;
@@ -64,6 +70,9 @@ pub struct Recording {
     punch_out: Option<TimePosition>,
     tracks: Vec<TrackId>,
     channels: usize,
+    /// `EngineHandle::roll_start().rolls` before the transport was told to
+    /// roll, so `stop` can tell this recording's roll start from an older one.
+    rolls_before: u64,
 }
 
 impl Recording {
@@ -132,6 +141,8 @@ pub(crate) enum Capture {
         blocks: CaptureConsumer,
         /// Audio gathered so far, one plane per channel.
         planes: Vec<Vec<f32>>,
+        /// Device-clock stamp of the first block, once one arrived.
+        first_us: Option<u64>,
     },
     /// A thread empties the queue as it fills; nothing to call. Only a
     /// device source makes one, so without `devices` it exists for tests.
@@ -165,6 +176,8 @@ pub(crate) struct Collector {
     frames: Arc<AtomicUsize>,
     dropped: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
+    /// Device-clock stamp of the first block; `u64::MAX` until one arrived.
+    first_us: Arc<AtomicU64>,
     handle: Option<JoinHandle<(Vec<Vec<f32>>, CaptureConsumer)>>,
 }
 
@@ -181,14 +194,17 @@ impl Collector {
     }
 
     /// Stops the thread after it has drained what is left on the queue and
-    /// returns the planes with the queue's consumer end. Stop the input
-    /// side first so nothing new arrives.
-    pub(crate) fn finish(mut self) -> Result<(Vec<Vec<f32>>, CaptureConsumer)> {
+    /// returns the planes, the queue's consumer end and the device-clock
+    /// stamp of the first block. Stop the input side first so nothing new
+    /// arrives.
+    pub(crate) fn finish(mut self) -> Result<(Vec<Vec<f32>>, CaptureConsumer, Option<u64>)> {
         self.stop.store(true, Ordering::Release);
         let handle = self.handle.take().expect("finish is called once");
-        handle
+        let (planes, blocks) = handle
             .join()
-            .map_err(|_| SuperbError::Message("the recording collector thread panicked".into()))
+            .map_err(|_| SuperbError::Message("the recording collector thread panicked".into()))?;
+        let first_us = self.first_us.load(Ordering::Acquire);
+        Ok((planes, blocks, (first_us != u64::MAX).then_some(first_us)))
     }
 }
 
@@ -253,6 +269,7 @@ pub fn start(session: &mut Session, source: Source) -> Result<()> {
             Capture::Manual {
                 blocks,
                 planes: vec![Vec::new(); channels],
+                first_us: None,
             },
             channels,
         ),
@@ -273,6 +290,7 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
         .unwrap_or(playhead);
     let punch_out = session.memory.punch_out().filter(|p| *p > punch_in);
     let (started_at, count_in) = roll_from(session, punch_in, playhead);
+    let rolls_before = session.engine.roll_start().map_or(0, |r| r.rolls);
     if started_at != playhead {
         session.engine.send(EngineCommand::Seek(started_at))?;
     }
@@ -292,6 +310,7 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
         punch_out,
         tracks,
         channels,
+        rolls_before,
     });
     if count_in {
         session.mixer.click.set_count_in_until(Some(punch_in));
@@ -338,6 +357,69 @@ pub fn punch_out(session: &mut Session, at: Option<TimePosition>) -> Result<()> 
     session::edit(session, SetPunch::new(PunchPoint::Out, at))
 }
 
+/// Sets the recording offset: how much earlier than it arrived a take is
+/// placed, taking back the trip through the interface (what you hear
+/// leaves late, what you play comes back late, and the take lands late by
+/// both). Positive moves takes earlier; `TimeDuration::ZERO` places them
+/// where they arrived. Measure it with `calibrate` (feature `devices`), or
+/// type in a number you know. State, like arm: saved with the session, not
+/// an undo step. Applies from the next [`stop`].
+///
+/// Made of: `Memory::set_recording_offset` through `session::set_state`.
+pub fn offset(session: &mut Session, offset: TimeDuration) -> Result<()> {
+    session::set_state(session, |m| {
+        m.set_recording_offset(offset);
+        Ok(())
+    })
+}
+
+/// Measures the recording offset with a loopback and sets it. Connect an
+/// output of the interface to an input (a cable, or a microphone at the
+/// speaker), play the session through a device (`devices::output`) with the
+/// input open (`devices::input`), and call this: it plays one click through
+/// a bare mixer, records what comes back, finds the click in it and stores
+/// how late it arrived as the [`offset`]. Takes about two seconds and
+/// returns the measurement. The session's mixer, tempo map and playhead are
+/// put back afterwards. Measure again after changing the interface or its
+/// buffer size.
+///
+/// Made of: a throwaway `Memory` with the metronome on at 30 bpm →
+/// `session::steps::build_mixer` → `publish` and
+/// `EngineHandle::send(TempoMap, SetLoopEnabled(false))` → the input's
+/// recording queue and a collector thread → `Seek` to one second before
+/// beat zero → `Record`, wait, `Stop` → `Collector::finish` → frame 0 lined
+/// up with the `RollStart` → the click found → `session::steps::rebuild`
+/// and `Seek` back → [`offset`].
+#[cfg(feature = "devices")]
+pub fn calibrate(session: &mut Session) -> Result<TimeDuration> {
+    if session.recording.is_some() {
+        return Err(SuperbError::Message(
+            "stop the recording before calibrating".into(),
+        ));
+    }
+    if session.output.is_none() {
+        return Err(SuperbError::Message(
+            "play through a device (`devices::output`) before calibrating".into(),
+        ));
+    }
+    if session.input.is_none() {
+        return Err(SuperbError::Message(
+            "open the audio input (`devices::input`) before calibrating".into(),
+        ));
+    }
+    let playhead = transport::playhead(session);
+    session.engine.send(EngineCommand::Stop)?;
+    let measured = steps::measure_round_trip(session);
+    // Put the session back whatever happened: its mixer, map and loop come
+    // with the rebuild.
+    session.needs_rebuild = true;
+    session::steps::rebuild(session)?;
+    session.engine.send(EngineCommand::Seek(playhead))?;
+    let measured = measured?;
+    offset(session, measured)?;
+    Ok(measured)
+}
+
 /// Moves waiting blocks into the recording when the source is a queue
 /// ([`Source::Queue`]); a device recording has its thread and needs
 /// nothing. Returns the frames gathered in total, or zero when nothing is
@@ -367,7 +449,9 @@ pub fn collect(session: &mut Session) -> usize {
 /// again; the audio stays in memory either way.
 ///
 /// Made of: `EngineHandle::send(Stop)` → drain the queue or
-/// `Collector::finish` (and hand the audio input its queue back) → the
+/// `Collector::finish` (and hand the audio input its queue back) → frame 0
+/// lined up with the `RollStart` when the device clock gives one → the take
+/// moved earlier by [`offset`] → trimmed to the punch points → the
 /// planes become one buffer → per
 /// track, a file name nothing uses yet and the channels its `Input`
 /// selects → `wav::write` into the session folder → `AudioCache::insert_shared`
@@ -390,28 +474,41 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         punch_in,
         punch_out,
         tracks,
+        rolls_before,
         ..
     } = recording;
-    let planes = match capture {
+    let (planes, first_us) = match capture {
         Capture::Manual {
             mut blocks,
             mut planes,
+            mut first_us,
         } => {
-            steps::append_blocks(&mut blocks, &mut planes);
-            planes
+            steps::append_blocks(&mut blocks, &mut planes, &mut first_us);
+            (planes, first_us)
         }
         Capture::Threaded(collector) => {
-            let (planes, blocks) = collector.finish()?;
+            let (planes, blocks, first_us) = collector.finish()?;
             #[cfg(feature = "devices")]
             if let Some(input) = session.input.as_mut() {
                 input.end_recording(blocks);
             }
             #[cfg(not(feature = "devices"))]
             drop(blocks);
-            planes
+            (planes, first_us)
         }
     };
-    let planes = steps::trim_planes(planes, started_at, punch_in, punch_out);
+    // Frame 0 of the capture is where the transport began rolling, when the
+    // device clock can say so; then the take moves earlier by the offset.
+    let lead = steps::capture_lead(
+        first_us,
+        session.engine.roll_start(),
+        rolls_before,
+        started_at,
+        session.memory.sample_rate(),
+    );
+    let planes = steps::align_planes(planes, lead);
+    let captured_from = started_at.offset(-session.memory.recording_offset().samples());
+    let (planes, placed_at) = steps::trim_planes(planes, captured_from, punch_in, punch_out);
     let audio = steps::finish_recording(planes);
     if audio.frames() == 0 {
         return Ok(Vec::new());
@@ -442,7 +539,7 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         let placed = Clip::with_id(
             id,
             name,
-            punch_in,
+            placed_at,
             length,
             ClipSource::Audio {
                 path: key.clone(),
@@ -522,17 +619,29 @@ pub(crate) mod steps {
         let frames = Arc::new(AtomicUsize::new(0));
         let dropped = blocks.dropped_handle();
         let stop = Arc::new(AtomicBool::new(false));
-        let (frames_t, stop_t) = (Arc::clone(&frames), Arc::clone(&stop));
+        let first_us = Arc::new(AtomicU64::new(u64::MAX));
+        let (frames_t, stop_t, first_t) = (
+            Arc::clone(&frames),
+            Arc::clone(&stop),
+            Arc::clone(&first_us),
+        );
         let handle = std::thread::Builder::new()
             .name("superb recording collector".into())
             .spawn(move || {
                 let mut planes = vec![Vec::new(); channels];
+                let mut first = None;
                 loop {
-                    let appended = append_blocks(&mut blocks, &mut planes);
+                    let appended = append_blocks(&mut blocks, &mut planes, &mut first);
+                    if let Some(us) = first {
+                        first_t.store(us, Ordering::Release);
+                    }
                     frames_t.fetch_add(appended, Ordering::Release);
                     if stop_t.load(Ordering::Acquire) {
                         // The input has stopped feeding us; take what is left.
-                        let rest = append_blocks(&mut blocks, &mut planes);
+                        let rest = append_blocks(&mut blocks, &mut planes, &mut first);
+                        if let Some(us) = first {
+                            first_t.store(us, Ordering::Release);
+                        }
                         frames_t.fetch_add(rest, Ordering::Release);
                         break (planes, blocks);
                     }
@@ -548,6 +657,7 @@ pub(crate) mod steps {
             frames,
             dropped,
             stop,
+            first_us,
             handle: Some(handle),
         })
     }
@@ -591,18 +701,30 @@ pub(crate) mod steps {
     /// a threaded capture needs nothing. Returns the frames appended.
     pub(crate) fn collect(capture: &mut Capture) -> usize {
         match capture {
-            Capture::Manual { blocks, planes } => append_blocks(blocks, planes),
+            Capture::Manual {
+                blocks,
+                planes,
+                first_us,
+            } => append_blocks(blocks, planes, first_us),
             Capture::Threaded(_) => 0,
         }
     }
 
     /// Appends every waiting block to `planes` and hands the blocks back to
     /// the input side. Blocks with fewer channels than the recording are padded
-    /// with silence. Returns the frames appended. Allocates; never call it
-    /// on the audio thread.
-    pub(crate) fn append_blocks(blocks: &mut CaptureConsumer, planes: &mut [Vec<f32>]) -> usize {
+    /// with silence; `first_us` takes the first block's device-clock stamp
+    /// if it has none yet. Returns the frames appended. Allocates; never
+    /// call it on the audio thread.
+    pub(crate) fn append_blocks(
+        blocks: &mut CaptureConsumer,
+        planes: &mut [Vec<f32>],
+        first_us: &mut Option<u64>,
+    ) -> usize {
         let mut appended = 0;
         while let Some(block) = blocks.pop() {
+            if first_us.is_none() {
+                *first_us = Some(block.block_start_us());
+            }
             let frames = block.frames();
             for (ch, plane) in planes.iter_mut().enumerate() {
                 if ch < block.channels() {
@@ -617,17 +739,68 @@ pub(crate) mod steps {
         appended
     }
 
+    /// Frames of the capture that came before the transport began rolling
+    /// (positive), or that are missing from its start (negative), from the
+    /// first block's device-clock stamp and the engine's [`RollStart`].
+    /// Zero when either side has no clock, or when the roll start is not
+    /// this recording's (`rolls` has not moved past `rolls_before`).
+    pub(crate) fn capture_lead(
+        first_us: Option<u64>,
+        roll: Option<RollStart>,
+        rolls_before: u64,
+        started_at: TimePosition,
+        rate: SampleRate,
+    ) -> i64 {
+        let (Some(first_us), Some(roll)) = (first_us, roll) else {
+            return 0;
+        };
+        if roll.rolls <= rolls_before {
+            return 0;
+        }
+        let elapsed_us = i128::from(roll.instant_us) - i128::from(first_us);
+        let to_roll = (elapsed_us * i128::from(rate.hz()) / 1_000_000) as i64;
+        // Frame `to_roll` of the capture is the roll position; the take
+        // begins at `started_at`.
+        to_roll + (started_at.samples() - roll.position.samples())
+    }
+
+    /// Makes frame `lead` of `planes` their frame 0: drops the first `lead`
+    /// frames, or puts `-lead` frames of silence first.
+    pub(crate) fn align_planes(planes: Vec<Vec<f32>>, lead: i64) -> Vec<Vec<f32>> {
+        if lead == 0 {
+            return planes;
+        }
+        planes
+            .into_iter()
+            .map(|plane| {
+                if lead > 0 {
+                    plane
+                        .get(lead as usize..)
+                        .map(<[f32]>::to_vec)
+                        .unwrap_or_default()
+                } else {
+                    let mut aligned = vec![0.0; lead.unsigned_abs() as usize];
+                    aligned.extend_from_slice(&plane);
+                    aligned
+                }
+            })
+            .collect()
+    }
+
     /// Drops what was captured before the punch-in (the roll towards it)
-    /// and after the punch-out.
+    /// and after the punch-out, given where the capture's frame 0 sits on
+    /// the timeline. Returns the planes and where they begin: the punch-in,
+    /// or later when the capture itself begins later.
     pub(crate) fn trim_planes(
         planes: Vec<Vec<f32>>,
-        started_at: TimePosition,
+        captured_from: TimePosition,
         punch_in: TimePosition,
         punch_out: Option<TimePosition>,
-    ) -> Vec<Vec<f32>> {
-        let skip = (punch_in.samples() - started_at.samples()).max(0) as usize;
-        let keep = punch_out.map(|out| (out.samples() - punch_in.samples()).max(0) as usize);
-        planes
+    ) -> (Vec<Vec<f32>>, TimePosition) {
+        let placed_at = punch_in.max(captured_from);
+        let skip = (placed_at.samples() - captured_from.samples()) as usize;
+        let keep = punch_out.map(|out| (out.samples() - placed_at.samples()).max(0) as usize);
+        let planes = planes
             .into_iter()
             .map(|plane| {
                 let mut plane = plane.get(skip..).map(<[f32]>::to_vec).unwrap_or_default();
@@ -636,7 +809,107 @@ pub(crate) mod steps {
                 }
                 plane
             })
-            .collect()
+            .collect();
+        (planes, placed_at)
+    }
+
+    /// Where the click of a calibration came back: the frame the first
+    /// burst in `planes` begins at, less `expected`, the frame it was played
+    /// at. The burst is the first sample reaching a quarter of the peak,
+    /// walked back to where the signal rises out of the noise. Errors when
+    /// nothing came back, or it came back before it was played.
+    #[cfg_attr(not(feature = "devices"), allow(dead_code))]
+    pub(crate) fn round_trip(planes: &[Vec<f32>], expected: usize) -> Result<TimeDuration> {
+        let frames = planes.first().map_or(0, Vec::len);
+        let level = |i: usize| {
+            planes
+                .iter()
+                .fold(0.0f32, |m, p| m.max(p.get(i).map_or(0.0, |s| s.abs())))
+        };
+        let peak = (0..frames).map(level).fold(0.0f32, f32::max);
+        if peak < 0.01 {
+            return Err(SuperbError::Message(
+                "the input does not hear the output: connect an output to an input and try again"
+                    .into(),
+            ));
+        }
+        let mut onset = (0..frames).find(|&i| level(i) >= peak * 0.25).unwrap_or(0);
+        while onset > 0 && level(onset - 1) > peak * 0.01 {
+            onset -= 1;
+        }
+        if onset < expected {
+            return Err(SuperbError::Message(
+                "the click came back before it was played: the input and the output are not on one clock"
+                    .into(),
+            ));
+        }
+        Ok(TimeDuration::from_samples((onset - expected) as i64))
+    }
+
+    /// Seconds of click-free roll before beat zero in a calibration.
+    #[cfg(feature = "devices")]
+    pub(crate) const CALIBRATION_LEAD_SECONDS: f64 = 1.0;
+    /// Seconds the calibration keeps capturing after beat zero.
+    #[cfg(feature = "devices")]
+    pub(crate) const CALIBRATION_TAIL_SECONDS: f64 = 0.6;
+
+    /// The measuring half of [`calibrate`](super::calibrate): a bare mixer
+    /// with the click at 30 bpm (a tick every two seconds, so exactly one
+    /// lands in the capture), a device recording from one second before
+    /// beat zero, and the click found in what came back. Leaves the
+    /// calibration mixer and map in the engine; the caller rebuilds.
+    #[cfg(feature = "devices")]
+    pub(crate) fn measure_round_trip(session: &mut Session) -> Result<TimeDuration> {
+        let rate = session.memory.sample_rate();
+        let mut calibration = Memory::new("calibration", rate);
+        calibration.tempo_map_mut().set_initial_tempo(30.0)?;
+        calibration.metronome_mut().enabled = true;
+        calibration.metronome_mut().level_db = -6.0;
+        let (mixer, handles) = session::steps::build_mixer(
+            &calibration,
+            &crate::primitives::io::cache::AudioCache::new(),
+            session.channels,
+        )?;
+        session::steps::publish(&mut session.engine, mixer)?;
+        session.mixer = handles;
+        session
+            .engine
+            .send(EngineCommand::TempoMap(calibration.tempo_map().clone()))?;
+        session.engine.send(EngineCommand::SetLoopEnabled(false))?;
+        session.engine.send(EngineCommand::SetPunch {
+            punch_in: None,
+            punch_out: None,
+        })?;
+
+        let input = session
+            .input
+            .as_mut()
+            .ok_or_else(|| SuperbError::Message("the audio input is not open".into()))?;
+        let channels = input.channels();
+        let blocks = input.begin_recording()?;
+        let collector = spawn_collector(blocks, channels)?;
+        let lead = TimeDuration::from_seconds(CALIBRATION_LEAD_SECONDS, rate);
+        let started_at = TimePosition::ZERO.offset(-lead.samples());
+        let rolls_before = session.engine.roll_start().map_or(0, |r| r.rolls);
+        session.engine.send(EngineCommand::Seek(started_at))?;
+        session.engine.send(EngineCommand::Record)?;
+        std::thread::sleep(core::time::Duration::from_secs_f64(
+            CALIBRATION_LEAD_SECONDS + CALIBRATION_TAIL_SECONDS,
+        ));
+        session.engine.send(EngineCommand::Stop)?;
+        let (planes, blocks, first_us) = collector.finish()?;
+        if let Some(input) = session.input.as_mut() {
+            input.end_recording(blocks);
+        }
+        let lead_frames = capture_lead(
+            first_us,
+            session.engine.roll_start(),
+            rolls_before,
+            started_at,
+            rate,
+        );
+        let planes = align_planes(planes, lead_frames);
+        round_trip(&planes, lead.samples() as usize)
     }
 
     /// Turns collected planes into one buffer. Empty planes give a buffer
@@ -971,11 +1244,12 @@ mod tests {
         let mut capture = Capture::Manual {
             blocks,
             planes: vec![Vec::new(); 2],
+            first_us: None,
         };
         assert_eq!(steps::collect(&mut capture), 8);
         assert_eq!(capture.frames(), 8);
         assert_eq!(steps::collect(&mut capture), 0);
-        let Capture::Manual { blocks, planes } = capture else {
+        let Capture::Manual { blocks, planes, .. } = capture else {
             unreachable!()
         };
         assert!(blocks.is_empty());
@@ -1257,5 +1531,119 @@ mod tests {
         let clip = session.memory.clip(clips[0]).unwrap();
         assert_eq!(clip.start(), TimePosition::from_samples(9_600));
         assert_eq!(clip.length(), TimeDuration::from_samples(161 * 64 - 9_600));
+    }
+
+    #[test]
+    fn the_recording_offset_moves_a_take_earlier() {
+        let folder = session::scratch("offset");
+        let mut session = session::create(&folder, R, 64).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        track::arm(&mut session, vox, true).unwrap();
+        let steps_before = session.history.undo_len();
+        offset(&mut session, TimeDuration::from_samples(100)).unwrap();
+        assert_eq!(session.memory.recording_offset().samples(), 100);
+        assert_eq!(
+            session.history.undo_len(),
+            steps_before,
+            "state, not an edit"
+        );
+
+        // Punch in at 640; feed five blocks that step 0.1, 0.2, ... 0.5.
+        transport::start(&mut session).unwrap();
+        session::steps::render_blocks(&mut session, 10).unwrap();
+        let (mut mic, blocks) = capture_queue(1, 64, 16).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
+        for n in 0..5 {
+            let mut block = PlanarBuffer::new(1, 64);
+            block.fill(0.1 * (n + 1) as f32);
+            assert!(mic.push(&block, n as u64 * 1_333));
+        }
+        session::steps::render_blocks(&mut session, 5).unwrap();
+        let clips = stop(&mut session).unwrap();
+        let clip = session.memory.clip(clips[0]).unwrap();
+        // The take sits at the punch-in, 100 frames of it dropped: what
+        // arrived first was played before the punch-in.
+        assert_eq!(clip.start(), TimePosition::from_samples(640));
+        assert_eq!(clip.length(), TimeDuration::from_samples(220));
+        let audio = session.audio.get("audio/vox 1.wav".as_ref()).unwrap();
+        assert!(
+            (audio.channel(0)[0] - 0.2).abs() < 1e-6,
+            "frame 100 of the capture"
+        );
+
+        // Saved with the session.
+        session::save(&mut session).unwrap();
+        let again = session::open(&folder, 64).unwrap();
+        assert_eq!(again.memory.recording_offset().samples(), 100);
+    }
+
+    #[test]
+    fn a_capture_is_lined_up_with_the_roll_start() {
+        use steps::{align_planes, capture_lead};
+        let at = TimePosition::from_samples(1_000);
+        let roll = RollStart {
+            rolls: 3,
+            position: at,
+            instant_us: 1_010_000,
+        };
+        // No stamp, no roll start, or a roll start from an earlier
+        // recording: nothing to line up.
+        assert_eq!(capture_lead(None, Some(roll), 2, at, R), 0);
+        assert_eq!(capture_lead(Some(1_000_000), None, 2, at, R), 0);
+        assert_eq!(capture_lead(Some(1_000_000), Some(roll), 3, at, R), 0);
+        // Capture began 10 ms before the roll: 480 frames too many.
+        assert_eq!(capture_lead(Some(1_000_000), Some(roll), 2, at, R), 480);
+        // Capture began 10 ms after the roll: 480 frames missing.
+        assert_eq!(capture_lead(Some(1_020_000), Some(roll), 2, at, R), -480);
+        // The take begins 100 frames after where the transport rolled from.
+        let later = TimePosition::from_samples(1_100);
+        assert_eq!(capture_lead(Some(1_010_000), Some(roll), 2, later, R), 100);
+
+        let planes = vec![vec![1.0, 2.0, 3.0, 4.0]];
+        assert_eq!(align_planes(planes.clone(), 0), planes);
+        assert_eq!(align_planes(planes.clone(), 2), vec![vec![3.0, 4.0]]);
+        assert_eq!(align_planes(planes.clone(), 9), vec![Vec::<f32>::new()]);
+        assert_eq!(
+            align_planes(planes, -2),
+            vec![vec![0.0, 0.0, 1.0, 2.0, 3.0, 4.0]]
+        );
+    }
+
+    #[test]
+    fn the_calibration_finds_the_click_in_what_came_back() {
+        // The real click through the real engine: at 30 bpm the only tick
+        // in the first second is the one at beat zero.
+        let mut session = session::create(session::scratch("calib"), R, 64).unwrap();
+        session::set_tempo(&mut session, 30.0).unwrap();
+        crate::metronome::enable(&mut session, true).unwrap();
+        crate::metronome::level(&mut session, -6.0).unwrap();
+        transport::start(&mut session).unwrap();
+        let played = session::steps::render_blocks(&mut session, 300).unwrap();
+        assert!(played.peak() > 0.3, "a click");
+        let delay = 333;
+        let planes: Vec<Vec<f32>> = (0..played.channels())
+            .map(|ch| {
+                let mut plane = vec![0.0; delay];
+                plane.extend_from_slice(played.channel(ch));
+                plane
+            })
+            .collect();
+        let measured = steps::round_trip(&planes, 0).unwrap().samples();
+        assert!((measured - delay as i64).abs() <= 1, "measured {measured}");
+        assert!(
+            steps::round_trip(&planes, delay + 10).is_err(),
+            "before it was played"
+        );
+        assert!(
+            steps::round_trip(&[vec![0.0; 1_000]], 0).is_err(),
+            "silence"
+        );
     }
 }

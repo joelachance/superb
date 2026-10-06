@@ -138,6 +138,12 @@ struct Shared {
     /// 0 stopped, 1 playing, 2 recording.
     state: AtomicU8,
     blocks: AtomicU64,
+    /// Seqlock over the roll start below: odd while it is being written;
+    /// halved, how many times the transport has started rolling under a
+    /// device clock.
+    roll_seq: AtomicU64,
+    roll_position: AtomicI64,
+    roll_instant_us: AtomicU64,
 }
 
 fn state_to_u8(state: TransportState) -> u8 {
@@ -154,6 +160,23 @@ fn state_from_u8(v: u8) -> TransportState {
         2 => TransportState::Recording,
         _ => TransportState::Stopped,
     }
+}
+
+/// Where and when the transport last started rolling, on the device
+/// clock: the block that began rolling started at `position`, at
+/// `instant_us` (microseconds on the stream clock, the clock that also
+/// stamps captured blocks). A recording lines its first captured frame up
+/// with this, so a take lands where the transport was, not where the
+/// capture happened to begin. `rolls` counts starts, so a reader can tell
+/// a fresh one from the last.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RollStart {
+    /// How many times the transport has started rolling under a device clock.
+    pub rolls: u64,
+    /// The transport position of the block that began rolling.
+    pub position: TimePosition,
+    /// When that block started, in microseconds on the stream clock.
+    pub instant_us: u64,
 }
 
 /// The control side of a live engine: what a UI holds to drive an
@@ -243,6 +266,32 @@ impl EngineHandle {
         self.state().is_rolling()
     }
 
+    /// Where and when the transport last started rolling on the device
+    /// clock, or `None` if it never has (nothing drives the audio thread
+    /// with a clock, or it has not rolled yet). Consistent even while the
+    /// audio thread is writing a new one.
+    pub fn roll_start(&self) -> Option<RollStart> {
+        loop {
+            let seq = self.shared.roll_seq.load(Ordering::SeqCst);
+            if seq == 0 {
+                return None;
+            }
+            if seq % 2 == 1 {
+                core::hint::spin_loop();
+                continue;
+            }
+            let position = self.shared.roll_position.load(Ordering::SeqCst);
+            let instant_us = self.shared.roll_instant_us.load(Ordering::SeqCst);
+            if self.shared.roll_seq.load(Ordering::SeqCst) == seq {
+                return Some(RollStart {
+                    rolls: seq / 2,
+                    position: TimePosition::from_samples(position),
+                    instant_us,
+                });
+            }
+        }
+    }
+
     /// Blocks the audio thread has rendered so far.
     pub fn blocks_rendered(&self) -> u64 {
         self.shared.blocks.load(Ordering::Acquire)
@@ -294,6 +343,10 @@ pub struct AudioThread {
     /// A replaced map the retire queue had no room for; retried each tick.
     retired_map_overflow: Option<TempoMap>,
     shared: Arc<Shared>,
+    /// The current block's start on the device clock, when a device drives
+    /// this thread.
+    block_start_us: Option<u64>,
+    was_rolling: bool,
 }
 
 impl AudioThread {
@@ -356,8 +409,38 @@ impl AudioThread {
     /// block into `out` and publishes the new position. Allocation-free.
     ///
     /// `out` may have any channel count; the graph's output is adapted.
+    /// No device clock: see [`tick_timed`](Self::tick_timed).
     pub fn tick(&mut self, out: &mut PlanarBuffer) -> Result<()> {
+        self.block_start_us = None;
+        self.render_block(out)
+    }
+
+    /// [`tick`](Self::tick) for a block that starts at `block_start_us` on
+    /// the device clock (`run_on_device` calls this): timestamped MIDI is
+    /// placed against it, and when the transport starts rolling the
+    /// block's position and instant are published as the [`RollStart`] a
+    /// recording lines up with.
+    pub fn tick_timed(&mut self, out: &mut PlanarBuffer, block_start_us: u64) -> Result<()> {
+        self.block_start_us = Some(block_start_us);
+        self.engine.set_midi_block_start_us(Some(block_start_us));
+        self.render_block(out)
+    }
+
+    fn render_block(&mut self, out: &mut PlanarBuffer) -> Result<()> {
         self.apply_commands();
+        let rolling = self.engine.transport().is_rolling();
+        if rolling && !self.was_rolling {
+            if let Some(instant_us) = self.block_start_us {
+                let position = self.engine.transport().position().samples();
+                self.shared.roll_seq.fetch_add(1, Ordering::SeqCst);
+                self.shared.roll_position.store(position, Ordering::SeqCst);
+                self.shared
+                    .roll_instant_us
+                    .store(instant_us, Ordering::SeqCst);
+                self.shared.roll_seq.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        self.was_rolling = rolling;
         for source in self.extra_midi.iter_mut().flatten() {
             while let Some(msg) = source.pop() {
                 let _ = self.engine.midi_mut().push(MidiEvent {
@@ -398,8 +481,8 @@ impl AudioThread {
     /// `config.sample_rate` and `config.max_block_frames` must equal the
     /// values the audio thread was created with, because every published graph is
     /// prepared for them; a mismatch is rejected rather than silently
-    /// re-prepared. The callback sets the MIDI block start from the device
-    /// clock, then calls [`tick`](Self::tick).
+    /// re-prepared. The callback calls [`tick_timed`](Self::tick_timed)
+    /// with the device clock.
     #[cfg(feature = "devices")]
     pub fn run_on_device(
         mut self,
@@ -418,8 +501,7 @@ impl AudioThread {
         crate::primitives::io::device::OutputStream::open_with_meter(
             config,
             move |block: &mut PlanarBuffer, block_start_us: u64| {
-                self.engine.set_midi_block_start_us(Some(block_start_us));
-                if self.tick(block).is_err() {
+                if self.tick_timed(block, block_start_us).is_err() {
                     block.clear();
                 }
             },
@@ -473,6 +555,9 @@ fn pair(
         position: AtomicI64::new(0),
         state: AtomicU8::new(0),
         blocks: AtomicU64::new(0),
+        roll_seq: AtomicU64::new(0),
+        roll_position: AtomicI64::new(0),
+        roll_instant_us: AtomicU64::new(0),
     });
     let load = engine.load();
     Ok((
@@ -496,6 +581,8 @@ fn pair(
             retired_maps: maps_tx,
             retired_map_overflow: None,
             shared,
+            block_start_us: None,
+            was_rolling: false,
         },
     ))
 }
@@ -763,5 +850,43 @@ mod tests {
         assert_eq!(transport.sample_rate(), R, "the engine's rate wins");
         assert_eq!(transport.tempo_map().meter_points().len(), 2);
         assert_eq!(control.reclaim(), 1, "the old map");
+    }
+
+    #[test]
+    fn the_roll_start_is_published_when_rolling_begins_under_a_device_clock() {
+        let (mut control, mut audio) = Engine::live(R, 64, 120.0).unwrap();
+        let mut out = PlanarBuffer::new(2, 64);
+        assert_eq!(control.roll_start(), None);
+        // Rolling without a clock publishes nothing.
+        control.send(EngineCommand::Play).unwrap();
+        audio.tick(&mut out).unwrap();
+        assert_eq!(control.roll_start(), None);
+        control.send(EngineCommand::Stop).unwrap();
+        audio.tick(&mut out).unwrap();
+        // With one, the block that begins rolling is published once.
+        control
+            .send(EngineCommand::Seek(TimePosition::from_samples(1_000)))
+            .unwrap();
+        control.send(EngineCommand::Play).unwrap();
+        audio.tick_timed(&mut out, 5_000_000).unwrap();
+        audio.tick_timed(&mut out, 5_001_333).unwrap();
+        assert_eq!(
+            control.roll_start(),
+            Some(RollStart {
+                rolls: 1,
+                position: TimePosition::from_samples(1_000),
+                instant_us: 5_000_000,
+            })
+        );
+        // Punching in is not a new roll; stopping and playing again is.
+        control.send(EngineCommand::Record).unwrap();
+        audio.tick_timed(&mut out, 5_002_666).unwrap();
+        assert_eq!(control.roll_start().unwrap().rolls, 1);
+        control.send(EngineCommand::Stop).unwrap();
+        audio.tick_timed(&mut out, 5_004_000).unwrap();
+        control.send(EngineCommand::Play).unwrap();
+        audio.tick_timed(&mut out, 5_005_333).unwrap();
+        let again = control.roll_start().unwrap();
+        assert_eq!((again.rolls, again.instant_us), (2, 5_005_333));
     }
 }
