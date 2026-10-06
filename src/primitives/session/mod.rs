@@ -63,5 +63,6 @@ pub use snapshot::{
     TempoPointSnapshot, TempoSnapshot, TrackSnapshot, FORMAT_VERSION,
 };
 pub use track::{
-    Clip, ClipSource, Input, MidiNote, SendState, Track, TrackKind, TrackSend, TrackState,
+    Clip, ClipSource, ClipState, Input, MidiNote, SendState, Track, TrackKind, TrackSend,
+    TrackState,
 };

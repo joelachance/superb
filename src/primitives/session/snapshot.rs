@@ -91,8 +91,9 @@ pub struct ClipSnapshot {
     pub source: ClipSource,
     /// Gain in dB.
     pub gain_db: f32,
-    /// Mute state.
-    pub muted: bool,
+    /// Muted (`muted` in older files).
+    #[serde(alias = "muted")]
+    pub mute: bool,
     /// Fade-in in samples.
     pub fade_in: i64,
     /// Fade-out in samples.
@@ -234,11 +235,11 @@ impl From<&Clip> for ClipSnapshot {
             start: i.start.samples(),
             length: i.length.samples(),
             source: i.source.clone(),
-            gain_db: i.gain_db,
-            muted: i.muted,
-            fade_in: i.fade_in.samples(),
-            fade_out: i.fade_out.samples(),
-            archived: i.archived,
+            gain_db: i.state.gain_db,
+            mute: i.state.mute,
+            fade_in: i.state.fade_in.samples(),
+            fade_out: i.state.fade_out.samples(),
+            archived: i.state.archived,
         }
     }
 }
@@ -440,11 +441,11 @@ impl Memory {
                     TimeDuration::from_samples(i.length),
                     i.source.clone(),
                 )?;
-                clip.gain_db = i.gain_db;
-                clip.muted = i.muted;
-                clip.fade_in = TimeDuration::from_samples(i.fade_in);
-                clip.fade_out = TimeDuration::from_samples(i.fade_out);
-                clip.archived = i.archived;
+                clip.state.gain_db = i.gain_db;
+                clip.state.mute = i.mute;
+                clip.state.fade_in = TimeDuration::from_samples(i.fade_in);
+                clip.state.fade_out = TimeDuration::from_samples(i.fade_out);
+                clip.state.archived = i.archived;
                 track.clips.push(clip);
             }
             for i in &t.inserts {
@@ -604,8 +605,8 @@ mod tests {
             },
         )
         .unwrap();
-        audio.fade_in = TimeDuration::from_samples(8);
-        audio.gain_db = -1.0;
+        audio.state.fade_in = TimeDuration::from_samples(8);
+        audio.state.gain_db = -1.0;
         s.add_clip(drums, audio).unwrap();
         let notes = vec![
             MidiNote {
@@ -630,7 +631,7 @@ mod tests {
             ClipSource::Midi { notes },
         )
         .unwrap();
-        midi.muted = true;
+        midi.state.mute = true;
         s.add_clip(keys, midi).unwrap();
         s.add_clip(
             keys,
@@ -870,6 +871,12 @@ mod tests {
             rename(o, "mute", "muted");
             rename(o, "solo", "soloed");
             rename(o, "arm", "armed");
+            if let Some(clips) = o.get_mut("clips").and_then(|c| c.as_array_mut()) {
+                for clip in clips.iter_mut().filter_map(|c| c.as_object_mut()) {
+                    rename(clip, "mute", "muted");
+                    clip.remove("archived");
+                }
+            }
             o.remove("monitor");
             for i in o["inserts"].as_array_mut().unwrap() {
                 let io = i.as_object_mut().unwrap();

@@ -969,8 +969,8 @@ mod tests {
         s.resize_clip(late, TimeDuration::from_samples(10)).unwrap();
         assert_eq!(s.clip(late).unwrap().end().samples(), 1_010);
         assert!(s.resize_clip(late, TimeDuration::ZERO).is_err());
-        s.clip_mut(late).unwrap().muted = true;
-        assert!(s.clip(late).unwrap().muted);
+        s.clip_mut(late).unwrap().state.mute = true;
+        assert!(s.clip(late).unwrap().state.mute);
 
         let (from, removed) = s.remove_clip(late).unwrap();
         assert_eq!(from, a);

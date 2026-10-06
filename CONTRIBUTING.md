@@ -114,8 +114,8 @@ exists because its absence cost a rename.
   are the live controls of the mixer the engine runs. A type called
   `Player` must play.
 * **State is a field called `state`.** Every object in the memory keeps its
-  settable fields under one `state` (`TrackState`, `SendState`), with
-  nouns for switches: `mute`, not `muted`.
+  settable fields under one `state` (`TrackState`, `ClipState`,
+  `SendState`), with nouns for switches: `mute`, not `muted`.
 * **One home per behaviour.** A device listing lives in `devices`, an
   offline render in `export`. When two functions do the same thing,
   delete one rather than alias it.

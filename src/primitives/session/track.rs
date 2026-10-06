@@ -98,10 +98,18 @@ pub struct Clip {
     pub(crate) length: TimeDuration,
     /// Content.
     pub source: ClipSource,
-    /// Clip gain in dB (0 = unity).
+    /// Gain, mute, fades and whether the clip is archived.
+    pub state: ClipState,
+}
+
+/// A clip's state: everything you can set on it once it is placed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClipState {
+    /// Clip gain in dB (0 = unity): an offset on the clip itself, before
+    /// the track's fader.
     pub gain_db: f32,
-    /// Muted clips are not rendered.
-    pub muted: bool,
+    /// Muted clips are not rendered. State: saved, never an undo step.
+    pub mute: bool,
     /// Fade-in length (`0` for none).
     pub fade_in: TimeDuration,
     /// Fade-out length (`0` for none).
@@ -109,6 +117,18 @@ pub struct Clip {
     /// Archived clips stay in the session with their place and audio but
     /// are not rendered and do not count toward a track's end.
     pub archived: bool,
+}
+
+impl Default for ClipState {
+    fn default() -> Self {
+        Self {
+            gain_db: 0.0,
+            mute: false,
+            fade_in: TimeDuration::ZERO,
+            fade_out: TimeDuration::ZERO,
+            archived: false,
+        }
+    }
 }
 
 impl Clip {
@@ -140,11 +160,7 @@ impl Clip {
             start,
             length,
             source,
-            gain_db: 0.0,
-            muted: false,
-            fade_in: TimeDuration::ZERO,
-            fade_out: TimeDuration::ZERO,
-            archived: false,
+            state: ClipState::default(),
         })
     }
 
@@ -429,7 +445,7 @@ impl Track {
     pub fn end(&self) -> TimePosition {
         self.clips
             .iter()
-            .filter(|c| !c.archived)
+            .filter(|c| !c.state.archived)
             .map(Clip::end)
             .max()
             .unwrap_or(TimePosition::ZERO)

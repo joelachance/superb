@@ -240,7 +240,7 @@ fn add_clip_players(
             continue;
         };
         for clip in track.clips() {
-            if clip.muted || clip.archived {
+            if clip.state.mute || clip.state.archived {
                 continue;
             }
             let node = match &clip.source {
@@ -251,8 +251,8 @@ fn add_clip_players(
                     };
                     let mut player = BufferPlayerNode::new(buffer, channels);
                     player.set_region(clip.start(), clip.length(), *offset);
-                    player.set_gain_db(clip.gain_db);
-                    player.set_fades(clip.fade_in, clip.fade_out);
+                    player.set_gain_db(clip.state.gain_db);
+                    player.set_fades(clip.state.fade_in, clip.state.fade_out);
                     mixer.graph_mut().add_node(Box::new(player))
                 }
                 ClipSource::Midi { notes } => {
@@ -329,7 +329,7 @@ pub(crate) fn schedule_midi_notes(
     let clip_start = clip.start();
     let clip_end = clip.end();
     let clip_start_beat = tempo.samples_to_beat(clip_start).beats();
-    let gain = db_to_linear(clip.gain_db);
+    let gain = db_to_linear(clip.state.gain_db);
     let mut events = Vec::with_capacity(notes.len() * 2);
 
     for n in notes {
@@ -527,7 +527,7 @@ mod tests {
         .unwrap();
         memory.add_clip(vox, missing).unwrap();
         let mut muted = audio_clip("muted", 200, 100);
-        muted.muted = true;
+        muted.state.mute = true;
         memory.add_clip(vox, muted).unwrap();
         memory
             .add_clip(vox, audio_clip("present", 300, 100))

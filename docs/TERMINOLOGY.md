@@ -55,7 +55,7 @@ column is what not to say in code, docs or UI text.
 | archive (a clip; it stays, silent) | delete, remove (clips are never deleted) |
 | strip | channel (a strip's channel count is something else) |
 | insert | effect slot, plugin slot |
-| state (mute, solo, arm, monitor, input, send on/off, looping) | switch, toggle, flag |
+| state (mute, solo, arm, monitor, input, clip mute, send on/off, looping) | switch, toggle, flag |
 | edit | change, gesture (for anything the undo history records) |
 | volume (a strip's fader, dB) | gain (that is the engine's linear multiplier) |
 | level (a send, dB) | gain, amount |

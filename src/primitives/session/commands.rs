@@ -49,7 +49,9 @@ use crate::primitives::{
     TimePosition, TrackId,
 };
 
-use crate::primitives::session::{Clip, Insert, Marker, Memory, Track, TrackKind, TrackSend};
+use crate::primitives::session::{
+    Clip, ClipSource, Insert, Marker, Memory, MidiNote, Track, TrackKind, TrackSend,
+};
 
 /// `kind` values of the [`CoalesceKey`]s used by this module.
 pub mod keys {
@@ -81,6 +83,12 @@ pub mod keys {
     pub const CLIP_GAIN: u64 = 23;
     /// [`set_clip_mute`](super::set_clip_mute).
     pub const CLIP_MUTE: u64 = 24;
+    /// [`set_clip_fade_in`](super::set_clip_fade_in).
+    pub const CLIP_FADE_IN: u64 = 25;
+    /// [`set_clip_fade_out`](super::set_clip_fade_out).
+    pub const CLIP_FADE_OUT: u64 = 26;
+    /// [`TrimClip`](super::TrimClip).
+    pub const CLIP_TRIM: u64 = 27;
     /// [`MoveMarker`](super::MoveMarker).
     pub const MARKER_MOVE: u64 = 30;
     /// [`set_marker_name`](super::set_marker_name).
@@ -603,14 +611,14 @@ impl Command<Memory> for ArchiveClip {
 
     fn apply(&mut self, memory: &mut Memory) -> Result<()> {
         let clip = memory.clip_mut(self.id)?;
-        self.previous = Some(clip.archived);
-        clip.archived = self.archived;
+        self.previous = Some(clip.state.archived);
+        clip.state.archived = self.archived;
         Ok(())
     }
 
     fn revert(&mut self, memory: &mut Memory) -> Result<()> {
         let previous = self.previous.ok_or_else(not_applied)?;
-        memory.clip_mut(self.id)?.archived = previous;
+        memory.clip_mut(self.id)?.state.archived = previous;
         Ok(())
     }
 }
@@ -724,6 +732,95 @@ impl Command<Memory> for ResizeClip {
     ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
         let next = next.downcast::<Self>()?;
         self.length = next.length;
+        Ok(())
+    }
+}
+
+/// Moves a clip's edges on the timeline. What is underneath stays put: a
+/// head trim shows later audio (the source offset moves with the edge) and
+/// MIDI notes keep their place on the timeline. Coalesces, so dragging an
+/// edge is one undo step.
+pub struct TrimClip {
+    id: ClipId,
+    start: TimePosition,
+    end: TimePosition,
+    from: Option<(TimePosition, TimeDuration, ClipSource)>,
+}
+
+impl TrimClip {
+    /// Trims the clip to `[start, end)`.
+    pub fn new(id: ClipId, start: TimePosition, end: TimePosition) -> Self {
+        Self {
+            id,
+            start,
+            end,
+            from: None,
+        }
+    }
+}
+
+impl Command<Memory> for TrimClip {
+    fn label(&self) -> &str {
+        "Trim clip"
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let length = TimeDuration::from_samples(self.end.samples() - self.start.samples());
+        if length.samples() <= 0 {
+            return Err(SuperbError::InvalidArgument {
+                what: "clip trim (end must be after start)",
+            });
+        }
+        let clip = memory.clip(self.id)?;
+        let before = (clip.start(), clip.length(), clip.source.clone());
+        let moved = self.start.samples() - before.0.samples();
+        let source = match &clip.source {
+            ClipSource::Audio { path, offset } => ClipSource::Audio {
+                path: path.clone(),
+                offset: TimeDuration::from_samples((offset.samples() + moved).max(0)),
+            },
+            ClipSource::Midi { notes } if moved != 0 => {
+                let tempo = memory.tempo_map();
+                let delta = tempo.samples_to_beat(self.start).beats()
+                    - tempo.samples_to_beat(before.0).beats();
+                ClipSource::Midi {
+                    notes: notes
+                        .iter()
+                        .map(|n| MidiNote {
+                            beat: n.beat - delta,
+                            ..*n
+                        })
+                        .collect(),
+                }
+            }
+            other => other.clone(),
+        };
+        memory.move_clip(self.id, self.start)?;
+        memory.resize_clip(self.id, length)?;
+        memory.clip_mut(self.id)?.source = source;
+        self.from = Some(before);
+        Ok(())
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let (start, length, source) = self.from.take().ok_or_else(not_applied)?;
+        memory.move_clip(self.id, start)?;
+        memory.resize_clip(self.id, length)?;
+        memory.clip_mut(self.id)?.source = source;
+        Ok(())
+    }
+
+    fn coalesce_key(&self) -> Option<CoalesceKey> {
+        Some(CoalesceKey::new(keys::CLIP_TRIM, self.id.raw()))
+    }
+
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<Memory>>,
+    ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
+        let next = next.downcast::<Self>()?;
+        self.start = next.start;
+        self.end = next.end;
         Ok(())
     }
 }
@@ -1293,8 +1390,8 @@ pub fn set_clip_gain_db(id: ClipId, gain_db: f32) -> PropertyEdit<Memory, f32> {
         keys::CLIP_GAIN,
         id,
         gain_db,
-        |i| i.gain_db,
-        |i, v| i.gain_db = v,
+        |i| i.state.gain_db,
+        |i, v| i.state.gain_db = v,
     )
 }
 
@@ -1305,8 +1402,32 @@ pub fn set_clip_mute(id: ClipId, muted: bool) -> PropertyEdit<Memory, bool> {
         keys::CLIP_MUTE,
         id,
         muted,
-        |i| i.muted,
-        |i, v| i.muted = v,
+        |i| i.state.mute,
+        |i, v| i.state.mute = v,
+    )
+}
+
+/// Sets a clip's fade-in length.
+pub fn set_clip_fade_in(id: ClipId, length: TimeDuration) -> PropertyEdit<Memory, TimeDuration> {
+    clip_property(
+        "Set clip fade in",
+        keys::CLIP_FADE_IN,
+        id,
+        length,
+        |i| i.state.fade_in,
+        |i, v| i.state.fade_in = v,
+    )
+}
+
+/// Sets a clip's fade-out length.
+pub fn set_clip_fade_out(id: ClipId, length: TimeDuration) -> PropertyEdit<Memory, TimeDuration> {
+    clip_property(
+        "Set clip fade out",
+        keys::CLIP_FADE_OUT,
+        id,
+        length,
+        |i| i.state.fade_out,
+        |i, v| i.state.fade_out = v,
     )
 }
 
@@ -1631,7 +1752,10 @@ mod tests {
             ("vox", -6.0, -0.5, true, true, true, Some(0x123456))
         );
         let i = s.clip(clip).unwrap();
-        assert_eq!((i.name.as_str(), i.gain_db, i.muted), ("take", -2.0, true));
+        assert_eq!(
+            (i.name.as_str(), i.state.gain_db, i.state.mute),
+            ("take", -2.0, true)
+        );
         assert_eq!(s.name(), "memory");
         while h.undo(&mut s).unwrap() {}
         let t = s.track(a).unwrap();
@@ -1648,7 +1772,10 @@ mod tests {
             ("a", 0.0, 0.0, false, false, false, None)
         );
         let i = s.clip(clip).unwrap();
-        assert_eq!((i.name.as_str(), i.gain_db, i.muted), ("i", 0.0, false));
+        assert_eq!(
+            (i.name.as_str(), i.state.gain_db, i.state.mute),
+            ("i", 0.0, false)
+        );
         assert_eq!(s.name(), "t");
         while h.redo(&mut s).unwrap() {}
         assert_eq!(s.track(a).unwrap().state.volume_db, -6.0);

@@ -198,7 +198,7 @@ continuous, so they go through the history and coalesce.
 
 **Memory.** The memory is plain data with no `Arc` handles and no audio
 types. Each object's settable fields sit under one `state` field
-(`TrackState`, `SendState`, `InsertState`). IDs come from one per-session counter and are never reused. The
+(`TrackState`, `ClipState`, `SendState`, `InsertState`). IDs come from one per-session counter and are never reused. The
 file format is a separate primitive-only snapshot with a format version,
 not the in-memory types, and old fields load with defaults. Routing is
 validated in the memory (targets must be buses, bus chains may not form
