@@ -53,7 +53,7 @@ use crate::primitives::realtime::LoadMeter;
 use crate::primitives::transport::{LoopRange, Transport, TransportState};
 use crate::primitives::{Result, SampleRate, SuperbError, TimePosition};
 
-use super::{Engine, MidiTiming};
+use super::{Engine, LiveInput, MidiTiming};
 
 /// How many [`EngineCommand`]s may wait between two blocks.
 pub const COMMAND_CAPACITY: usize = 64;
@@ -63,6 +63,8 @@ pub const MIDI_CAPACITY: usize = 256;
 pub const MAX_EXTRA_MIDI_INPUTS: usize = 4;
 /// How many published graphs may wait to be swapped in.
 pub const SWAP_CAPACITY: usize = 2;
+/// How many replaced live inputs may wait to be reclaimed.
+pub const RETIRED_INPUT_CAPACITY: usize = 4;
 
 /// A request from the control thread to the audio thread.
 ///
@@ -87,6 +89,10 @@ pub enum EngineCommand {
     /// built-in software queue keeps sample-accurate placement. At most
     /// [`MAX_EXTRA_MIDI_INPUTS`] sources; extra ones are dropped.
     AddMidiInput(Consumer<TimestampedMessage>),
+    /// Attaches captured audio as the engine's live input (what
+    /// `ProcessContext::input` carries). An input attached before travels
+    /// back to the control side and is freed by [`EngineHandle::reclaim`].
+    LiveInput(LiveInput),
 }
 
 impl core::fmt::Debug for EngineCommand {
@@ -100,6 +106,7 @@ impl core::fmt::Debug for EngineCommand {
             EngineCommand::SetLoopEnabled(b) => write!(f, "SetLoopEnabled({b})"),
             EngineCommand::SetMidiTiming(t) => write!(f, "SetMidiTiming({t:?})"),
             EngineCommand::AddMidiInput(_) => f.write_str("AddMidiInput(..)"),
+            EngineCommand::LiveInput(input) => write!(f, "LiveInput({input:?})"),
         }
     }
 }
@@ -137,6 +144,7 @@ fn state_from_u8(v: u8) -> TransportState {
 pub struct EngineHandle {
     commands: Producer<EngineCommand>,
     midi: Producer<TimestampedMessage>,
+    retired_inputs: Consumer<LiveInput>,
     editor: GraphEditor,
     shared: Arc<Shared>,
     load: Arc<LoadMeter>,
@@ -173,9 +181,14 @@ impl EngineHandle {
         &mut self.editor
     }
 
-    /// Drops retired graphs the audio thread has handed back. Returns how many.
+    /// Drops retired graphs and replaced live inputs the audio thread has
+    /// handed back. Returns how many.
     pub fn reclaim(&mut self) -> usize {
-        self.editor.try_reclaim()
+        let mut n = self.editor.try_reclaim();
+        while self.retired_inputs.pop().is_some() {
+            n += 1;
+        }
+        n
     }
 
     /// Queues a MIDI message for the engine's built-in software input.
@@ -249,6 +262,9 @@ pub struct AudioThread {
     engine: Engine<LiveGraph>,
     commands: Consumer<EngineCommand>,
     extra_midi: [Option<Consumer<TimestampedMessage>>; MAX_EXTRA_MIDI_INPUTS],
+    retired_inputs: Producer<LiveInput>,
+    /// A replaced input the retire queue had no room for; retried each tick.
+    retired_overflow: Option<LiveInput>,
     shared: Arc<Shared>,
 }
 
@@ -257,6 +273,11 @@ impl AudioThread {
     /// [`tick`](Self::tick); call it directly only if you drive
     /// [`Engine::render`] yourself. Allocation-free.
     pub fn apply_commands(&mut self) {
+        if let Some(old) = self.retired_overflow.take() {
+            if let Err(old) = self.retired_inputs.push(old) {
+                self.retired_overflow = Some(old);
+            }
+        }
         while let Some(command) = self.commands.pop() {
             match command {
                 EngineCommand::Play => self.engine.transport_mut().play(),
@@ -274,6 +295,14 @@ impl AudioThread {
                     }
                     // A dropped consumer is freed here, on this thread; the
                     // producer side notices through `is_abandoned`.
+                }
+                EngineCommand::LiveInput(input) => {
+                    if let Some(old) = self.engine.set_live_input(Some(input)) {
+                        // Never freed here: it goes back to the control thread.
+                        if let Err(old) = self.retired_inputs.push(old) {
+                            self.retired_overflow = Some(old);
+                        }
+                    }
                 }
             }
         }
@@ -361,6 +390,7 @@ impl core::fmt::Debug for AudioThread {
             .field("transport", &self.engine.transport().state())
             .field("position", &self.engine.transport().position())
             .field("extra_midi", &self.extra_midi.iter().flatten().count())
+            .field("live_input", &self.engine.live_input().is_some())
             .finish()
     }
 }
@@ -393,6 +423,7 @@ fn pair(
     let (midi_tx, midi_rx) = spsc::channel::<TimestampedMessage>(MIDI_CAPACITY);
     engine.set_midi_input(Some(midi_rx));
     let (cmd_tx, cmd_rx) = spsc::channel::<EngineCommand>(COMMAND_CAPACITY);
+    let (retired_tx, retired_rx) = spsc::channel::<LiveInput>(RETIRED_INPUT_CAPACITY);
     let shared = Arc::new(Shared {
         position: AtomicI64::new(0),
         state: AtomicU8::new(0),
@@ -403,6 +434,7 @@ fn pair(
         EngineHandle {
             commands: cmd_tx,
             midi: midi_tx,
+            retired_inputs: retired_rx,
             editor,
             shared: Arc::clone(&shared),
             load,
@@ -413,6 +445,8 @@ fn pair(
             engine,
             commands: cmd_rx,
             extra_midi: [None, None, None, None],
+            retired_inputs: retired_tx,
+            retired_overflow: None,
             shared,
         },
     ))
@@ -614,5 +648,44 @@ mod tests {
     #[test]
     fn invalid_configuration_is_rejected() {
         assert!(Engine::live(R, 0, 120.0).is_err());
+    }
+
+    #[test]
+    fn a_live_input_command_attaches_and_a_replaced_one_comes_back() {
+        use crate::primitives::graph::nodes::LiveInputNode;
+        use crate::primitives::io::capture::capture_queue;
+        let (mut control, mut audio) = Engine::live(R, 64, 120.0).unwrap();
+        let mut graph = AudioGraph::new();
+        let tap = graph.add_node(Box::new(LiveInputNode::new([0, 0])));
+        graph.set_output(tap).unwrap();
+        control.publish(graph).unwrap();
+        let (mut mic, blocks) = capture_queue(1, 64, 4).unwrap();
+        control
+            .send(EngineCommand::LiveInput(
+                LiveInput::new(blocks, 1, 64).unwrap(),
+            ))
+            .unwrap();
+        let mut block = PlanarBuffer::new(1, 64);
+        block.fill(0.5);
+        assert!(mic.push(&block, 0));
+        let mut out = PlanarBuffer::new(2, 64);
+        audio.tick(&mut out).unwrap();
+        assert!(
+            out.channel(1).iter().all(|&s| s == 0.5),
+            "a mono input on both sides"
+        );
+        assert!(format!("{audio:?}").contains("live_input: true"));
+        let _ = control.reclaim(); // the first graph's predecessor
+
+        // A second input replaces the first, which travels back to be freed here.
+        let (_mic2, blocks2) = capture_queue(1, 64, 4).unwrap();
+        control
+            .send(EngineCommand::LiveInput(
+                LiveInput::new(blocks2, 1, 64).unwrap(),
+            ))
+            .unwrap();
+        audio.tick(&mut out).unwrap();
+        assert!(out.is_silent(), "the new input has nothing yet");
+        assert_eq!(control.reclaim(), 1, "the replaced input");
     }
 }

@@ -375,6 +375,66 @@ impl Node for SilenceNode {
 // MonoSynthNode
 // ---------------------------------------------------------------------------
 
+/// Plays the engine's live audio input ([`ProcessContext::input`]): output
+/// channel `i` carries input channel `taps[i]`, so `[0, 0]` puts a mono
+/// microphone on both sides of a stereo strip and `[2, 3]` picks a stereo
+/// pair. A tap the input does not have is silence, and so is the node
+/// while no input is attached. This is how a track monitors what is being
+/// recorded on it.
+pub struct LiveInputNode {
+    taps: Vec<usize>,
+}
+
+impl LiveInputNode {
+    /// Creates a node with one output channel per tap.
+    pub fn new(taps: impl Into<Vec<usize>>) -> Self {
+        Self { taps: taps.into() }
+    }
+
+    /// Input channel per output channel.
+    pub fn taps(&self) -> &[usize] {
+        &self.taps
+    }
+}
+
+impl Node for LiveInputNode {
+    fn name(&self) -> &str {
+        "live_input"
+    }
+
+    fn channels(&self) -> NodeChannels {
+        NodeChannels::generator(self.taps.len())
+    }
+
+    fn process(
+        &mut self,
+        ctx: &ProcessContext<'_>,
+        _input: &PlanarBuffer,
+        output: &mut PlanarBuffer,
+    ) -> ProcessStatus {
+        let Some(input) = ctx.input else {
+            return ProcessStatus::Silent;
+        };
+        let frames = ctx.frames.min(input.frames());
+        let mut any = false;
+        for (i, &tap) in self.taps.iter().enumerate() {
+            let out = &mut output.channel_mut(i)[..ctx.frames];
+            if tap < input.channels() {
+                out[..frames].copy_from_slice(&input.channel(tap)[..frames]);
+                out[frames..].fill(0.0);
+                any = true;
+            } else {
+                out.fill(0.0);
+            }
+        }
+        if any {
+            ProcessStatus::Normal
+        } else {
+            ProcessStatus::Silent
+        }
+    }
+}
+
 /// A minimal monophonic MIDI-driven sine synth.
 ///
 /// Note-on sets pitch and amplitude (velocity / 127) at the event's frame
@@ -850,6 +910,7 @@ mod tests {
             time: BlockTime::free_running(),
             midi,
             input_is_silent: silent_in,
+            input: None,
         }
     }
 
@@ -1064,6 +1125,7 @@ mod tests {
             },
             midi: &midi,
             input_is_silent: true,
+            input: None,
         };
         assert_eq!(
             player.process(&rolling, &input, &mut out),
@@ -1116,6 +1178,7 @@ mod tests {
             },
             midi: &midi,
             input_is_silent: true,
+            input: None,
         };
         assert_eq!(
             synth.process(&rolling, &input, &mut out),
@@ -1126,5 +1189,32 @@ mod tests {
         assert!(s[11..30].iter().any(|&x| x.abs() > 0.01));
         assert!(s[30..].iter().all(|&x| x == 0.0));
         assert_eq!(synth.name(), "scheduled_synth");
+    }
+
+    #[test]
+    fn live_input_node_copies_its_taps_and_is_silent_without_an_input() {
+        let midi = MidiEventBuffer::with_capacity(0);
+        let mut node = LiveInputNode::new([1, 0, 5]);
+        assert_eq!(node.channels().outputs, 3);
+        let mut out = PlanarBuffer::new(3, 8);
+        let none = ctx(8, &midi, true);
+        assert_eq!(
+            node.process(&none, &PlanarBuffer::new(1, 8), &mut out),
+            ProcessStatus::Silent
+        );
+        let mut live = PlanarBuffer::new(2, 8);
+        live.channel_mut(0).fill(0.25);
+        live.channel_mut(1).fill(0.5);
+        let with = ProcessContext {
+            input: Some(&live),
+            ..ctx(8, &midi, true)
+        };
+        assert_eq!(
+            node.process(&with, &PlanarBuffer::new(1, 8), &mut out),
+            ProcessStatus::Normal
+        );
+        assert!(out.channel(0).iter().all(|&s| s == 0.5));
+        assert!(out.channel(1).iter().all(|&s| s == 0.25));
+        assert!(out.channel(2).iter().all(|&s| s == 0.0), "no such tap");
     }
 }

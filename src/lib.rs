@@ -88,8 +88,8 @@ pub mod prelude {
     };
     pub use crate::primitives::buffers::{InterleavedBuffer, PlanarBuffer};
     pub use crate::primitives::graph::nodes::{
-        BufferPlayerNode, GainNode, MonoSynthNode, PassThroughNode, ScheduledNoteEvent,
-        ScheduledSynthNode, SineNode,
+        BufferPlayerNode, GainNode, LiveInputNode, MonoSynthNode, PassThroughNode,
+        ScheduledNoteEvent, ScheduledSynthNode, SineNode,
     };
     pub use crate::primitives::graph::{
         live_pair, AudioGraph, BlockProcessor, BlockTime, GraphCommand, GraphEditor, LiveGraph,

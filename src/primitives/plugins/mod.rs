@@ -58,7 +58,7 @@
 //! graph.prepare(SampleRate::HZ_48K, 256).unwrap();
 //!
 //! params.push(ParamChange { id: 0, value: 0.5 }).unwrap(); // from the UI thread
-//! graph.process(BlockTime::free_running(), 256, &MidiEventBuffer::with_capacity(0)).unwrap();
+//! graph.process(BlockTime::free_running(), 256, &MidiEventBuffer::with_capacity(0), None).unwrap();
 //! assert!(graph.output().peak() <= 0.5 + 1e-6);
 //! ```
 

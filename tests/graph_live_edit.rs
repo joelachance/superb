@@ -33,7 +33,8 @@ fn live_process_is_allocation_free_with_and_without_pending_swap() {
     let midi = MidiEventBuffer::with_capacity(0);
 
     // Warm-up: applies the first swap and runs one block.
-    live.process(BlockTime::free_running(), 256, &midi).unwrap();
+    live.process(BlockTime::free_running(), 256, &midi, None)
+        .unwrap();
     assert_eq!(live.swap_count(), 1);
 
     // Steady state: nothing pending.
@@ -42,7 +43,7 @@ fn live_process_is_allocation_free_with_and_without_pending_swap() {
         superb::primitives::realtime::assert_no_alloc(|| {
             for i in 0..32 {
                 let frames = if i % 2 == 0 { 256 } else { 200 };
-                live.process(time, frames, &midi).unwrap();
+                live.process(time, frames, &midi, None).unwrap();
                 time = time.advanced_by(frames, R);
                 assert_eq!(live.output().frames(), frames);
                 assert!(live.output().peak() > 0.0);
@@ -62,9 +63,9 @@ fn live_process_is_allocation_free_with_and_without_pending_swap() {
     // ... then the swap itself happens inside process with no heap activity.
     with_rt(|| {
         superb::primitives::realtime::assert_no_alloc(|| {
-            live.process(time, 256, &midi).unwrap();
+            live.process(time, 256, &midi, None).unwrap();
             assert_eq!(live.output().channel(0)[0], 0.125);
-            live.process(time, 128, &midi).unwrap();
+            live.process(time, 128, &midi, None).unwrap();
             assert_eq!(live.output().frames(), 128);
         });
     });

@@ -203,6 +203,7 @@ mod tests {
             time: BlockTime::free_running(),
             midi,
             input_is_silent: silent,
+            input: None,
         }
     }
 

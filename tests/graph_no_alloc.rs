@@ -1,7 +1,8 @@
 //! Proves that `AudioGraph::process` performs no heap operations once prepared.
 
+use superb::primitives::buffers::PlanarBuffer;
 use superb::primitives::graph::nodes::{
-    DelayNode, GainNode, MonoSynthNode, PassThroughNode, SineNode,
+    DelayNode, GainNode, LiveInputNode, MonoSynthNode, PassThroughNode, SineNode,
 };
 use superb::primitives::graph::{AudioGraph, BlockTime, MidiPort};
 use superb::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
@@ -16,6 +17,8 @@ fn process_is_allocation_free() {
     let mut graph = AudioGraph::new();
     let sine = graph.add_node(Box::new(SineNode::new(220.0, 0.5, 2)));
     let synth = graph.add_node(Box::new(MonoSynthNode::new(2)));
+    // A monitoring node copying the engine's live input.
+    let live = graph.add_node(Box::new(LiveInputNode::new([0, 1])));
     let gain = graph.add_node(Box::new(GainNode::new(0.8, 2)));
     let bus = graph.add_node(Box::new(PassThroughNode::new(2)));
     // A parallel path with latency: the direct `gain -> bus` edge gets a
@@ -24,6 +27,7 @@ fn process_is_allocation_free() {
     let lookahead = graph.add_node(Box::new(DelayNode::new(37, 2)));
     graph.connect(sine, gain).unwrap();
     graph.connect(synth, gain).unwrap();
+    graph.connect(live, gain).unwrap();
     graph.connect(gain, bus).unwrap();
     graph.connect(gain, lookahead).unwrap();
     graph.connect(lookahead, bus).unwrap();
@@ -46,9 +50,11 @@ fn process_is_allocation_free() {
         },
     })
     .unwrap();
+    let mut input = PlanarBuffer::new(2, 512);
+    input.fill(0.1);
     // Warm-up call (first-time lazy initialisation, if any, happens here).
     graph
-        .process(BlockTime::free_running(), 512, &midi)
+        .process(BlockTime::free_running(), 512, &midi, Some(&input))
         .unwrap();
 
     let mut time = BlockTime {
@@ -58,7 +64,8 @@ fn process_is_allocation_free() {
     superb::primitives::realtime::assert_no_alloc(|| {
         for i in 0..64 {
             let frames = if i % 3 == 0 { 512 } else { 480 };
-            graph.process(time, frames, &midi).unwrap();
+            input.set_frames(frames).unwrap();
+            graph.process(time, frames, &midi, Some(&input)).unwrap();
             time = time.advanced_by(frames, SampleRate::HZ_48K);
             let out = graph.output();
             assert_eq!(out.frames(), frames);
@@ -69,7 +76,7 @@ fn process_is_allocation_free() {
             "the compensated edge is live"
         );
         graph.reset();
-        graph.process(time, 480, &midi).unwrap();
+        graph.process(time, 480, &midi, None).unwrap();
         let _ = TimePosition::ZERO;
     });
 }

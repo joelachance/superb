@@ -51,12 +51,15 @@ pub trait BlockProcessor: Send {
         max_frames: usize,
     ) -> crate::primitives::Result<()>;
 
-    /// Renders one block. Must be allocation-free.
+    /// Renders one block. Must be allocation-free. `input` is the engine's
+    /// live audio input for the block, if one is attached; nodes see it as
+    /// `ProcessContext::input`.
     fn process(
         &mut self,
         time: crate::primitives::graph::BlockTime,
         frames: usize,
         midi: &crate::primitives::midi::MidiEventBuffer,
+        input: Option<&PlanarBuffer>,
     ) -> crate::primitives::Result<()>;
 
     /// The rendered output of the last `process` call.

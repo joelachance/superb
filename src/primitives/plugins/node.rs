@@ -317,12 +317,14 @@ pub(crate) mod tests {
         assert_eq!(g.latency_frames(), 4);
         assert_eq!(g.edge_delay(src, sink).unwrap(), 4);
 
-        g.process(BlockTime::free_running(), 8, &no_midi()).unwrap();
+        g.process(BlockTime::free_running(), 8, &no_midi(), None)
+            .unwrap();
         assert_eq!(g.node_output(fx).unwrap().channel(1), &[1.0; 8]);
 
         tx.push(ParamChange { id: 1, value: 0.5 }).unwrap();
         tx.push(ParamChange { id: 99, value: 7.0 }).unwrap(); // unknown: dropped silently
-        g.process(BlockTime::free_running(), 8, &no_midi()).unwrap();
+        g.process(BlockTime::free_running(), 8, &no_midi(), None)
+            .unwrap();
         assert_eq!(g.node_output(fx).unwrap().channel(0), &[0.5; 8]);
         g.reset();
         let plugin = g.remove_node(fx).unwrap();
@@ -345,6 +347,7 @@ pub(crate) mod tests {
             time: BlockTime::free_running(),
             midi: &midi,
             input_is_silent: false,
+            input: None,
         };
         tx.push(ParamChange { id: 1, value: 0.5 }).unwrap();
         bypass.store(true, Ordering::Relaxed);
@@ -369,6 +372,7 @@ pub(crate) mod tests {
         // Silent input stays silent either way.
         let quiet = ProcessContext {
             input_is_silent: true,
+            input: None,
             ..ctx
         };
         bypass.store(true, Ordering::Relaxed);
@@ -394,6 +398,7 @@ pub(crate) mod tests {
             time: BlockTime::free_running(),
             midi: &midi,
             input_is_silent: false,
+            input: None,
         };
         assert_eq!(
             node.process(&ctx, &input, &mut output),

@@ -42,7 +42,7 @@
 //! graph.prepare(SampleRate::HZ_48K, 256).unwrap();
 //!
 //! let midi = MidiEventBuffer::with_capacity(0);
-//! graph.process(BlockTime::free_running(), 256, &midi).unwrap();
+//! graph.process(BlockTime::free_running(), 256, &midi, None).unwrap();
 //! let out = graph.output();
 //! assert_eq!(out.channels(), 1);
 //! assert!(out.peak() <= 0.25 + 1e-6);

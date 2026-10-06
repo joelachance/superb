@@ -288,7 +288,7 @@ impl AudioGraph {
     /// let ch = MidiChannel::new(0).unwrap();
     /// let mut midi = MidiEventBuffer::with_capacity(4);
     /// midi.push(MidiEvent { frame: 0, message: MidiMessage::NoteOn { channel: ch, note: 69, velocity: 127 } }).unwrap();
-    /// graph.process(BlockTime::free_running(), 64, &midi).unwrap();
+    /// graph.process(BlockTime::free_running(), 64, &midi, None).unwrap();
     /// assert!(graph.node_output(lead).unwrap().peak() > 0.9);
     /// assert!(graph.node_output(pad).unwrap().is_silent());
     /// ```
@@ -650,6 +650,7 @@ impl AudioGraph {
         time: BlockTime,
         frames: usize,
         midi: &MidiEventBuffer,
+        input: Option<&PlanarBuffer>,
     ) -> Result<()> {
         let (sample_rate, max_frames) = match (self.dirty, self.prepared) {
             (false, Some(cfg)) => cfg,
@@ -715,6 +716,7 @@ impl AudioGraph {
                 time,
                 midi: node_midi,
                 input_is_silent,
+                input,
             };
             let status = slot.node.process(&ctx, &self.input_buffers[i], output);
             self.stats.nodes_processed += 1;
@@ -764,8 +766,14 @@ impl crate::primitives::graph::BlockProcessor for AudioGraph {
         AudioGraph::prepare(self, sample_rate, max_frames)
     }
 
-    fn process(&mut self, time: BlockTime, frames: usize, midi: &MidiEventBuffer) -> Result<()> {
-        AudioGraph::process(self, time, frames, midi)
+    fn process(
+        &mut self,
+        time: BlockTime,
+        frames: usize,
+        midi: &MidiEventBuffer,
+        input: Option<&PlanarBuffer>,
+    ) -> Result<()> {
+        AudioGraph::process(self, time, frames, midi, input)
     }
 
     fn output(&self) -> &PlanarBuffer {
@@ -831,7 +839,7 @@ mod tests {
 
     fn run(graph: &mut AudioGraph, frames: usize) {
         graph
-            .process(BlockTime::free_running(), frames, &no_midi())
+            .process(BlockTime::free_running(), frames, &no_midi(), None)
             .unwrap();
     }
 
@@ -850,7 +858,7 @@ mod tests {
         let c = g.add_node(Box::new(ConstantNode::new(1.0, 1)));
         g.set_output(c).unwrap();
         assert_eq!(
-            g.process(BlockTime::free_running(), 16, &no_midi()),
+            g.process(BlockTime::free_running(), 16, &no_midi(), None),
             Err(SuperbError::NotPrepared)
         );
         g.prepare(R, 16).unwrap();
@@ -858,7 +866,7 @@ mod tests {
         assert!(g.add_node(Box::new(SilenceNode::new(1))).is_valid());
         assert!(g.is_dirty());
         assert_eq!(
-            g.process(BlockTime::free_running(), 16, &no_midi()),
+            g.process(BlockTime::free_running(), 16, &no_midi(), None),
             Err(SuperbError::NotPrepared)
         );
         assert_eq!(g.output().channels(), 0);
@@ -866,7 +874,7 @@ mod tests {
         g.prepare(R, 16).unwrap();
         assert_eq!(g.prepared_config(), Some((R, 16)));
         assert!(matches!(
-            g.process(BlockTime::free_running(), 17, &no_midi()),
+            g.process(BlockTime::free_running(), 17, &no_midi(), None),
             Err(SuperbError::CapacityExceeded { .. })
         ));
         assert!(g.prepare(R, 0).is_err());
@@ -1114,7 +1122,8 @@ mod tests {
         );
         g.prepare(R, 64).unwrap();
         let midi = note_on_buffer();
-        g.process(BlockTime::free_running(), 64, &midi).unwrap();
+        g.process(BlockTime::free_running(), 64, &midi, None)
+            .unwrap();
         assert!(
             g.node_output(a).unwrap().peak() > 0.9,
             "routed synth sounds"
@@ -1133,7 +1142,8 @@ mod tests {
         g.connect_midi(MidiPort::External, b).unwrap();
         g.prepare(R, 64).unwrap();
         g.reset();
-        g.process(BlockTime::free_running(), 64, &midi).unwrap();
+        g.process(BlockTime::free_running(), 64, &midi, None)
+            .unwrap();
         assert!(g.node_output(b).unwrap().peak() > 0.9);
         assert_eq!(g.stats().nodes_silent, 1);
         assert_eq!(g.stats().mixes, 1);
@@ -1143,7 +1153,7 @@ mod tests {
     fn without_midi_edges_midi_is_broadcast() {
         let (mut g, a, b, _sink) = two_synths();
         g.prepare(R, 64).unwrap();
-        g.process(BlockTime::free_running(), 64, &note_on_buffer())
+        g.process(BlockTime::free_running(), 64, &note_on_buffer(), None)
             .unwrap();
         assert!(g.node_output(a).unwrap().peak() > 0.9);
         assert!(g.node_output(b).unwrap().peak() > 0.9);
@@ -1155,7 +1165,7 @@ mod tests {
         assert!(g.midi_edges().is_empty());
         g.prepare(R, 64).unwrap();
         g.reset();
-        g.process(BlockTime::free_running(), 64, &note_on_buffer())
+        g.process(BlockTime::free_running(), 64, &note_on_buffer(), None)
             .unwrap();
         assert_eq!(g.stats().mixes, 2);
     }
@@ -1184,7 +1194,7 @@ mod tests {
         g.connect_midi(MidiPort::External, b).unwrap();
         assert!(g.is_dirty());
         assert_eq!(
-            g.process(BlockTime::free_running(), 8, &no_midi()),
+            g.process(BlockTime::free_running(), 8, &no_midi(), None),
             Err(SuperbError::NotPrepared)
         );
         // remove_node drops the MIDI edges targeting it.

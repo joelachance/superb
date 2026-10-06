@@ -1,11 +1,13 @@
 //! The engine block loop, and the live engine split into a control handle
 //! and an audio thread ([`Engine::live`]).
 
+mod input;
 mod live;
 
+pub use input::LiveInput;
 pub use live::{
     AudioThread, EngineCommand, EngineHandle, COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS,
-    MIDI_CAPACITY, SWAP_CAPACITY,
+    MIDI_CAPACITY, RETIRED_INPUT_CAPACITY, SWAP_CAPACITY,
 };
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -70,6 +72,8 @@ pub struct Engine<P: BlockProcessor> {
     midi_timing: MidiTiming,
     /// One-shot block start (µs) for the next `render`, if set.
     midi_block_start_us: Option<u64>,
+    /// Captured audio on its way to the nodes, if an input is attached.
+    live_input: Option<LiveInput>,
 }
 
 impl<P: BlockProcessor> Engine<P> {
@@ -92,6 +96,7 @@ impl<P: BlockProcessor> Engine<P> {
             frames_rendered: 0,
             midi_timing: MidiTiming::default(),
             midi_block_start_us: None,
+            live_input: None,
         }
     }
 
@@ -195,6 +200,19 @@ impl<P: BlockProcessor> Engine<P> {
         self.midi_in = consumer;
     }
 
+    /// Attaches captured audio as the live input every node sees as
+    /// `ProcessContext::input`, or detaches it with `None`. Returns the
+    /// input that was attached before; on the audio thread, hand that one
+    /// back to the control thread rather than dropping it here.
+    pub fn set_live_input(&mut self, input: Option<LiveInput>) -> Option<LiveInput> {
+        core::mem::replace(&mut self.live_input, input)
+    }
+
+    /// The live input, if one is attached.
+    pub fn live_input(&self) -> Option<&LiveInput> {
+        self.live_input.as_ref()
+    }
+
     /// Chooses how queued messages are placed within a block.
     pub fn set_midi_timing(&mut self, timing: MidiTiming) {
         self.midi_timing = timing;
@@ -294,10 +312,20 @@ impl<P: BlockProcessor> Engine<P> {
         }
         self.midi.sort_by_frame();
 
+        // Captured audio for this block, if an input is attached.
+        if let Some(live) = self.live_input.as_mut() {
+            live.pull();
+            live.read_block(frames);
+        }
+
         let mut result = Ok(());
         for seg in self.transport.advance(frames) {
             let time = BlockTime::from_transport(&self.transport, &seg);
-            if let Err(e) = self.processor.process(time, seg.frames, &self.midi) {
+            let input = self
+                .live_input
+                .as_mut()
+                .map(|live| live.segment(seg.block_offset, seg.frames));
+            if let Err(e) = self.processor.process(time, seg.frames, &self.midi, input) {
                 result = Err(e);
                 break;
             }
@@ -630,5 +658,55 @@ mod tests {
         let (g, t) = e.into_parts();
         assert_eq!(g.node_count(), 1);
         assert_eq!(t.sample_rate(), R);
+    }
+
+    #[test]
+    fn live_input_reaches_the_nodes_and_stays_whole_across_a_loop_wrap() {
+        use crate::primitives::graph::nodes::LiveInputNode;
+        use crate::primitives::io::capture::capture_queue;
+        let mut g = AudioGraph::new();
+        let tap = g.add_node(Box::new(LiveInputNode::new([0, 1])));
+        g.set_output(tap).unwrap();
+        let mut engine = Engine::new(g, Transport::new(R, 120.0));
+        engine.prepare(R, 64).unwrap();
+        let (mut mic, blocks) = capture_queue(2, 64, 8).unwrap();
+        assert!(engine
+            .set_live_input(Some(LiveInput::new(blocks, 2, 64).unwrap()))
+            .is_none());
+        let mut out = PlanarBuffer::new(2, 64);
+        engine.render(&mut out).unwrap();
+        assert!(out.is_silent(), "nothing captured yet");
+
+        let mut block = PlanarBuffer::new(2, 64);
+        block.channel_mut(0).fill(0.25);
+        block.channel_mut(1).fill(0.5);
+        for i in 0..2 {
+            assert!(mic.push(&block, i));
+        }
+        engine.render(&mut out).unwrap();
+        assert!(out.channel(0).iter().all(|&s| s == 0.25));
+        assert!(out.channel(1).iter().all(|&s| s == 0.5));
+
+        // A block that wraps the loop is rendered in two segments; the
+        // input is fed to each in turn and stays whole.
+        let t = engine.transport_mut();
+        t.set_loop(Some(
+            LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(100)).unwrap(),
+        ));
+        t.set_loop_enabled(true);
+        t.seek(TimePosition::from_samples(80));
+        t.play();
+        let segments = engine.stats().segments;
+        engine.render(&mut out).unwrap();
+        assert_eq!(engine.stats().segments, segments + 2);
+        assert!(out.channel(0).iter().all(|&s| s == 0.25));
+        assert!(out.channel(1).iter().all(|&s| s == 0.5));
+
+        // The ring is empty now: silence, counted as an underrun.
+        engine.render(&mut out).unwrap();
+        assert!(out.is_silent());
+        assert_eq!(engine.live_input().unwrap().underruns(), 64);
+        assert!(engine.set_live_input(None).is_some());
+        assert!(engine.live_input().is_none());
     }
 }

@@ -1118,6 +1118,7 @@ mod tests {
             },
             midi,
             input_is_silent: silent,
+            input: None,
         }
     }
 
@@ -1349,6 +1350,7 @@ mod tests {
             BlockTime::free_running(),
             32,
             &MidiEventBuffer::with_capacity(0),
+            None,
         )
         .unwrap();
         assert_eq!(g.output().channel(1), &[2.0; 32]);
@@ -1358,6 +1360,7 @@ mod tests {
             BlockTime::free_running(),
             32,
             &MidiEventBuffer::with_capacity(0),
+            None,
         )
         .unwrap();
         drop(g);

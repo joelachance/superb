@@ -647,8 +647,14 @@ impl BlockProcessor for Mixer {
         self.graph.prepare(sample_rate, max_frames)
     }
 
-    fn process(&mut self, time: BlockTime, frames: usize, midi: &MidiEventBuffer) -> Result<()> {
-        self.graph.process(time, frames, midi)
+    fn process(
+        &mut self,
+        time: BlockTime,
+        frames: usize,
+        midi: &MidiEventBuffer,
+        input: Option<&PlanarBuffer>,
+    ) -> Result<()> {
+        self.graph.process(time, frames, midi, input)
     }
 
     fn output(&self) -> &PlanarBuffer {
@@ -684,7 +690,8 @@ mod tests {
     fn settle(m: &mut Mixer) -> Vec<f32> {
         let midi = no_midi();
         for _ in 0..2 {
-            m.process(BlockTime::free_running(), N, &midi).unwrap();
+            m.process(BlockTime::free_running(), N, &midi, None)
+                .unwrap();
         }
         (0..m.channels())
             .map(|c| m.output().channel(c)[N - 1])
@@ -718,7 +725,8 @@ mod tests {
         assert_eq!(m.bus(m.master()).unwrap().name, "master");
         assert!(m.bus(m.master()).unwrap().output.is_none());
         m.prepare(R, N).unwrap();
-        m.process(BlockTime::free_running(), N, &no_midi()).unwrap();
+        m.process(BlockTime::free_running(), N, &no_midi(), None)
+            .unwrap();
         assert!(m.output().is_silent());
         assert_eq!(m.output_channels(), 2);
         assert_eq!(m.channels(), 2);

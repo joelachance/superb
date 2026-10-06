@@ -34,7 +34,8 @@ on this layer and the block loop in `primitives::io` drives it.
 * `MidiPort` / `MidiEdge` — a MIDI source (`MidiPort::External`, the buffer
   passed to `process`) routed to one node; edited with
   `connect_midi`/`disconnect_midi`/`midi_edges` (see below).
-* `ProcessContext` / `BlockTime` — what a node sees each block: sample rate,
+* `ProcessContext` / `BlockTime` — what a node sees each block: `input`
+  (the engine's live audio input, when one is attached), sample rate,
   frame count, timeline position/tempo/rolling/wrapped state, the block's
   `MidiEventBuffer`, and `input_is_silent`.
 * `nodes` module — fixtures: `SineNode`, `GainNode` (click-free ramped gain),
@@ -57,7 +58,7 @@ graph.set_output(gain).unwrap();
 graph.prepare(SampleRate::HZ_48K, 256).unwrap();
 
 let midi = MidiEventBuffer::with_capacity(0);
-graph.process(BlockTime::free_running(), 256, &midi).unwrap();
+graph.process(BlockTime::free_running(), 256, &midi, None).unwrap();
 let out = graph.output();
 assert_eq!(out.channels(), 1);
 assert!(out.peak() <= 0.25 + 1e-6);
@@ -96,7 +97,7 @@ graph.prepare(SampleRate::HZ_48K, 64).unwrap();
 let ch = MidiChannel::new(0).unwrap();
 let mut midi = MidiEventBuffer::with_capacity(4);
 midi.push(MidiEvent { frame: 0, message: MidiMessage::NoteOn { channel: ch, note: 69, velocity: 127 } }).unwrap();
-graph.process(BlockTime::free_running(), 64, &midi).unwrap();
+graph.process(BlockTime::free_running(), 64, &midi, None).unwrap();
 assert!(graph.node_output(lead).unwrap().peak() > 0.9);
 assert!(graph.node_output(pad).unwrap().is_silent());
 ```
@@ -152,14 +153,14 @@ editor.graph_mut().set_output(g).unwrap();
 editor.publish().unwrap();                      // prepare + enqueue, draft becomes empty
 
 let midi = MidiEventBuffer::with_capacity(0);
-live.process(BlockTime::free_running(), 256, &midi).unwrap(); // applies the swap, then renders
+live.process(BlockTime::free_running(), 256, &midi, None).unwrap(); // applies the swap, then renders
 assert_eq!(live.swap_count(), 1);
 
 // Keep processing while building the next generation on the draft ...
 let c = editor.graph_mut().add_node(Box::new(superb::primitives::graph::nodes::ConstantNode::new(0.25, 1)));
 editor.graph_mut().set_output(c).unwrap();
 editor.publish().unwrap();
-live.process(BlockTime::free_running(), 256, &midi).unwrap();
+live.process(BlockTime::free_running(), 256, &midi, None).unwrap();
 assert_eq!(live.output().channel(0)[0], 0.25);
 ```
 

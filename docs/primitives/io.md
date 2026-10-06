@@ -35,6 +35,13 @@ resampling and bounce/export helpers.
   `AudioThread` is the audio side (`tick` renders one block; with
   `devices`, `run_on_device` moves it into an output callback). This is
   what the `transport` flow drives.
+* `LiveInput` — captured audio on its way into a running engine:
+  `Engine::set_live_input` (or `EngineCommand::LiveInput` on a live engine,
+  with a replaced input coming back through `reclaim`). Before each block
+  the engine pulls the queued blocks into a ring four blocks deep and hands
+  the frames to every node as `ProcessContext::input`; `LiveInputNode`
+  plays chosen channels of it on a strip. Overruns drop the oldest frames,
+  underruns are silence, both counted.
 * `capture::{capture_queue, CaptureProducer, CaptureConsumer, CaptureBlock}`
   — a recycle queue of pre-allocated planar blocks for recording; always
   compiled, fed by `device::run_capture` or any producer.

@@ -1,5 +1,6 @@
 //! Per-block context handed to nodes.
 
+use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::midi::MidiEventBuffer;
 use crate::primitives::transport::{Segment, Transport};
 use crate::primitives::{BeatPosition, SampleRate, TimePosition};
@@ -92,6 +93,11 @@ pub struct ProcessContext<'a> {
     /// node has no producers). Nodes may skip work and report
     /// [`ProcessStatus::Silent`](crate::primitives::graph::ProcessStatus::Silent).
     pub input_is_silent: bool,
+    /// The engine's live audio input for this block, when one is attached
+    /// (`Engine::set_live_input`): `frames` frames of as many channels as
+    /// the input carries. A node that monitors an input copies from here;
+    /// everything else ignores it.
+    pub input: Option<&'a PlanarBuffer>,
 }
 
 impl<'a> ProcessContext<'a> {

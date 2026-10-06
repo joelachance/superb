@@ -52,7 +52,7 @@
 //! editor.graph_mut().set_output(c).unwrap();
 //! editor.publish().unwrap();
 //!
-//! live.process(BlockTime::free_running(), 64, &midi).unwrap();
+//! live.process(BlockTime::free_running(), 64, &midi, None).unwrap();
 //! assert_eq!(live.output().channel(0)[0], 0.25);
 //!
 //! // Edit the (fresh) draft while the stream keeps running, then publish again.
@@ -60,7 +60,7 @@
 //! editor.graph_mut().set_output(c).unwrap();
 //! editor.publish().unwrap();
 //!
-//! live.process(BlockTime::free_running(), 64, &midi).unwrap();
+//! live.process(BlockTime::free_running(), 64, &midi, None).unwrap();
 //! assert_eq!(live.output().channel(0)[0], 0.5);
 //! assert_eq!(live.swap_count(), 2);
 //! ```
@@ -350,9 +350,10 @@ impl LiveGraph {
         time: BlockTime,
         frames: usize,
         midi: &MidiEventBuffer,
+        input: Option<&PlanarBuffer>,
     ) -> Result<()> {
         self.apply_pending();
-        self.active.process(time, frames, midi)
+        self.active.process(time, frames, midi, input)
     }
 
     /// The active graph's output from the last `process` call.
@@ -415,8 +416,14 @@ impl BlockProcessor for LiveGraph {
         LiveGraph::prepare(self, sample_rate, max_frames)
     }
 
-    fn process(&mut self, time: BlockTime, frames: usize, midi: &MidiEventBuffer) -> Result<()> {
-        LiveGraph::process(self, time, frames, midi)
+    fn process(
+        &mut self,
+        time: BlockTime,
+        frames: usize,
+        midi: &MidiEventBuffer,
+        input: Option<&PlanarBuffer>,
+    ) -> Result<()> {
+        LiveGraph::process(self, time, frames, midi, input)
     }
 
     fn output(&self) -> &PlanarBuffer {
@@ -502,7 +509,7 @@ mod tests {
     }
 
     fn run(live: &mut LiveGraph, frames: usize) {
-        live.process(BlockTime::free_running(), frames, &no_midi())
+        live.process(BlockTime::free_running(), frames, &no_midi(), None)
             .unwrap();
     }
 
@@ -549,7 +556,7 @@ mod tests {
         let (mut editor, mut live) = live_pair();
         editor.configure(R, 64);
         assert_eq!(
-            live.process(BlockTime::free_running(), 64, &no_midi()),
+            live.process(BlockTime::free_running(), 64, &no_midi(), None),
             Err(SuperbError::NotPrepared)
         );
 
@@ -831,7 +838,8 @@ mod tests {
                 let mut seen_second = false;
                 let mut blocks = 0u64;
                 while !stop_rt.load(Ordering::Acquire) {
-                    live.process(BlockTime::free_running(), 64, &midi).unwrap();
+                    live.process(BlockTime::free_running(), 64, &midi, None)
+                        .unwrap();
                     blocks += 1;
                     let v = live.output().channel(0)[0];
                     if (v - 0.25).abs() < 1e-6 {

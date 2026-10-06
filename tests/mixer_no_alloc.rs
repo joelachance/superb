@@ -40,7 +40,7 @@ fn mixer_process_is_allocation_free() {
     let ps = mixer.send_params(send).unwrap();
     let midi = MidiEventBuffer::with_capacity(0);
     mixer
-        .process(BlockTime::free_running(), 256, &midi)
+        .process(BlockTime::free_running(), 256, &midi, None)
         .unwrap();
 
     superb::primitives::realtime::assert_no_alloc(|| {
@@ -55,6 +55,7 @@ fn mixer_process_is_allocation_free() {
                     BlockTime::free_running(),
                     if i % 2 == 0 { 256 } else { 200 },
                     &midi,
+                    None,
                 )
                 .unwrap();
             let _ = pa.take_peak(0);

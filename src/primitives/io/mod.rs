@@ -9,6 +9,9 @@
 //!   sample-accurately via `superb::primitives::midi::timing::FrameMapper` against the
 //!   engine's stream clock ([`MidiTiming::Stream`], the default) or forced
 //!   to frame 0 ([`MidiTiming::BlockStart`]).
+//! * [`LiveInput`] — captured audio on its way into a running engine, which
+//!   nodes read as `ProcessContext::input` (how a track monitors what it
+//!   records).
 //! * [`cache`] — audio held in memory, keyed by the path clips refer to.
 //! * [`capture`] — a pre-allocated queue of planar blocks for handing
 //!   captured audio from a callback to another thread. Pure Rust; the
@@ -62,8 +65,8 @@ pub mod offline;
 pub mod wav;
 
 pub use engine::{
-    AudioThread, Engine, EngineCommand, EngineHandle, EngineStats, MidiTiming, COMMAND_CAPACITY,
-    MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY, SWAP_CAPACITY,
+    AudioThread, Engine, EngineCommand, EngineHandle, EngineStats, LiveInput, MidiTiming,
+    COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY, RETIRED_INPUT_CAPACITY, SWAP_CAPACITY,
 };
 
 /// Whether this build includes the `files` module.

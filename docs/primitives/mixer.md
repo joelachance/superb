@@ -45,7 +45,7 @@ mixer.connect_source(src, drums).unwrap();
 mixer.track_params(drums).unwrap().set_volume_db(-6.0206);
 
 mixer.prepare(SampleRate::HZ_48K, 64).unwrap();
-mixer.process(BlockTime::free_running(), 64, &MidiEventBuffer::with_capacity(0)).unwrap();
+mixer.process(BlockTime::free_running(), 64, &MidiEventBuffer::with_capacity(0), None).unwrap();
 let out = mixer.output();
 // 0.5 * 0.5 gain * constant-power centre (0.7071)
 assert!((out.channel(0)[63] - 0.1768).abs() < 1e-3);
