@@ -42,7 +42,9 @@ fn main() -> Result<()> {
     let (mut ear, live) = capture_queue(1, block, 8)?;
     session
         .engine
-        .send(EngineCommand::LiveInput(LiveInput::new(live, 1, block)?))?;
+        .send(EngineCommand::LiveInput(Some(LiveInput::new(
+            live, 1, block,
+        )?)))?;
 
     // Roll the transport a second in, then punch in there.
     transport::start(&mut session)?;

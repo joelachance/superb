@@ -164,7 +164,7 @@ impl core::fmt::Debug for AudioInput {
 /// two. From then on a monitoring audio track
 /// ([`track::monitor`](crate::track::monitor)) hears it through its strip,
 /// and `record::start` with `Source::Device` records from it. One input
-/// per session; it stays open for the session's life.
+/// per session, until [`close_input`].
 ///
 /// Made of: an `InputConfig` matching the session → two capture queues
 /// (one the engine reads as its live input, one a recording drains) →
@@ -202,15 +202,39 @@ pub fn input(session: &mut Session, device: Option<&str>) -> Result<()> {
     })?;
     session
         .engine
-        .send(EngineCommand::LiveInput(LiveInput::new(
+        .send(EngineCommand::LiveInput(Some(LiveInput::new(
             live_rx, channels, max_frames,
-        )?))?;
+        )?)))?;
     session.input = Some(AudioInput {
         stream,
         channels,
         recording,
         record: Some(record_rx),
     });
+    Ok(())
+}
+
+/// Closes the session's audio input: monitoring audio tracks fall silent
+/// and the next `record::start` with `Source::Device` opens it again,
+/// which is also how to change the device or the channel count. Refused
+/// while a device recording is drawing from it.
+///
+/// Made of: `EngineHandle::send(LiveInput(None))` → drop the stream; the
+/// engine hands the live input back and `reclaim` frees it at the next
+/// rebuild or render.
+#[cfg(feature = "devices")]
+pub fn close_input(session: &mut Session) -> Result<()> {
+    let input = session
+        .input
+        .as_ref()
+        .ok_or_else(|| SuperbError::Message("the audio input is not open".into()))?;
+    if input.record.is_none() {
+        return Err(SuperbError::Message(
+            "stop the recording before closing the audio input".into(),
+        ));
+    }
+    session.engine.send(EngineCommand::LiveInput(None))?;
+    session.input = None;
     Ok(())
 }
 

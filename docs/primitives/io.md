@@ -36,8 +36,9 @@ resampling and bounce/export helpers.
   `devices`, `run_on_device` moves it into an output callback). This is
   what the `transport` flow drives.
 * `LiveInput` — captured audio on its way into a running engine:
-  `Engine::set_live_input` (or `EngineCommand::LiveInput` on a live engine,
-  with a replaced input coming back through `reclaim`). Before each block
+  `Engine::set_live_input` (or `EngineCommand::LiveInput(Some(..))` on a
+  live engine, `None` to detach; a replaced or detached input comes back
+  through `reclaim`). Before each block
   the engine pulls the queued blocks into a ring four blocks deep and hands
   the frames to every node as `ProcessContext::input`; `LiveInputNode`
   plays chosen channels of it on a strip. Overruns drop the oldest frames,

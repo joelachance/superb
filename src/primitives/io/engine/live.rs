@@ -90,9 +90,10 @@ pub enum EngineCommand {
     /// [`MAX_EXTRA_MIDI_INPUTS`] sources; extra ones are dropped.
     AddMidiInput(Consumer<TimestampedMessage>),
     /// Attaches captured audio as the engine's live input (what
-    /// `ProcessContext::input` carries). An input attached before travels
-    /// back to the control side and is freed by [`EngineHandle::reclaim`].
-    LiveInput(LiveInput),
+    /// `ProcessContext::input` carries), or detaches it with `None`. An
+    /// input attached before travels back to the control side and is freed
+    /// by [`EngineHandle::reclaim`].
+    LiveInput(Option<LiveInput>),
 }
 
 impl core::fmt::Debug for EngineCommand {
@@ -297,7 +298,7 @@ impl AudioThread {
                     // producer side notices through `is_abandoned`.
                 }
                 EngineCommand::LiveInput(input) => {
-                    if let Some(old) = self.engine.set_live_input(Some(input)) {
+                    if let Some(old) = self.engine.set_live_input(input) {
                         // Never freed here: it goes back to the control thread.
                         if let Err(old) = self.retired_inputs.push(old) {
                             self.retired_overflow = Some(old);
@@ -661,9 +662,9 @@ mod tests {
         control.publish(graph).unwrap();
         let (mut mic, blocks) = capture_queue(1, 64, 4).unwrap();
         control
-            .send(EngineCommand::LiveInput(
+            .send(EngineCommand::LiveInput(Some(
                 LiveInput::new(blocks, 1, 64).unwrap(),
-            ))
+            )))
             .unwrap();
         let mut block = PlanarBuffer::new(1, 64);
         block.fill(0.5);
@@ -680,12 +681,18 @@ mod tests {
         // A second input replaces the first, which travels back to be freed here.
         let (_mic2, blocks2) = capture_queue(1, 64, 4).unwrap();
         control
-            .send(EngineCommand::LiveInput(
+            .send(EngineCommand::LiveInput(Some(
                 LiveInput::new(blocks2, 1, 64).unwrap(),
-            ))
+            )))
             .unwrap();
         audio.tick(&mut out).unwrap();
         assert!(out.is_silent(), "the new input has nothing yet");
         assert_eq!(control.reclaim(), 1, "the replaced input");
+
+        // Detaching hands the input back the same way.
+        control.send(EngineCommand::LiveInput(None)).unwrap();
+        audio.tick(&mut out).unwrap();
+        assert!(format!("{audio:?}").contains("live_input: false"));
+        assert_eq!(control.reclaim(), 1, "the detached input");
     }
 }

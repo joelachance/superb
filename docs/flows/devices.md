@@ -16,6 +16,7 @@ ports. Without them the module is empty and the session renders through
 | `outputs()` / `inputs()` | `devices` | device listings with the default marked and the channel count when known |
 | `output(session, Option<name>)` | `devices` | play the session through that device (`None` = default): the audio thread moves into a stream matched to the session, and structural edits rebuild at once |
 | `input(session, Option<name>)` | `devices` | open the session's audio input on that device: as many channels as the audio tracks' inputs name, at least two; monitoring audio tracks hear it and `record::start(Source::Device)` records from it; one per session, kept in `session.input` |
+| `close_input(session)` | `devices` | close it; refused while a device recording runs. Open again to change the device or the channel count |
 | `midi_inputs()` | `midi-io` | MIDI input ports |
 
 ## Usage
@@ -40,7 +41,9 @@ record::start(&mut session, record::Source::Device(None))?;   // records from th
 `session.engine.max_frames()`; `input`: two capture queues,
 `InputStream::open_timed` pushing every block to both (one the engine
 reads as its `LiveInput`, one a recording drains while it runs) →
-`EngineHandle::send(LiveInput)`; `midi::input::list_input_ports`.
+`EngineHandle::send(LiveInput(Some(..)))`; `close_input`:
+`EngineHandle::send(LiveInput(None))` and drop the stream;
+`midi::input::list_input_ports`.
 
 ## Notes
 
@@ -51,6 +54,5 @@ reads as its `LiveInput`, one a recording drains while it runs) →
   mismatch.
 * Device indices and names are a snapshot; re-list after plugging
   something in.
-* The input stays open for the session's life; there is no close yet.
-  Open it after setting the tracks' inputs, since its channel count comes
-  from them.
+* The input's channel count comes from the tracks' inputs when it opens;
+  to widen it, close and open it again.

@@ -733,9 +733,9 @@ mod tests {
         let (mut mic, blocks) = capture_queue(2, 64, 8).unwrap();
         session
             .engine
-            .send(EngineCommand::LiveInput(
+            .send(EngineCommand::LiveInput(Some(
                 LiveInput::new(blocks, 2, 64).unwrap(),
-            ))
+            )))
             .unwrap();
         let mut block = PlanarBuffer::new(2, 64);
         block.channel_mut(1).fill(0.5); // the voice is on the second channel
