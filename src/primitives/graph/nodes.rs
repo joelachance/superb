@@ -441,15 +441,17 @@ impl Default for ClickParams {
     }
 }
 
-/// A metronome: a short tick on every beat while the transport rolls,
-/// louder on the first beat of a bar, placed sample-accurately from the
-/// block's beat position and tempo. Silent while stopped, and while off
-/// unless a count-in is running ([`ClickParams`]).
+/// A metronome: a short tick on every notated beat while the transport
+/// rolls (quarters in 4/4, eighths in 6/8), louder on the first beat of
+/// the bar, placed sample-accurately from the block's beat position,
+/// tempo and meter. Silent while stopped, and while off unless a count-in
+/// is running ([`ClickParams`]).
 pub struct ClickNode {
     params: Arc<ClickParams>,
     channels: usize,
-    beats_per_bar: u32,
     sample_rate: f64,
+    /// Sample position of the last tick, so a beat that rounding places in
+    /// two neighbouring blocks sounds once.
     last_tick: Option<i64>,
     remaining: usize,
     phase: f64,
@@ -459,13 +461,11 @@ pub struct ClickNode {
 }
 
 impl ClickNode {
-    /// A click writing `channels` output channels, accenting every
-    /// `beats_per_bar`th beat from beat zero (`0` for no accent).
-    pub fn new(channels: usize, params: Arc<ClickParams>, beats_per_bar: u32) -> Self {
+    /// A click writing `channels` output channels.
+    pub fn new(channels: usize, params: Arc<ClickParams>) -> Self {
         Self {
             params,
             channels,
-            beats_per_bar,
             sample_rate: SampleRate::default().as_f64(),
             last_tick: None,
             remaining: 0,
@@ -483,8 +483,7 @@ impl ClickNode {
 
     /// Starts a tick: 50 ms of a decaying sine, higher and louder on an
     /// accented beat.
-    fn tick(&mut self, beat: i64, level: f32) {
-        let accent = self.beats_per_bar > 0 && beat.rem_euclid(i64::from(self.beats_per_bar)) == 0;
+    fn tick(&mut self, accent: bool, level: f32) {
         let hz = if accent { 1500.0 } else { 1000.0 };
         self.increment = hz / self.sample_rate;
         self.phase = 0.0;
@@ -534,23 +533,30 @@ impl Node for ClickNode {
         let beats_per_sample = time.bpm / 60.0 / self.sample_rate;
         let beat0 = time.beat_start.beats();
         let end = beat0 + frames as f64 * beats_per_sample;
+        // Ticks fall on the notated beats of the bar: every `step` quarter
+        // notes from the bar start, the first of each bar accented.
+        let step = time.signature.beat_length().beats();
+        let per_bar = i64::from(time.signature.numerator());
+        let bar = time.bar_start.beats();
         // A beat within half a sample of a block edge belongs to the block
         // it is nearest to; `last_tick` keeps it from sounding twice when
         // rounding puts it in both.
         let edge = beats_per_sample / 2.0;
-        let mut next_beat = (beat0 - edge).ceil();
+        let mut k = ((beat0 - edge - bar) / step).ceil() as i64;
+        let position = |k: i64| bar + k as f64 * step;
         let frame_of = |beat: f64| {
             (((beat - beat0) / beats_per_sample).round().max(0.0) as usize).min(frames - 1)
         };
-        let mut next_frame = (next_beat < end - edge).then(|| frame_of(next_beat));
+        let mut next_frame = (position(k) < end - edge).then(|| frame_of(position(k)));
         for i in 0..frames {
             if next_frame == Some(i) {
-                if self.last_tick != Some(next_beat as i64) {
-                    self.tick(next_beat as i64, level);
-                    self.last_tick = Some(next_beat as i64);
+                let sample = time.start.samples() + i as i64;
+                if self.last_tick.is_none_or(|last| (sample - last).abs() > 1) {
+                    self.tick(k.rem_euclid(per_bar) == 0, level);
+                    self.last_tick = Some(sample);
                 }
-                next_beat += 1.0;
-                next_frame = (next_beat < end - edge).then(|| frame_of(next_beat));
+                k += 1;
+                next_frame = (position(k) < end - edge).then(|| frame_of(position(k)));
             }
             let sample = if self.remaining > 0 {
                 let s = (self.phase * core::f64::consts::TAU).sin() as f32 * self.amplitude;
@@ -1316,6 +1322,8 @@ mod tests {
                 wrapped: false,
                 bpm: 120.0,
                 beat_start: Default::default(),
+                signature: Default::default(),
+                bar_start: Default::default(),
             },
             midi: &midi,
             input_is_silent: true,
@@ -1369,6 +1377,8 @@ mod tests {
                 wrapped: false,
                 bpm: 120.0,
                 beat_start: Default::default(),
+                signature: Default::default(),
+                bar_start: Default::default(),
             },
             midi: &midi,
             input_is_silent: true,
@@ -1416,7 +1426,7 @@ mod tests {
     fn the_click_ticks_on_the_beat_and_obeys_its_switch_and_count_in() {
         let midi = MidiEventBuffer::with_capacity(0);
         let params = Arc::new(ClickParams::new(true, 0.5));
-        let mut node = ClickNode::new(1, Arc::clone(&params), 4);
+        let mut node = ClickNode::new(1, Arc::clone(&params));
         node.prepare(SampleRate::HZ_48K, 64);
         let mut out = PlanarBuffer::new(1, 64);
         let input = PlanarBuffer::new(1, 64);
@@ -1457,6 +1467,34 @@ mod tests {
         };
         node.process(&on_beat_zero, &input, &mut accented);
         assert!(accented.peak() > out.peak());
+        // The click ticks the notated beat. At 45 000 bpm a 64-frame block is
+        // one quarter note: in 4/4 one tick (frame 0), in 6/8 two (an eighth
+        // apart, frame 32).
+        let quarter_block = |signature| ProcessContext {
+            time: BlockTime {
+                rolling: true,
+                bpm: 45_000.0,
+                beat_start: crate::primitives::BeatPosition::new(8.0),
+                bar_start: crate::primitives::BeatPosition::new(8.0),
+                signature,
+                ..BlockTime::free_running()
+            },
+            ..ctx(64, &midi, true)
+        };
+        node.reset();
+        node.process(
+            &quarter_block(crate::primitives::TimeSignature::FOUR_FOUR),
+            &input,
+            &mut out,
+        );
+        assert_eq!(node.last_tick, Some(0));
+        node.reset();
+        node.process(
+            &quarter_block(crate::primitives::TimeSignature::new(6, 8).unwrap()),
+            &input,
+            &mut out,
+        );
+        assert_eq!(node.last_tick, Some(32));
         // Off: silent, unless a count-in is running and the block is before its end.
         params.set_enabled(false);
         assert_eq!(

@@ -26,7 +26,6 @@ fn process_is_allocation_free() {
     let click = graph.add_node(Box::new(ClickNode::new(
         2,
         Arc::new(ClickParams::new(true, 0.5)),
-        4,
     )));
     let gain = graph.add_node(Box::new(GainNode::new(0.8, 2)));
     let bus = graph.add_node(Box::new(PassThroughNode::new(2)));

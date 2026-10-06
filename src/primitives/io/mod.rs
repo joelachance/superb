@@ -66,7 +66,8 @@ pub mod wav;
 
 pub use engine::{
     AudioThread, Engine, EngineCommand, EngineHandle, EngineStats, LiveInput, MidiTiming,
-    COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY, RETIRED_INPUT_CAPACITY, SWAP_CAPACITY,
+    COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY, RETIRED_INPUT_CAPACITY,
+    RETIRED_MAP_CAPACITY, SWAP_CAPACITY,
 };
 
 /// Whether this build includes the `files` module.

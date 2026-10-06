@@ -38,7 +38,8 @@ resampling and bounce/export helpers.
 * `LiveInput` — captured audio on its way into a running engine:
   `Engine::set_live_input` (or `EngineCommand::LiveInput(Some(..))` on a
   live engine, `None` to detach; a replaced or detached input comes back
-  through `reclaim`). Before each block
+  through `reclaim`). `EngineCommand::TempoMap` replaces the transport's
+  tempo map the same way, the old map coming back through `reclaim`. Before each block
   the engine pulls the queued blocks into a ring four blocks deep and hands
   the frames to every node as `ProcessContext::input`; `LiveInputNode`
   plays chosen channels of it on a strip. Overruns drop the oldest frames,

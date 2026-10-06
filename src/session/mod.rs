@@ -25,12 +25,14 @@ pub mod steps;
 use std::path::{Path, PathBuf};
 
 use crate::primitives::io::EngineCommand;
-use crate::primitives::session::commands::{AddMarker, SetLoopRange, SetTempo};
+use crate::primitives::session::commands::{
+    AddMarker, RemoveTempo, SetLoopRange, SetMeter, SetTempo,
+};
 use crate::primitives::session::{Marker, Memory};
 use crate::primitives::transport::LoopRange;
 use crate::primitives::undo::Command;
 use crate::primitives::{
-    BeatPosition, MarkerId, Result, SampleRate, SuperbError, TimePosition, TrackId,
+    BeatPosition, MarkerId, Result, SampleRate, SuperbError, TimePosition, TimeSignature, TrackId,
 };
 
 use std::sync::Arc;
@@ -261,13 +263,41 @@ pub fn add_marker(session: &mut Session, name: &str, at: TimePosition) -> Result
     Ok(id)
 }
 
-/// Sets the memory's tempo at the start, and the running engine's.
-/// Consecutive changes are one undo step.
+/// Sets the memory's tempo at the start. Consecutive changes are one undo
+/// step. MIDI clips are scheduled through the tempo map, so the mixer
+/// rebuilds, and the rebuild hands the engine the new map.
 ///
-/// Made of: push `SetTempo` at beat 0 → `EngineHandle::send(SetTempo)`.
+/// Made of: `SetTempo` at beat 0 through `session::structural`.
 pub fn set_tempo(session: &mut Session, bpm: f64) -> Result<()> {
-    edit(session, SetTempo::new(BeatPosition::ZERO, bpm))?;
-    session.engine.send(EngineCommand::SetTempo(bpm))
+    structural(session, SetTempo::new(BeatPosition::ZERO, bpm))
+}
+
+/// Adds a tempo change at `beat` (`Some(bpm)`), or removes the one there
+/// (`None`); the tempo at beat zero is set with [`set_tempo`] and cannot
+/// be removed. Changes to the same beat coalesce. Rebuilds the mixer,
+/// which hands the engine the new map.
+///
+/// Made of: `SetTempo` or `RemoveTempo` through `session::structural`.
+pub fn tempo_change(session: &mut Session, beat: BeatPosition, bpm: Option<f64>) -> Result<()> {
+    match bpm {
+        Some(bpm) => structural(session, SetTempo::new(beat, bpm)),
+        None => structural(session, RemoveTempo::new(beat)),
+    }
+}
+
+/// Sets the meter (time signature) from `bar` on (`Some`), or removes the
+/// change at that bar (`None`); bar 1 always has a meter. Beats stay
+/// quarter notes whatever the signature, as in Logic and Cubase; the
+/// click ticks on the notated beat. Rebuilds the mixer, which hands the
+/// engine the new map.
+///
+/// Made of: `SetMeter` through `session::structural`.
+pub fn meter_change(
+    session: &mut Session,
+    bar: u32,
+    signature: Option<TimeSignature>,
+) -> Result<()> {
+    structural(session, SetMeter::new(bar, signature))
 }
 
 /// Sets or clears the loop range in the memory and on the running engine.
@@ -547,5 +577,54 @@ mod tests {
 
         assert!(open(dir.join("missing"), 128).is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tempo_and_meter_changes_are_edits_that_reach_the_engine() {
+        let mut session = create(scratch("tempo_meter"), R, 64).unwrap();
+        let steps = session.history.undo_len();
+        tempo_change(&mut session, BeatPosition::new(4.0), Some(240.0)).unwrap();
+        meter_change(&mut session, 2, Some(TimeSignature::new(3, 4).unwrap())).unwrap();
+        assert_eq!(session.history.undo_len(), steps + 2);
+        assert_eq!(
+            session.memory.tempo_map().tempo_at(BeatPosition::new(5.0)),
+            240.0
+        );
+        assert_eq!(
+            session.memory.tempo_map().meter_at(BeatPosition::new(4.0)),
+            TimeSignature::new(3, 4).unwrap()
+        );
+        assert!(
+            meter_change(&mut session, 1, None).is_err(),
+            "bar 1 keeps a meter"
+        );
+        assert!(tempo_change(&mut session, BeatPosition::new(9.0), None).is_err());
+
+        // The engine gets the map at the next rebuild.
+        crate::transport::start(&mut session).unwrap();
+        steps::render_blocks(&mut session, 1).unwrap();
+        let engine_map = session
+            .audio_thread
+            .as_ref()
+            .unwrap()
+            .engine()
+            .transport()
+            .tempo_map();
+        assert_eq!(engine_map.tempo_at(BeatPosition::new(5.0)), 240.0);
+        assert_eq!(engine_map.meter_points().len(), 2);
+
+        // Undo takes both back, redo returns them, and removing works.
+        assert!(undo(&mut session).unwrap());
+        assert!(undo(&mut session).unwrap());
+        assert_eq!(session.memory.tempo_map().tempo_points().len(), 1);
+        assert_eq!(session.memory.tempo_map().meter_points().len(), 1);
+        assert!(redo(&mut session).unwrap());
+        assert!(redo(&mut session).unwrap());
+        tempo_change(&mut session, BeatPosition::new(4.0), None).unwrap();
+        meter_change(&mut session, 2, None).unwrap();
+        assert_eq!(session.memory.tempo_map().tempo_points().len(), 1);
+        assert_eq!(session.memory.tempo_map().meter_points().len(), 1);
+        assert!(undo(&mut session).unwrap());
+        assert_eq!(session.memory.tempo_map().meter_points().len(), 2);
     }
 }

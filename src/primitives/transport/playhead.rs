@@ -224,6 +224,15 @@ impl Transport {
         &self.tempo_map
     }
 
+    /// Swaps in a whole tempo map, keeping this transport's sample rate,
+    /// and hands the old one back so it can be dropped elsewhere. Nothing
+    /// is allocated: a live engine receives the map by command and sends
+    /// the old one back to the control thread.
+    pub fn replace_tempo_map(&mut self, mut map: TempoMap) -> TempoMap {
+        map.set_sample_rate(self.sample_rate());
+        core::mem::replace(&mut self.tempo_map, map)
+    }
+
     /// Mutable access to the tempo map (call off the audio thread).
     pub fn tempo_map_mut(&mut self) -> &mut TempoMap {
         &mut self.tempo_map

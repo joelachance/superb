@@ -47,8 +47,9 @@ transport::start(&mut session)?;
 `Memory::set_looping` through `session::set_state`, then
 `EngineHandle::send(SetLoopEnabled)`. `start` runs `session::steps::rebuild`
 first when the memory changed since the last build; a rebuild also sends
-the memory's tempo, loop range and looping switch to the engine, so an
-opened session plays at its tempo and loops the way it was saved. `playhead` and `state` read the
+the memory's tempo map, loop range and looping switch to the engine, so an
+opened session plays at its tempo and meter and loops the way it was
+saved. `playhead` and `state` read the
 engine's atomics.
 
 ## Notes

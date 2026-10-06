@@ -18,7 +18,9 @@ moment it is created: `memory.json` beside an `audio/` folder of WAV files.
 | `create(folder, sample_rate, block_size) -> Session` | a new session in `folder`, created now with its `audio/` folder and `memory.json`, named after the folder | — |
 | `open(folder, block_size)` / `save(session)` | the folder in and out: `memory.json` plus the WAV files clips refer to; `save` also writes any audio a clip refers to that is not on disk yet; `session.history.is_clean()` says whether anything changed since (state changes count) | — |
 | `add_marker(session, name, at)` | | one |
-| `set_tempo(session, bpm)` | initial tempo of the tempo map; also told to the engine | one |
+| `set_tempo(session, bpm)` | initial tempo of the tempo map; rebuilds, which hands the engine the map | one |
+| `tempo_change(session, beat, Option<bpm>)` | add or remove a tempo change at a beat; rebuilds | one per beat (coalesces) |
+| `meter_change(session, bar, Option<TimeSignature>)` | set or remove the time signature from a bar on; bar 1 always has one; rebuilds | one |
 | `set_loop(session, Option<LoopRange>)` | the loop range; also told to the engine; `transport::looping` turns it on | one |
 | `undo(session)` / `redo(session)` | return `false` when there is nothing to do; rebuild the mixer | |
 
@@ -83,8 +85,10 @@ wrote it; redo writes it again. Archived clips keep their files in place;
 `Memory::save`. `Memory::allocate_marker_id` → `Marker::with_id` → the matching command
 in `primitives::session::commands` pushed through `UndoStack::push`;
 `MemorySnapshot` and `serde_json` for `memory.json`, `wav::write` /
-`wav::read` for the audio. `set_tempo` and `set_loop` additionally send
-`EngineCommand::SetTempo` / `SetLoop`. `rebuild`: `EngineHandle::reclaim` →
+`wav::read` for the audio. `set_tempo`, `tempo_change` and
+`meter_change` go through `session::structural` (`SetTempo`,
+`RemoveTempo`, `SetMeter`); `set_loop` additionally sends
+`EngineCommand::SetLoop`. `rebuild`: `EngineHandle::reclaim` →
 `build_mixer` → `publish`, then `LiveGraph::apply_pending` while the audio
 thread is still in the session. `render_blocks`: `AudioThread::tick` per
 block, plus `record::collect` while a recording runs.
@@ -95,5 +99,6 @@ The crate-private helpers `edit`, `structural`, `changed_structure` and
 
 ## Limitations
 
-* Tempo is a single initial value here; `session.memory.tempo_map_mut()`
-  gives tempo and meter changes, which bypass undo.
+* Beats are quarter notes whatever the meter, as in Logic and Cubase: a
+  6/8 bar is three beats long and the click ticks eighths. Tempo ramps
+  (`SetTempo::ramped`) have no verb yet; push the command yourself.

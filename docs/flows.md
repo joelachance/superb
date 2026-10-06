@@ -92,7 +92,7 @@ undo.
 
 The engine runs a mixer built from the memory. Edits that change its
 *shape* (a new track, a clip added, moved or archived, a send, a route,
-monitoring on a track) rebuild it: at once while a device is playing
+monitoring on a track, a tempo or meter change) rebuild it: at once while a device is playing
 (so the change is heard within a block), otherwise at the next `transport::start`
 or `session::steps::render_blocks`, which is cheaper when many edits
 arrive together (opening a file). You never call `rebuild` yourself unless

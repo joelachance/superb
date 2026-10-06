@@ -46,7 +46,7 @@ use crate::primitives::transport::LoopRange;
 use crate::primitives::undo::{CoalesceKey, Command, PropertyEdit};
 use crate::primitives::{
     BeatPosition, ClipId, InsertId, MarkerId, Result, SendId, SuperbError, TimeDuration,
-    TimePosition, TrackId,
+    TimePosition, TimeSignature, TrackId,
 };
 
 use crate::primitives::session::{
@@ -1159,6 +1159,105 @@ impl Command<Memory> for SetTempo {
         self.bpm = next.bpm;
         self.ramp = next.ramp;
         Ok(())
+    }
+}
+
+/// Removes a tempo change; undo puts it back. The tempo at beat zero
+/// cannot be removed.
+pub struct RemoveTempo {
+    beat: BeatPosition,
+    previous: Option<(f64, bool)>,
+}
+
+impl RemoveTempo {
+    /// Creates the command.
+    pub fn new(beat: BeatPosition) -> Self {
+        Self {
+            beat,
+            previous: None,
+        }
+    }
+}
+
+impl Command<Memory> for RemoveTempo {
+    fn label(&self) -> &str {
+        "Remove tempo change"
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let point = memory
+            .tempo_map()
+            .tempo_points()
+            .iter()
+            .find(|p| p.beat == self.beat)
+            .map(|p| (p.bpm, p.ramp))
+            .ok_or(SuperbError::NotFound {
+                kind: "tempo change",
+                id: self.beat.beats().to_bits(),
+            })?;
+        memory.tempo_map_mut().remove_tempo(self.beat)?;
+        self.previous = Some(point);
+        Ok(())
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let (bpm, ramp) = self.previous.ok_or_else(not_applied)?;
+        let map = memory.tempo_map_mut();
+        if ramp {
+            map.add_tempo_ramp(self.beat, bpm)
+        } else {
+            map.add_tempo(self.beat, bpm)
+        }
+    }
+}
+
+/// Sets or removes the meter (time signature) from a bar on. Bar 1 always
+/// has a meter and cannot be cleared. One undo step.
+pub struct SetMeter {
+    bar: u32,
+    signature: Option<TimeSignature>,
+    previous: Option<Option<TimeSignature>>,
+}
+
+impl SetMeter {
+    /// `Some` sets the meter from `bar` (1-based) on, `None` removes the
+    /// change at that bar.
+    pub fn new(bar: u32, signature: Option<TimeSignature>) -> Self {
+        Self {
+            bar,
+            signature,
+            previous: None,
+        }
+    }
+}
+
+impl Command<Memory> for SetMeter {
+    fn label(&self) -> &str {
+        "Set meter"
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let before = memory
+            .tempo_map()
+            .meter_points()
+            .iter()
+            .find(|m| m.bar == self.bar)
+            .map(|m| m.signature);
+        let map = memory.tempo_map_mut();
+        match self.signature {
+            Some(signature) => map.add_meter(self.bar, signature)?,
+            None => map.remove_meter(self.bar)?,
+        }
+        self.previous = Some(before);
+        Ok(())
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let map = memory.tempo_map_mut();
+        match self.previous.ok_or_else(not_applied)? {
+            Some(signature) => map.add_meter(self.bar, signature),
+            None => map.remove_meter(self.bar),
+        }
     }
 }
 

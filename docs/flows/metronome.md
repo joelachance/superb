@@ -8,8 +8,9 @@ recording.
 The click is a node on the master bus, built with the mixer and driven by
 the memory's metronome state: whether it is on and how loud, both reaching
 the live node at once, and how many bars of count-in a recording that
-starts at the playhead gets. The first beat of every bar is accented
-(higher and louder), following the meter at the start of the session.
+starts at the playhead gets. It ticks on the notated beat of the meter in
+force (quarters in 4/4, eighths in 6/8) and accents the first beat of
+every bar, following tempo and meter changes along the timeline.
 During a count-in the click sounds even when the metronome is off, and
 stops at the punch-in.
 
@@ -47,9 +48,9 @@ its controls.
 
 ## Notes
 
-* The click follows the block's beat position and tempo, so it stays on
-  the beat through tempo changes; a tempo ramp inside one block uses the
-  tempo at the block's start.
+* The click follows the block's beat position, tempo and meter, so it
+  stays on the beat through tempo and meter changes; a tempo ramp inside
+  one block uses the tempo at the block's start.
 * The count-in applies when a recording begins at the playhead. With a
   punch-in point ahead of the playhead the transport rolls from where it
   is instead, and the click sounds only if the metronome is on.

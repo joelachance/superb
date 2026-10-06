@@ -50,7 +50,7 @@ use crate::primitives::graph::{live_pair_with_capacity, AudioGraph, GraphEditor,
 use crate::primitives::midi::{MidiEvent, TimestampedMessage};
 use crate::primitives::realtime::spsc::{self, Consumer, Producer};
 use crate::primitives::realtime::LoadMeter;
-use crate::primitives::transport::{LoopRange, Transport, TransportState};
+use crate::primitives::transport::{LoopRange, TempoMap, Transport, TransportState};
 use crate::primitives::{Result, SampleRate, SuperbError, TimePosition};
 
 use super::{Engine, LiveInput, MidiTiming};
@@ -65,6 +65,8 @@ pub const MAX_EXTRA_MIDI_INPUTS: usize = 4;
 pub const SWAP_CAPACITY: usize = 2;
 /// How many replaced live inputs may wait to be reclaimed.
 pub const RETIRED_INPUT_CAPACITY: usize = 4;
+/// How many replaced tempo maps may wait to be reclaimed.
+pub const RETIRED_MAP_CAPACITY: usize = 4;
 
 /// A request from the control thread to the audio thread.
 ///
@@ -82,8 +84,10 @@ pub enum EngineCommand {
     SetLoop(Option<LoopRange>),
     /// Enable or disable looping.
     SetLoopEnabled(bool),
-    /// Set the tempo at the start of the transport's tempo map, in bpm.
-    SetTempo(f64),
+    /// Replaces the transport's tempo map (tempo and meter changes). The
+    /// old map travels back to the control side and is freed by
+    /// [`EngineHandle::reclaim`].
+    TempoMap(TempoMap),
     /// Set or clear the punch points: while playing the transport drops
     /// into recording at `punch_in`, while recording it drops out at
     /// `punch_out`.
@@ -116,7 +120,7 @@ impl core::fmt::Debug for EngineCommand {
             EngineCommand::Seek(p) => write!(f, "Seek({p})"),
             EngineCommand::SetLoop(r) => write!(f, "SetLoop({r:?})"),
             EngineCommand::SetLoopEnabled(b) => write!(f, "SetLoopEnabled({b})"),
-            EngineCommand::SetTempo(bpm) => write!(f, "SetTempo({bpm})"),
+            EngineCommand::TempoMap(_) => f.write_str("TempoMap(..)"),
             EngineCommand::SetPunch {
                 punch_in,
                 punch_out,
@@ -162,6 +166,7 @@ pub struct EngineHandle {
     commands: Producer<EngineCommand>,
     midi: Producer<TimestampedMessage>,
     retired_inputs: Consumer<LiveInput>,
+    retired_maps: Consumer<TempoMap>,
     editor: GraphEditor,
     shared: Arc<Shared>,
     load: Arc<LoadMeter>,
@@ -198,11 +203,14 @@ impl EngineHandle {
         &mut self.editor
     }
 
-    /// Drops retired graphs and replaced live inputs the audio thread has
-    /// handed back. Returns how many.
+    /// Drops retired graphs, replaced live inputs and replaced tempo maps
+    /// the audio thread has handed back. Returns how many.
     pub fn reclaim(&mut self) -> usize {
         let mut n = self.editor.try_reclaim();
         while self.retired_inputs.pop().is_some() {
+            n += 1;
+        }
+        while self.retired_maps.pop().is_some() {
             n += 1;
         }
         n
@@ -282,6 +290,9 @@ pub struct AudioThread {
     retired_inputs: Producer<LiveInput>,
     /// A replaced input the retire queue had no room for; retried each tick.
     retired_overflow: Option<LiveInput>,
+    retired_maps: Producer<TempoMap>,
+    /// A replaced map the retire queue had no room for; retried each tick.
+    retired_map_overflow: Option<TempoMap>,
     shared: Arc<Shared>,
 }
 
@@ -295,6 +306,11 @@ impl AudioThread {
                 self.retired_overflow = Some(old);
             }
         }
+        if let Some(old) = self.retired_map_overflow.take() {
+            if let Err(old) = self.retired_maps.push(old) {
+                self.retired_map_overflow = Some(old);
+            }
+        }
         while let Some(command) = self.commands.pop() {
             match command {
                 EngineCommand::Play => self.engine.transport_mut().play(),
@@ -305,13 +321,12 @@ impl AudioThread {
                 EngineCommand::SetLoopEnabled(on) => {
                     self.engine.transport_mut().set_loop_enabled(on)
                 }
-                EngineCommand::SetTempo(bpm) => {
-                    // Recomputes the map's cached seconds in place: no allocation.
-                    let _ = self
-                        .engine
-                        .transport_mut()
-                        .tempo_map_mut()
-                        .set_initial_tempo(bpm);
+                EngineCommand::TempoMap(map) => {
+                    let old = self.engine.transport_mut().replace_tempo_map(map);
+                    // Never freed here: it goes back to the control thread.
+                    if let Err(old) = self.retired_maps.push(old) {
+                        self.retired_map_overflow = Some(old);
+                    }
                 }
                 EngineCommand::SetPunch {
                     punch_in,
@@ -453,6 +468,7 @@ fn pair(
     engine.set_midi_input(Some(midi_rx));
     let (cmd_tx, cmd_rx) = spsc::channel::<EngineCommand>(COMMAND_CAPACITY);
     let (retired_tx, retired_rx) = spsc::channel::<LiveInput>(RETIRED_INPUT_CAPACITY);
+    let (maps_tx, maps_rx) = spsc::channel::<TempoMap>(RETIRED_MAP_CAPACITY);
     let shared = Arc::new(Shared {
         position: AtomicI64::new(0),
         state: AtomicU8::new(0),
@@ -464,6 +480,7 @@ fn pair(
             commands: cmd_tx,
             midi: midi_tx,
             retired_inputs: retired_rx,
+            retired_maps: maps_rx,
             editor,
             shared: Arc::clone(&shared),
             load,
@@ -476,6 +493,8 @@ fn pair(
             extra_midi: [None, None, None, None],
             retired_inputs: retired_tx,
             retired_overflow: None,
+            retired_maps: maps_tx,
+            retired_map_overflow: None,
             shared,
         },
     ))
@@ -722,5 +741,27 @@ mod tests {
         audio.tick(&mut out).unwrap();
         assert!(format!("{audio:?}").contains("live_input: false"));
         assert_eq!(control.reclaim(), 1, "the detached input");
+    }
+
+    #[test]
+    fn a_tempo_map_command_swaps_the_map_and_the_old_one_comes_back() {
+        let (mut control, mut audio) = Engine::live(R, 64, 120.0).unwrap();
+        let _ = control.reclaim();
+        let mut map = TempoMap::new(SampleRate::new(44_100).unwrap(), 240.0);
+        map.add_meter(3, crate::primitives::TimeSignature::new(3, 4).unwrap())
+            .unwrap();
+        control.send(EngineCommand::TempoMap(map)).unwrap();
+        let mut out = PlanarBuffer::new(2, 64);
+        audio.tick(&mut out).unwrap();
+        let transport = audio.engine().transport();
+        assert_eq!(
+            transport
+                .tempo_map()
+                .tempo_at(crate::primitives::BeatPosition::ZERO),
+            240.0
+        );
+        assert_eq!(transport.sample_rate(), R, "the engine's rate wins");
+        assert_eq!(transport.tempo_map().meter_points().len(), 2);
+        assert_eq!(control.reclaim(), 1, "the old map");
     }
 }

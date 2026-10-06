@@ -136,7 +136,10 @@ These decisions are load-bearing. Change them only on purpose, and update
 this page when you do.
 
 **Time.** Audio time is an integer number of samples (`i64`, signed so
-pre-roll exists). Musical time is `f64` beats. Only `TempoMap` converts
+pre-roll exists). Musical time is `f64` beats, and a beat is a quarter
+note whatever the meter (a 6/8 bar is three beats), as in Logic and
+Cubase; meter changes start on bars and change numbering, grid and click
+accents, never the audio's place in time. Only `TempoMap` converts
 between them. Tempo ramps are linear in bpm over beats and integrated in
 closed form so beats and seconds round-trip exactly.
 
@@ -170,7 +173,10 @@ Inserts sit between the input node and the strip node; pre-fader sends
 tap after the last insert.
 
 **Live engine.** Commands and graphs go one way, position and transport
-state come back as atomics. Captured audio enters the same way: a
+state come back as atomics. The tempo map travels like a graph: a rebuild
+sends the memory's whole map and the audio thread hands the old one back
+to be freed, so a tempo or meter change never allocates there. Captured
+audio enters the same way: a
 `LiveInput` attached by command, pulled into a ring before each block and
 handed to every node as `ProcessContext::input`, so monitoring is a node
 on the strip and nothing locks. A published graph must be prepared for the engine's

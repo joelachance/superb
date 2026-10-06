@@ -3,7 +3,7 @@
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::midi::MidiEventBuffer;
 use crate::primitives::transport::{Segment, Transport};
-use crate::primitives::{BeatPosition, SampleRate, TimePosition};
+use crate::primitives::{BeatPosition, SampleRate, TimePosition, TimeSignature};
 
 /// Timeline information for one contiguous block (or transport segment).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -18,6 +18,10 @@ pub struct BlockTime {
     pub bpm: f64,
     /// Musical position of `start`.
     pub beat_start: BeatPosition,
+    /// Time signature in force at `start`.
+    pub signature: TimeSignature,
+    /// Musical position of the start of the bar containing `start`.
+    pub bar_start: BeatPosition,
 }
 
 impl BlockTime {
@@ -31,6 +35,8 @@ impl BlockTime {
             wrapped: false,
             bpm: 120.0,
             beat_start: BeatPosition::ZERO,
+            signature: TimeSignature::FOUR_FOUR,
+            bar_start: BeatPosition::ZERO,
         }
     }
 
@@ -42,6 +48,8 @@ impl BlockTime {
             wrapped: false,
             bpm,
             beat_start: BeatPosition::ZERO,
+            signature: TimeSignature::FOUR_FOUR,
+            bar_start: BeatPosition::ZERO,
         }
     }
 
@@ -49,12 +57,22 @@ impl BlockTime {
     pub fn from_transport(transport: &Transport, segment: &Segment) -> Self {
         let map = transport.tempo_map();
         let beat_start = map.samples_to_beat(segment.start);
+        let signature = map.meter_at(beat_start);
+        // Before zero (pre-roll) bars repeat the first meter backwards.
+        let bar_start = if beat_start.beats() < 0.0 {
+            let bar = signature.bar_length().beats();
+            BeatPosition::new((beat_start.beats() / bar).floor() * bar)
+        } else {
+            map.bar_start(beat_start)
+        };
         Self {
             start: segment.start,
             rolling: transport.is_rolling(),
             wrapped: segment.wrapped,
             bpm: map.tempo_at(beat_start),
             beat_start,
+            signature,
+            bar_start,
         }
     }
 
@@ -62,12 +80,20 @@ impl BlockTime {
     /// advanced at the current tempo).
     pub fn advanced_by(&self, frames: usize, rate: SampleRate) -> Self {
         let seconds = frames as f64 / rate.as_f64();
+        let beat_start = self.beat_start.beats() + seconds * self.bpm / 60.0;
+        let bar = self.signature.bar_length().beats();
+        let mut bar_start = self.bar_start.beats();
+        while beat_start >= bar_start + bar {
+            bar_start += bar;
+        }
         Self {
             start: self.start.offset(frames as i64),
             rolling: self.rolling,
             wrapped: false,
             bpm: self.bpm,
-            beat_start: BeatPosition::new(self.beat_start.beats() + seconds * self.bpm / 60.0),
+            beat_start: BeatPosition::new(beat_start),
+            signature: self.signature,
+            bar_start: BeatPosition::new(bar_start),
         }
     }
 }
@@ -159,5 +185,31 @@ mod tests {
             BlockTime::stopped_at(TimePosition::from_samples(7), 90.0).bpm,
             90.0
         );
+    }
+
+    #[test]
+    fn block_time_carries_the_meter_and_the_bar_start() {
+        let mut map = crate::primitives::transport::TempoMap::new(SampleRate::HZ_48K, 120.0);
+        map.add_meter(2, TimeSignature::new(6, 8).unwrap()).unwrap();
+        let mut t = Transport::with_tempo_map(map);
+        // Bar 1 is 4/4 (beats 0..4); bar 2 is 6/8 (three quarter notes).
+        t.seek(TimePosition::from_samples(24_000 * 5)); // beat 5: bar 2, second eighth pair
+        t.play();
+        let segs = t.advance(64);
+        let seg = segs.into_iter().next().unwrap();
+        let time = BlockTime::from_transport(&t, &seg);
+        assert_eq!(time.signature, TimeSignature::new(6, 8).unwrap());
+        assert_eq!(time.bar_start, BeatPosition::new(4.0));
+        // Advancing across the bar line moves the bar start with it.
+        let later = time.advanced_by(24_000 * 3, SampleRate::HZ_48K);
+        assert!((later.bar_start.beats() - 7.0).abs() < 1e-9);
+        // Pre-roll: bars repeat the first meter backwards from zero.
+        let mut early = Transport::new(SampleRate::HZ_48K, 120.0);
+        early.seek(TimePosition::from_samples(-24_000));
+        early.play();
+        let segs = early.advance(64);
+        let seg = segs.into_iter().next().unwrap();
+        let time = BlockTime::from_transport(&early, &seg);
+        assert_eq!(time.bar_start, BeatPosition::new(-4.0));
     }
 }
