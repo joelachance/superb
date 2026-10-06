@@ -45,7 +45,7 @@ column is what not to say in code, docs or UI text.
 |---|---|
 | session (the thing you open) | song, project, rig, workspace |
 | memory (what the session remembers and saves: tracks, clips, routing, tempo) | document, model, session file |
-| session folder (`memory.json` beside `audio/`) | project file, bundle, package |
+| session folder (`memory.json` beside `audio/`, made by `create`) | project file, bundle, package |
 | mixer (what the engine runs, built for you) | console |
 | rebuild (the mixer) | sync, refresh, update |
 | render_blocks (run the engine with no sound card) | drive, advance, tick, sample |

@@ -28,7 +28,8 @@
 //! use superb::prelude::*;
 //! use superb::{clip, session, track, transport};
 //!
-//! let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
+//! let folder = std::env::temp_dir().join("demo.superb");   // a session is a folder
+//! let mut session = session::create(&folder, SampleRate::HZ_48K, 256)?;
 //! let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
 //!
 //! // Clips name audio held in memory: a decoded file, or a buffer you made.

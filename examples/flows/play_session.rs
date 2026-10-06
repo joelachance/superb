@@ -20,7 +20,7 @@ use superb::{clip, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut session = session::create("play", rate, 256)?;
+    let mut session = session::create(std::env::temp_dir().join("play_session.superb"), rate, 256)?;
     let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 
     // Half a second of a plucked-sounding tone: a sine with a decay.

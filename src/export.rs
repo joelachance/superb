@@ -121,7 +121,7 @@ mod tests {
     const R: SampleRate = SampleRate::HZ_48K;
 
     fn tone_rig() -> Session {
-        let mut session = session::create("bounce", R, 256).unwrap();
+        let mut session = session::create(session::scratch("bounce"), R, 256).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 1_000);
         tone.fill(0.5);
@@ -173,7 +173,7 @@ mod tests {
         assert!(part.channel(0)[600..].iter().all(|&s| s.abs() < 1e-6));
         let _ = std::fs::remove_dir_all(&dir);
 
-        let mut empty = session::create("empty", R, 64).unwrap();
+        let mut empty = session::create(session::scratch("empty"), R, 64).unwrap();
         assert!(bounce(&mut empty, "unused.wav", Bounce::default()).is_err());
         let mut late = tone_rig();
         assert!(

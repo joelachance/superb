@@ -35,7 +35,7 @@ shape, so they rebuild it.
 use superb::prelude::*;
 use superb::{session, track};
 
-let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
+let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;
 let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
 for db in [-1.0, -2.0, -3.0] {

@@ -109,7 +109,7 @@ mod tests {
 
     #[test]
     fn configs_follow_the_rig() {
-        let session = session::create("dev", SampleRate::CD, 128).unwrap();
+        let session = session::create(session::scratch("dev"), SampleRate::CD, 128).unwrap();
         let out = output_config(&session, Some("Speakers"));
         assert_eq!(out.device_name.as_deref(), Some("Speakers"));
         assert_eq!(out.sample_rate, SampleRate::CD);

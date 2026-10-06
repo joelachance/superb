@@ -74,7 +74,7 @@ mod tests {
 
     #[test]
     fn a_monitoring_track_sounds_when_a_note_arrives() {
-        let mut session = session::create("keys", R, 64).unwrap();
+        let mut session = session::create(session::scratch("keys"), R, 64).unwrap();
         let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         assert!(!session.memory.track(keys).unwrap().state.monitor);
         track::monitor(&mut session, keys, true).unwrap();
@@ -103,7 +103,7 @@ mod tests {
 
     #[test]
     fn only_midi_tracks_monitor_and_bad_notes_are_refused() {
-        let mut session = session::create("keys", R, 64).unwrap();
+        let mut session = session::create(session::scratch("keys"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         assert!(matches!(
             track::monitor(&mut session, vox, true),

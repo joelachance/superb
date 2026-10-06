@@ -20,7 +20,11 @@ use superb::{clip, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut session = session::create("bounce", rate, 256)?;
+    let mut session = session::create(
+        std::env::temp_dir().join("export_session.superb"),
+        rate,
+        256,
+    )?;
     let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
     let pad = track::add(&mut session, "pad", TrackKind::Audio)?;
 

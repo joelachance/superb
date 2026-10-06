@@ -19,9 +19,11 @@ use superb::primitives::session::MidiNote;
 use superb::{clip, session, track};
 
 fn main() -> Result<()> {
-    // 48 kHz, 256-frame blocks. Nothing is playing yet; this is just the
-    // memory plus an idle engine.
-    let mut session = session::create("My first session", SampleRate::HZ_48K, 256)?;
+    // A session is a folder: memory.json plus an audio/ folder, created at
+    // once and named after it. 48 kHz, 256-frame blocks. Nothing is playing
+    // yet; this is just the memory plus an idle engine.
+    let folder = std::env::temp_dir().join("My first session");
+    let mut session = session::create(&folder, SampleRate::HZ_48K, 256)?;
 
     // Tracks. `track::add` returns an ID you keep; names are for people.
     let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
@@ -94,12 +96,11 @@ fn main() -> Result<()> {
         session.memory.clip(clip)?.start().to_seconds(rate)
     );
 
-    // Save into a session folder, then open it again. The folder gets
-    // memory.json and, because a clip refers to it, audio/vox-take-1.wav;
-    // open reads both back, so the clip plays without any help.
-    let folder = std::env::temp_dir().join("new_session.superb");
+    // Save, then open the folder again. Save writes memory.json and, because
+    // a clip refers to it, audio/vox-take-1.wav; open reads both back, so
+    // the clip plays without any help.
     println!("saved? {}", session.history.is_clean());
-    session::save(&mut session, &folder)?;
+    session::save(&mut session)?;
     println!(
         "saved? {} -> {}",
         session.history.is_clean(),

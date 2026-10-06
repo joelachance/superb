@@ -191,7 +191,8 @@ mod tests {
 
     #[test]
     fn meters_report_and_reset() {
-        let mut session = session::create("meters", SampleRate::HZ_48K, 64).unwrap();
+        let mut session =
+            session::create(session::scratch("meters"), SampleRate::HZ_48K, 64).unwrap();
         let vox = add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);

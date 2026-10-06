@@ -8,15 +8,15 @@ The session: the one thing you open, edit and play.
 clips, routing, tempo), the undo history, the audio clips play and the
 running engine. This module creates, opens and saves it, edits the
 memory with undo, and in `session::steps` holds the engine side: how the
-memory becomes the mixer the engine runs. A saved session is a folder:
-`memory.json` beside an `audio/` folder of WAV files.
+memory becomes the mixer the engine runs. A session is a folder from the
+moment it is created: `memory.json` beside an `audio/` folder of WAV files.
 
 ## Verbs
 
 | verb | does | undo step |
 |---|---|---|
-| `create(name, sample_rate, block_size) -> Session` | a new session around an empty memory | — |
-| `open(folder, block_size)` / `save(session, folder)` | a session folder in and out: `memory.json` plus the WAV files clips refer to; `save` writes any audio not on disk yet and makes the folder `session.folder`; `session.history.is_clean()` says whether anything changed since (state changes count) | — |
+| `create(folder, sample_rate, block_size) -> Session` | a new session in `folder`, created now with its `audio/` folder and `memory.json`, named after the folder | — |
+| `open(folder, block_size)` / `save(session)` | the folder in and out: `memory.json` plus the WAV files clips refer to; `save` also writes any audio a clip refers to that is not on disk yet; `session.history.is_clean()` says whether anything changed since (state changes count) | — |
 | `add_marker(session, name, at)` | | one |
 | `set_tempo(session, bpm)` | initial tempo of the tempo map | one |
 | `set_loop(session, Option<LoopRange>)` | the loop range; also told to the engine; `transport::looping` turns it on | one |
@@ -47,12 +47,12 @@ example builds a mixer this way without a `Session`.
 use superb::prelude::*;
 use superb::{session, track};
 
-let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
+let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;   // a folder
 let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 session::set_tempo(&mut session, 100.0)?;
 session::add_marker(&mut session, "verse", TimePosition::from_samples(48_000))?;
 session::undo(&mut session)?;   // the marker is gone
-session::save(&mut session, "demo.superb")?;      // a folder
+session::save(&mut session)?;
 let again = session::open("demo.superb", 256)?;
 ```
 
@@ -66,16 +66,21 @@ demo.superb/
     vox 2.wav
 ```
 
-A clip refers to its audio by a path relative to the folder, which is also
-its key in `session.audio`. `record::stop` writes `audio/<track> <n>.wav`
-as soon as the session has a folder; before the first save the audio waits
-in memory and `save` writes it. `open` reads every referenced WAV back; a
-missing file leaves its clip silent rather than failing. Files are never
-deleted: undoing a recording removes the clip, not the file.
+`create` makes the folder and writes `memory.json` at once, so a session
+can be opened from the moment it exists. A clip refers to its audio by a
+path relative to the folder, which is also its key in `session.audio`.
+`record::stop` writes `audio/<track> <n>.wav` as it stops, before the clip
+is placed; `save` writes `memory.json` and any audio a program put in
+`session.audio` under a key that is not on disk yet. `open` reads every
+referenced WAV back; a missing file leaves its clip silent rather than
+failing. Files are never deleted: undoing a recording removes the clip,
+not the file. Archived clips keep their files in place; `memory.json`
+marks them `"archived": true`.
 
 ## Made of
 
-`Memory::allocate_marker_id` → `Marker::with_id` → the matching command
+`create`: `create_dir_all` → `Memory::new` → `Session::new` →
+`Memory::save`. `Memory::allocate_marker_id` → `Marker::with_id` → the matching command
 in `primitives::session::commands` pushed through `UndoStack::push`;
 `MemorySnapshot` and `serde_json` for `memory.json`, `wav::write` /
 `wav::read` for the audio. `set_loop` additionally sends

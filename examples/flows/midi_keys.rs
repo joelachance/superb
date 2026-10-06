@@ -17,7 +17,7 @@ use superb::{midi, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut session = session::create("keys", rate, 128)?;
+    let mut session = session::create(std::env::temp_dir().join("midi_keys.superb"), rate, 128)?;
     let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
 
     // Monitoring is track state (saved, not an undo step) and changes the

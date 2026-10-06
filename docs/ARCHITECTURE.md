@@ -200,7 +200,7 @@ not the in-memory types, and old fields load with defaults. Routing is
 validated in the memory (targets must be buses, bus chains may not form
 a cycle), and removing a bus detaches what fed it instead of failing.
 
-**Files.** A saved session is a folder: `memory.json` beside `audio/`,
+**Files.** A session is a folder from its creation: `memory.json` beside `audio/`,
 where recordings land as 32-bit float WAV at the session's rate, named
 `<track> <n>.wav`; clips refer to them by relative path, and nothing is
 ever deleted. The MPL-2.0 decoder is imported from exactly one source file and

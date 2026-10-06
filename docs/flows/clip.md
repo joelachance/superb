@@ -26,7 +26,7 @@ alters what the mixer plays, so it rebuilds the mixer.
 use superb::prelude::*;
 use superb::{clip, session, track};
 
-let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
+let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;
 let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 
 let mut audio = PlanarBuffer::new(2, 48_000);

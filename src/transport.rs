@@ -86,7 +86,7 @@ mod tests {
 
     /// A session with one audio track playing a cached 0.5 tone from 0..400 frames.
     fn tone_rig() -> (Session, crate::primitives::TrackId) {
-        let mut session = session::create("tone", R, 64).unwrap();
+        let mut session = session::create(session::scratch("tone"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
@@ -145,9 +145,8 @@ mod tests {
 
     #[test]
     fn looping_is_saved_state_and_reaches_the_engine_on_open() {
-        let dir = std::env::temp_dir().join(format!("superb-looping-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
         let (mut session, _) = tone_rig();
+        let dir = session.folder.clone();
         let range = LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(100)).unwrap();
         session::set_loop(&mut session, Some(range)).unwrap();
         let steps = session.history.undo_len();
@@ -155,7 +154,7 @@ mod tests {
         assert!(session.memory.looping());
         assert_eq!(session.history.undo_len(), steps, "state, not an edit");
         assert!(!session.history.is_clean());
-        session::save(&mut session, &dir).unwrap();
+        session::save(&mut session).unwrap();
 
         // Reopened: the memory remembers, and the first start tells the engine.
         let mut again = session::open(&dir, 64).unwrap();

@@ -20,7 +20,8 @@ use superb::{record, session, track, transport};
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let block = 256;
-    let mut session = session::create("record", rate, block)?;
+    let folder = std::env::temp_dir().join("record_take.superb");
+    let mut session = session::create(&folder, rate, block)?;
     let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
     let _bed = track::add(&mut session, "bed", TrackKind::Audio)?;
 
@@ -30,12 +31,6 @@ fn main() -> Result<()> {
     track::arm(&mut session, vox, true)?;
     track::input(&mut session, vox, Some(Input::Mono(0)))?;
     println!("vox armed: {}", session.memory.track(vox)?.state.arm);
-
-    // Give the session a folder: from now on a recording is written there
-    // as it stops (audio/vox 1.wav). Without one it would wait in memory
-    // until the first save.
-    let folder = std::env::temp_dir().join("record_take.superb");
-    session::save(&mut session, &folder)?;
 
     // Roll the transport a second in, then punch in there.
     transport::start(&mut session)?;

@@ -64,7 +64,7 @@ new to you, start with [docs/TERMINOLOGY.md](docs/TERMINOLOGY.md).
 use superb::prelude::*;
 use superb::{clip, session, track, transport};
 
-let mut session = session::create("demo", SampleRate::HZ_48K, 256)?;
+let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;   // a folder
 let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
 
 // Audio lives in memory: a decoded file, or a buffer you made.

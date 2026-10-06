@@ -3,8 +3,7 @@
 //! [`start`] records from a [`Source`] onto every armed track from the
 //! playhead; [`stop`] writes each track's audio as a WAV file into the
 //! session folder (`audio/vox 1.wav`), keeps it in memory, and places a
-//! clip on each of those tracks, as one undo step. A session that has no
-//! folder yet keeps the audio in memory until `session::save`. The audio arrives through a capture
+//! clip on each of those tracks, as one undo step. The audio arrives through a capture
 //! queue that holds only a fraction of a second, so something has to empty
 //! it as it fills: a hardware source gets a thread that does so; a queue
 //! you fill yourself waits for [`collect`], which
@@ -272,9 +271,8 @@ pub fn collect(session: &mut Session) -> usize {
 /// track starting at the punch-in point. Each clip holds the channels its
 /// track's [`Input`] selects (tracks without one share the whole capture)
 /// and refers to `audio/<track> <n>.wav` (`audio/vox 1.wav`), so it is
-/// named `vox 1`. The file is written at once when the session has a
-/// folder ([`Session::folder`]); otherwise the audio waits in memory for
-/// `session::save`. Returns the new clips (none if nothing was captured).
+/// named `vox 1`; the file is written into [`Session::folder`] before the
+/// clip is placed. Returns the new clips (none if nothing was captured).
 /// The whole placement is one undo step called "Record"; undo removes the
 /// clips, never the files.
 ///
@@ -330,11 +328,9 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
             None => Arc::clone(&whole),
             Some(input) => Arc::new(steps::select_input(&whole, input)),
         };
-        if let Some(folder) = session.folder.as_deref() {
-            if let Err(e) = crate::session::folder::write_audio(folder, &key, &audio, rate) {
-                session.history.cancel_group(&mut session.memory)?;
-                return Err(e);
-            }
+        if let Err(e) = crate::session::folder::write_audio(&session.folder, &key, &audio, rate) {
+            session.history.cancel_group(&mut session.memory)?;
+            return Err(e);
         }
         session.audio.insert_shared(key.clone(), audio);
         match crate::clip::add(session, *track, key.as_path(), punch_in) {
@@ -478,8 +474,7 @@ pub(crate) mod steps {
     /// A file for a new recording on `track` that nothing uses yet, as a
     /// path relative to the session folder: `audio/vox 1.wav`,
     /// `audio/vox 2.wav`, ... The clip takes its stem as its name. Taken
-    /// names are those in memory and, when the session has a folder, the
-    /// files already in it.
+    /// names are those in memory and the files already in the folder.
     pub(crate) fn audio_key(session: &Session, track: TrackId) -> Result<PathBuf> {
         let base = session.memory.track(track)?.name.clone();
         let mut n = 1;
@@ -489,10 +484,7 @@ pub(crate) mod steps {
                 crate::session::folder::AUDIO_DIR
             ));
             let in_memory = session.audio.get(&key).is_some();
-            let on_disk = session
-                .folder
-                .as_ref()
-                .is_some_and(|folder| folder.join(&key).exists());
+            let on_disk = session.folder.join(&key).exists();
             if !in_memory && !on_disk {
                 return Ok(key);
             }
@@ -527,7 +519,7 @@ mod tests {
 
     #[test]
     fn a_recording_becomes_a_clip_on_every_armed_track() {
-        let mut session = session::create("rec", R, 64).unwrap();
+        let mut session = session::create(session::scratch("rec"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let gtr = track::add(&mut session, "gtr", TrackKind::Audio).unwrap();
         let _idle = track::add(&mut session, "idle", TrackKind::Audio).unwrap();
@@ -602,7 +594,7 @@ mod tests {
 
     #[test]
     fn clips_get_distinct_names_and_empty_recordings_leave_no_clip() {
-        let mut session = session::create("rec", R, 64).unwrap();
+        let mut session = session::create(session::scratch("rec"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         track::arm(&mut session, vox, true).unwrap();
         for i in 1..=2 {
@@ -648,7 +640,7 @@ mod tests {
 
     #[test]
     fn tracks_record_the_input_channels_they_chose() {
-        let mut session = session::create("rec", R, 64).unwrap();
+        let mut session = session::create(session::scratch("rec"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let gtr = track::add(&mut session, "gtr", TrackKind::Audio).unwrap();
         let room = track::add(&mut session, "room", TrackKind::Audio).unwrap();
@@ -706,7 +698,7 @@ mod tests {
 
     #[test]
     fn errors_are_explicit() {
-        let mut session = session::create("rec", R, 64).unwrap();
+        let mut session = session::create(session::scratch("rec"), R, 64).unwrap();
         let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         assert!(
             track::arm(&mut session, keys, true).is_err(),
@@ -756,7 +748,7 @@ mod tests {
 
     #[test]
     fn a_collector_thread_gathers_the_take_by_itself() {
-        let mut session = session::create("rec", R, 64).unwrap();
+        let mut session = session::create(session::scratch("rec"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         track::arm(&mut session, vox, true).unwrap();
         // A queue of 64 blocks fed with 200, paced like a device, and no
@@ -821,7 +813,7 @@ mod tests {
 
     #[test]
     fn collecting_as_you_go_outlasts_the_queue() {
-        let mut session = session::create("rec", R, 64).unwrap();
+        let mut session = session::create(session::scratch("rec"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         track::arm(&mut session, vox, true).unwrap();
         // A queue of only two blocks; the recording is ten blocks long.
@@ -879,12 +871,10 @@ mod tests {
 
     #[test]
     fn a_recording_is_written_into_the_session_folder_as_it_stops() {
-        let dir = std::env::temp_dir().join(format!("superb-rec-folder-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let mut session = session::create("rec", R, 64).unwrap();
+        let dir = session::scratch("rec-folder");
+        let mut session = session::create(&dir, R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         track::arm(&mut session, vox, true).unwrap();
-        session::save(&mut session, &dir).unwrap();
 
         let (mut mic, blocks) = capture_queue(1, 64, 16).unwrap();
         start(
@@ -898,7 +888,7 @@ mod tests {
         feed(&mut mic, 5, 0.25);
         let clips = stop(&mut session).unwrap();
         let file = dir.join("audio/vox 1.wav");
-        assert!(file.is_file(), "written before any save");
+        assert!(file.is_file(), "written as it stopped, before any save");
         let (read, rate) = crate::primitives::io::wav::read(&file).unwrap();
         assert_eq!(rate, R);
         assert_eq!(read.frames(), 320);
@@ -916,7 +906,7 @@ mod tests {
         // takes the next name even after a reopen that knows nothing of it.
         session::undo(&mut session).unwrap();
         assert!(file.is_file());
-        session::save(&mut session, &dir).unwrap();
+        session::save(&mut session).unwrap();
         let mut again = session::open(&dir, 64).unwrap();
         assert!(
             again.audio.get("audio/vox 1.wav".as_ref()).is_none(),
@@ -938,7 +928,7 @@ mod tests {
         assert!(dir.join("audio/vox 2.wav").is_file());
 
         // Reopening loads the recording and it plays.
-        session::save(&mut again, &dir).unwrap();
+        session::save(&mut again).unwrap();
         let mut played = session::open(&dir, 64).unwrap();
         assert_eq!(played.audio.len(), 1);
         transport::seek(&mut played, TimePosition::ZERO).unwrap();

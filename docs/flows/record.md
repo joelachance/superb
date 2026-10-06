@@ -87,8 +87,7 @@ rebuild.
 * Every armed track gets a clip at the punch-in position holding the
   channels its input selects, and its own file (two tracks without an
   input get two copies of the capture on disk).
-* A session that has never been saved has no folder: the audio stays in
-  memory until the first `session::save`, which writes it. Undo removes a
-  clip, never its file; a reopened session takes the next free name.
+* Undo removes a clip, never its file; a reopened session takes the next
+  free name.
 * Input monitoring, punch-out, loop recording and pre-roll are not there
   yet.

@@ -128,7 +128,7 @@ mod tests {
 
     #[test]
     fn audio_clips_take_their_length_and_name_from_the_audio() {
-        let mut session = session::create("clips", R, 64).unwrap();
+        let mut session = session::create(session::scratch("clips"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         session
             .audio
@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn midi_clips_end_with_their_last_note() {
-        let mut session = session::create("clips", R, 64).unwrap();
+        let mut session = session::create(session::scratch("clips"), R, 64).unwrap();
         let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         // 120 bpm: a beat is 24 000 samples. Notes to beat 2.5 → 60 000.
         let clip = add(
@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn a_drag_is_one_step_and_archiving_silences_without_deleting() {
-        let mut session = session::create("clips", R, 64).unwrap();
+        let mut session = session::create(session::scratch("clips"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);

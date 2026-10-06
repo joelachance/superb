@@ -41,7 +41,7 @@ pub struct Session {
     pub memory: Memory,              // tracks, clips, routing, tempo: what gets saved
     pub history: UndoStack<Memory>,  // every edit goes through here
     pub audio: AudioCache,           // the audio clips play, keyed by path
-    pub folder: Option<PathBuf>,     // where it was opened or saved: memory.json + audio/
+    pub folder: PathBuf,             // memory.json and audio/ live here
     pub engine: EngineHandle,        // control side of the running engine
     pub audio_thread: Option<AudioThread>, // the audio side, until a device takes it
     pub mixer: MixerHandles,         // live strip and send controls from the last rebuild
@@ -52,12 +52,13 @@ pub struct Session {
 }
 ```
 
-`session::create` or `session::open` makes one; `Session::new` wraps a
-`Memory` you already have. The `Memory` is what the session remembers and
+`session::create(folder, ..)` or `session::open(folder, ..)` makes one;
+`Session::new` wraps a `Memory` you already have. The `Memory` is what the session remembers and
 saves: plain data, undoable, written to JSON. The audio clips play sits
 beside it in `session.audio`, because the memory holds no buffers, only
-the paths clips refer to. A saved session is a folder, `memory.json`
-beside `audio/`, and recordings are written into it as they stop. The
+the paths clips refer to. A session is a folder from the moment it is
+created, `memory.json` beside `audio/`, and recordings are written into it
+as they stop. The
 mixer the engine runs is built from the memory and is not something you
 name.
 

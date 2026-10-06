@@ -88,7 +88,7 @@ mod tests {
 
     /// One audio track with a cached 0.5 tone covering 0..4_000 frames.
     fn tone_rig() -> (Session, TrackId) {
-        let mut session = session::create("mix", R, 64).unwrap();
+        let mut session = session::create(session::scratch("mix"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 4_000);
         tone.fill(0.5);

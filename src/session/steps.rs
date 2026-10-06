@@ -360,7 +360,7 @@ mod tests {
 
     /// A session with one audio track playing a cached 0.5 tone from 0..400 frames.
     fn tone_rig() -> (Session, crate::primitives::TrackId) {
-        let mut session = session::create("tone", R, 64).unwrap();
+        let mut session = session::create(session::scratch("tone"), R, 64).unwrap();
         let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
         let mut tone = PlanarBuffer::new(2, 400);
         tone.fill(0.5);
@@ -628,7 +628,7 @@ mod tests {
 
     #[test]
     fn monitoring_midi_tracks_get_a_live_instrument() {
-        let mut session = session::create("keys", R, 64).unwrap();
+        let mut session = session::create(session::scratch("keys"), R, 64).unwrap();
         let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
         transport::start(&mut session).unwrap();
         let (mixer, _) = build_mixer(&session.memory, &session.audio, 2).unwrap();
