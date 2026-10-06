@@ -97,6 +97,8 @@ pub mod keys {
     pub const TEMPO: u64 = 40;
     /// [`SetLoopRange`](super::SetLoopRange).
     pub const LOOP: u64 = 41;
+    /// [`SetPunch`](super::SetPunch); the key's `id` is the point.
+    pub const PUNCH: u64 = 42;
     /// [`set_send_level_db`](super::set_send_level_db).
     pub const SEND_LEVEL: u64 = 50;
     /// [`set_send_enabled`](super::set_send_enabled).
@@ -1200,6 +1202,81 @@ impl Command<Memory> for SetLoopRange {
     ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
         let next = next.downcast::<Self>()?;
         self.range = next.range;
+        Ok(())
+    }
+}
+
+/// Which punch point a [`SetPunch`] sets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PunchPoint {
+    /// Where a recording drops in.
+    In,
+    /// Where a recording drops out.
+    Out,
+}
+
+/// Sets or clears a punch point. Coalesces per point, like a drag.
+pub struct SetPunch {
+    point: PunchPoint,
+    position: Option<TimePosition>,
+    previous: Option<Option<TimePosition>>,
+}
+
+impl SetPunch {
+    /// Creates the command.
+    pub fn new(point: PunchPoint, position: Option<TimePosition>) -> Self {
+        Self {
+            point,
+            position,
+            previous: None,
+        }
+    }
+
+    fn read(&self, memory: &Memory) -> Option<TimePosition> {
+        match self.point {
+            PunchPoint::In => memory.punch_in(),
+            PunchPoint::Out => memory.punch_out(),
+        }
+    }
+
+    fn write(&self, memory: &mut Memory, position: Option<TimePosition>) {
+        match self.point {
+            PunchPoint::In => memory.set_punch_in(position),
+            PunchPoint::Out => memory.set_punch_out(position),
+        }
+    }
+}
+
+impl Command<Memory> for SetPunch {
+    fn label(&self) -> &str {
+        match self.point {
+            PunchPoint::In => "Set punch in",
+            PunchPoint::Out => "Set punch out",
+        }
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        self.previous = Some(self.read(memory));
+        self.write(memory, self.position);
+        Ok(())
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let previous = self.previous.ok_or_else(not_applied)?;
+        self.write(memory, previous);
+        Ok(())
+    }
+
+    fn coalesce_key(&self) -> Option<CoalesceKey> {
+        Some(CoalesceKey::new(keys::PUNCH, self.point as u64))
+    }
+
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<Memory>>,
+    ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
+        let next = next.downcast::<Self>()?;
+        self.position = next.position;
         Ok(())
     }
 }

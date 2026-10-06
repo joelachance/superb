@@ -251,7 +251,6 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 
 Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
 A plugins flow (the host is a primitive). Incremental edits to a running mixer (a
-rebuild replaces it). Punch-in/out and loop recording, count-in and
-pre-roll. VST3 hosting. SysEx, MIDI Time Code and
+rebuild replaces it). Loop recording, count-in and pre-roll. VST3 hosting. SysEx, MIDI Time Code and
 Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes
 owned by the session. Multi-bus or sidechain nodes.

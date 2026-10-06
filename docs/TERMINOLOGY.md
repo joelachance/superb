@@ -70,6 +70,7 @@ column is what not to say in code, docs or UI text.
 - **Signal path (we also say "graph")** — The wiring of processors. Same idea as inserts, sends, and buses on a mixing desk.
 - **Rebuild** — In Superb, rebuilding the mixer from the memory and swapping it into the running engine. Happens for you: at once while a device is playing, otherwise when you next start.
 - **Monitor** — Hearing a track's input live through its strip: the audio input for an audio track, played MIDI through an instrument for a MIDI track. `track::monitor`; not the speakers.
+- **Punch in / punch out** — Dropping into record at one timeline position and out at another while the transport rolls. `record::punch_in` and `record::punch_out` set the points; `record::start` honours them.
 - **Recording** — A recording in progress. When it stops, every armed track gets a clip named after it (`vox 1`); the clips share the audio.
 - **Insert** — An effect or instrument sitting in a track's signal path, in order. A primitive today (the memory stores it); the flow for it comes back with plugins.
 - **State vs. edit** — A track's mute, solo, arm, monitor and input, a send's on/off and whether playback loops are state: saved with the session, heard at once, never undo steps. Volume and pan are state too but continuous, so they are undoable edits that coalesce. Everything else you change is an edit.

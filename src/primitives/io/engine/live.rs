@@ -82,6 +82,15 @@ pub enum EngineCommand {
     SetLoop(Option<LoopRange>),
     /// Enable or disable looping.
     SetLoopEnabled(bool),
+    /// Set or clear the punch points: while playing the transport drops
+    /// into recording at `punch_in`, while recording it drops out at
+    /// `punch_out`.
+    SetPunch {
+        /// Where recording begins, if set.
+        punch_in: Option<TimePosition>,
+        /// Where recording ends, if set.
+        punch_out: Option<TimePosition>,
+    },
     /// Choose how queued MIDI is placed in a block.
     SetMidiTiming(MidiTiming),
     /// Adds a MIDI source (for example a hardware input bridge). Its
@@ -105,6 +114,10 @@ impl core::fmt::Debug for EngineCommand {
             EngineCommand::Seek(p) => write!(f, "Seek({p})"),
             EngineCommand::SetLoop(r) => write!(f, "SetLoop({r:?})"),
             EngineCommand::SetLoopEnabled(b) => write!(f, "SetLoopEnabled({b})"),
+            EngineCommand::SetPunch {
+                punch_in,
+                punch_out,
+            } => write!(f, "SetPunch({punch_in:?}, {punch_out:?})"),
             EngineCommand::SetMidiTiming(t) => write!(f, "SetMidiTiming({t:?})"),
             EngineCommand::AddMidiInput(_) => f.write_str("AddMidiInput(..)"),
             EngineCommand::LiveInput(input) => write!(f, "LiveInput({input:?})"),
@@ -289,6 +302,10 @@ impl AudioThread {
                 EngineCommand::SetLoopEnabled(on) => {
                     self.engine.transport_mut().set_loop_enabled(on)
                 }
+                EngineCommand::SetPunch {
+                    punch_in,
+                    punch_out,
+                } => self.engine.transport_mut().set_punch(punch_in, punch_out),
                 EngineCommand::SetMidiTiming(timing) => self.engine.set_midi_timing(timing),
                 EngineCommand::AddMidiInput(consumer) => {
                     if let Some(slot) = self.extra_midi.iter_mut().find(|s| s.is_none()) {

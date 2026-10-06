@@ -137,7 +137,7 @@ and modes, file decoding and resampling behind the `files` feature.
 
 Not yet: a plugins flow, duplex device streams, aligning hardware MIDI
 timestamps with the audio clock, updating a running mixer incrementally (a
-rebuild replaces it), punch-in/out and loop recording, VST3 hosting, SysEx and Standard MIDI Files, and
+rebuild replaces it), loop recording, VST3 hosting, SysEx and Standard MIDI Files, and
 encoders other than WAV.
 
 ## Licence

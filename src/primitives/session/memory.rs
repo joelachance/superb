@@ -31,6 +31,8 @@ pub struct Memory {
     tempo_map: TempoMap,
     loop_range: Option<LoopRange>,
     looping: bool,
+    punch_in: Option<TimePosition>,
+    punch_out: Option<TimePosition>,
     tracks: Vec<Track>,
     markers: Vec<Marker>,
     next_id: RawId,
@@ -46,6 +48,8 @@ impl Memory {
             tempo_map: TempoMap::new(sample_rate, 120.0),
             loop_range: None,
             looping: false,
+            punch_in: None,
+            punch_out: None,
             tracks: Vec::new(),
             markers: Vec::new(),
             next_id: 1,
@@ -112,6 +116,28 @@ impl Memory {
     /// Turns looping on or off.
     pub fn set_looping(&mut self, on: bool) {
         self.looping = on;
+        self.touch();
+    }
+
+    /// Where a recording drops in, if a punch-in point is set.
+    pub fn punch_in(&self) -> Option<TimePosition> {
+        self.punch_in
+    }
+
+    /// Sets or clears the punch-in point.
+    pub fn set_punch_in(&mut self, at: Option<TimePosition>) {
+        self.punch_in = at;
+        self.touch();
+    }
+
+    /// Where a recording drops out, if a punch-out point is set.
+    pub fn punch_out(&self) -> Option<TimePosition> {
+        self.punch_out
+    }
+
+    /// Sets or clears the punch-out point.
+    pub fn set_punch_out(&mut self, at: Option<TimePosition>) {
+        self.punch_out = at;
         self.touch();
     }
 

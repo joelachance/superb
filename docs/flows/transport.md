@@ -19,7 +19,7 @@ is saved with the session, like a track's mute.
 | `rewind(session)` | seek to zero |
 | `looping(session, on)` | loop over the range set with `session::set_loop`; state: saved, not an undo step |
 | `playhead(session) -> TimePosition` | where the playhead is |
-| `state(session) -> TransportState` | Stopped, Playing or Recording |
+| `state(session) -> TransportState` | Stopped, Playing or Recording; a recording with punch points switches between the last two on its own |
 
 ## Usage
 

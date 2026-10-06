@@ -1,9 +1,12 @@
 //! Recording: arm tracks, capture input, get a clip on each of them.
 //!
-//! [`start`] records from a [`Source`] onto every armed track from the
-//! playhead; [`stop`] writes each track's audio as a WAV file into the
-//! session folder (`audio/vox 1.wav`), keeps it in memory, and places a
-//! clip on each of those tracks, as one undo step. The audio arrives through a capture
+//! [`start`] records from a [`Source`] onto every armed track, from the
+//! playhead or from the punch-in point ahead of it ([`punch_in`]), until
+//! [`stop`] or the punch-out point ([`punch_out`]); the transport rolls
+//! from where it is and drops into and out of record at those points.
+//! [`stop`] writes each track's audio as a WAV file into the session folder
+//! (`audio/vox 1.wav`), keeps it in memory, and places a clip on each of
+//! those tracks, as one undo step. The audio arrives through a capture
 //! queue that holds only a fraction of a second, so something has to empty
 //! it as it fills: a hardware source gets a thread that does so; a queue
 //! you fill yourself waits for [`collect`], which
@@ -21,7 +24,7 @@ use std::thread::JoinHandle;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
 use crate::primitives::io::EngineCommand;
-use crate::primitives::session::commands::AddClip;
+use crate::primitives::session::commands::{AddClip, PunchPoint, SetPunch};
 use crate::primitives::session::{Clip, ClipSource, Input, Memory, TrackKind};
 use crate::primitives::undo::Command;
 use crate::primitives::{
@@ -56,7 +59,9 @@ pub enum Source {
 /// [`start`] and [`stop`].
 pub struct Recording {
     capture: Capture,
+    started_at: TimePosition,
     punch_in: TimePosition,
+    punch_out: Option<TimePosition>,
     tracks: Vec<TrackId>,
     channels: usize,
 }
@@ -73,9 +78,19 @@ impl Recording {
         self.capture.dropped()
     }
 
-    /// Where on the timeline the recording started.
+    /// Where the transport started rolling: at or before the punch-in.
+    pub fn started_at(&self) -> TimePosition {
+        self.started_at
+    }
+
+    /// Where the recording begins and the clips will start.
     pub fn punch_in(&self) -> TimePosition {
         self.punch_in
+    }
+
+    /// Where the recording ends on its own, if a punch-out point was set.
+    pub fn punch_out(&self) -> Option<TimePosition> {
+        self.punch_out
     }
 
     /// The tracks that were armed when it started; each gets a clip.
@@ -97,7 +112,9 @@ impl Recording {
 impl core::fmt::Debug for Recording {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Recording")
+            .field("started_at", &self.started_at)
             .field("punch_in", &self.punch_in)
+            .field("punch_out", &self.punch_out)
             .field("tracks", &self.tracks)
             .field("channels", &self.channels)
             .field("frames", &self.frames())
@@ -191,14 +208,17 @@ impl core::fmt::Debug for Collector {
     }
 }
 
-/// Starts recording from `source` onto every armed track, from the
-/// current playhead position. The transport starts rolling (recording)
-/// at the engine's next block.
+/// Starts recording from `source` onto every armed track. Recording begins
+/// at the playhead, or at the punch-in point when one is set ahead of it
+/// ([`punch_in`]): the transport rolls from where it is and drops into
+/// record there. With a punch-out point ([`punch_out`]) it drops out of
+/// record there and keeps playing; [`stop`] finishes either way.
 ///
 /// Made of: [`track::arm`](crate::track::arm)ed tracks → for a device,
-/// `devices::input` if the input is not open, then its recording queue and
-/// a collector thread → [`session::steps::rebuild`] when needed →
-/// `EngineHandle::send(Record)` → [`transport::playhead`] for the punch-in.
+/// `devices::input` if needed, its recording queue and a collector thread →
+/// [`session::steps::rebuild`] when needed → `EngineHandle::send(SetPunch)`
+/// → `EngineHandle::send(Record)`, or `Play` when the punch-in is ahead →
+/// [`transport::playhead`] for where it all started.
 pub fn start(session: &mut Session, source: Source) -> Result<()> {
     if session.recording.is_some() {
         return Err(SuperbError::Message(
@@ -242,14 +262,59 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
     if session.needs_rebuild {
         session::steps::rebuild(session)?;
     }
-    session.engine.send(EngineCommand::Record)?;
+    let playhead = transport::playhead(session);
+    let punch_in = session
+        .memory
+        .punch_in()
+        .filter(|p| *p > playhead)
+        .unwrap_or(playhead);
+    let punch_out = session.memory.punch_out().filter(|p| *p > punch_in);
+    let started_at = roll_from(session, punch_in, playhead);
+    if started_at != playhead {
+        session.engine.send(EngineCommand::Seek(started_at))?;
+    }
+    session.engine.send(EngineCommand::SetPunch {
+        punch_in: (started_at < punch_in).then_some(punch_in),
+        punch_out,
+    })?;
+    session.engine.send(if started_at < punch_in {
+        EngineCommand::Play
+    } else {
+        EngineCommand::Record
+    })?;
     session.recording = Some(Recording {
         capture,
-        punch_in: transport::playhead(session),
+        started_at,
+        punch_in,
+        punch_out,
         tracks,
         channels,
     });
     Ok(())
+}
+
+/// Where the transport starts rolling for a recording that begins at
+/// `punch_in`: the playhead, when it is at or before the punch-in.
+fn roll_from(_session: &Session, punch_in: TimePosition, playhead: TimePosition) -> TimePosition {
+    playhead.min(punch_in)
+}
+
+/// Sets or clears the punch-in point: where the next recording begins when
+/// it lies ahead of the playhead. Saved with the session; an edit that
+/// coalesces like a drag.
+///
+/// Made of: `SetPunch` through `session::edit`.
+pub fn punch_in(session: &mut Session, at: Option<TimePosition>) -> Result<()> {
+    session::edit(session, SetPunch::new(PunchPoint::In, at))
+}
+
+/// Sets or clears the punch-out point: where a recording drops out of
+/// record on its own and keeps playing. Saved with the session; an edit
+/// that coalesces like a drag.
+///
+/// Made of: `SetPunch` through `session::edit`.
+pub fn punch_out(session: &mut Session, at: Option<TimePosition>) -> Result<()> {
+    session::edit(session, SetPunch::new(PunchPoint::Out, at))
 }
 
 /// Moves waiting blocks into the recording when the source is a queue
@@ -269,7 +334,9 @@ pub fn collect(session: &mut Session) -> usize {
 }
 
 /// Stops the recording and the transport and places one clip per armed
-/// track starting at the punch-in point. Each clip holds the channels its
+/// track starting at the punch-in point. Audio captured before the
+/// punch-in (while rolling towards it) and after the punch-out is left
+/// out. Each clip holds the channels its
 /// track's [`Input`] selects (tracks without one share the whole capture)
 /// and refers to `audio/<track> <n>.wav` (`audio/vox 1.wav`), so it is
 /// named `vox 1`; the file is written into [`Session::folder`] before the
@@ -290,10 +357,16 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         .recording
         .take()
         .ok_or_else(|| SuperbError::Message("nothing is being recorded".into()))?;
+    session.engine.send(EngineCommand::SetPunch {
+        punch_in: None,
+        punch_out: None,
+    })?;
     session.engine.send(EngineCommand::Stop)?;
     let Recording {
         capture,
+        started_at,
         punch_in,
+        punch_out,
         tracks,
         ..
     } = recording;
@@ -316,6 +389,7 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
             planes
         }
     };
+    let planes = steps::trim_planes(planes, started_at, punch_in, punch_out);
     let audio = steps::finish_recording(planes);
     if audio.frames() == 0 {
         return Ok(Vec::new());
@@ -519,6 +593,28 @@ pub(crate) mod steps {
             blocks.recycle(block);
         }
         appended
+    }
+
+    /// Drops what was captured before the punch-in (the roll towards it)
+    /// and after the punch-out.
+    pub(crate) fn trim_planes(
+        planes: Vec<Vec<f32>>,
+        started_at: TimePosition,
+        punch_in: TimePosition,
+        punch_out: Option<TimePosition>,
+    ) -> Vec<Vec<f32>> {
+        let skip = (punch_in.samples() - started_at.samples()).max(0) as usize;
+        let keep = punch_out.map(|out| (out.samples() - punch_in.samples()).max(0) as usize);
+        planes
+            .into_iter()
+            .map(|plane| {
+                let mut plane = plane.get(skip..).map(<[f32]>::to_vec).unwrap_or_default();
+                if let Some(keep) = keep {
+                    plane.truncate(keep);
+                }
+                plane
+            })
+            .collect()
     }
 
     /// Turns collected planes into one buffer. Empty planes give a buffer
@@ -1001,5 +1097,92 @@ mod tests {
                 > 0.2
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn punch_points_decide_where_a_recording_begins_and_ends() {
+        use crate::primitives::transport::TransportState;
+        let mut session = session::create(session::scratch("punch"), R, 64).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        track::arm(&mut session, vox, true).unwrap();
+        punch_in(&mut session, Some(TimePosition::from_samples(640))).unwrap();
+        punch_out(&mut session, Some(TimePosition::from_samples(960))).unwrap();
+        assert_eq!(
+            session.memory.punch_in(),
+            Some(TimePosition::from_samples(640))
+        );
+        let json = session.memory.to_json().unwrap();
+        assert_eq!(
+            crate::primitives::session::Memory::from_json(&json)
+                .unwrap()
+                .punch_out(),
+            Some(TimePosition::from_samples(960))
+        );
+
+        // Start at zero: the transport rolls, drops into record at 640 and
+        // out at 960; the clip holds exactly that span.
+        let (mut mic, blocks) = capture_queue(1, 64, 64).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
+        let recording = session.recording.as_ref().unwrap();
+        assert_eq!(recording.started_at(), TimePosition::ZERO);
+        assert_eq!(recording.punch_in(), TimePosition::from_samples(640));
+        assert_eq!(recording.punch_out(), Some(TimePosition::from_samples(960)));
+        let mut seen_recording = false;
+        for i in 0..20 {
+            feed(&mut mic, 1, 0.25);
+            session::steps::render_blocks(&mut session, 1).unwrap();
+            let state = transport::state(&session);
+            let position = transport::playhead(&session).samples();
+            // The state switches as the block that reaches a point ends, so
+            // the block starting at 640 already records and 960 does not.
+            let expected = if (640..960).contains(&position) {
+                TransportState::Recording
+            } else {
+                TransportState::Playing
+            };
+            assert_eq!(state, expected, "block {i} at {position}");
+            seen_recording |= state == TransportState::Recording;
+        }
+        assert!(seen_recording);
+        let clips = stop(&mut session).unwrap();
+        let clip = session.memory.clip(clips[0]).unwrap();
+        assert_eq!(clip.start(), TimePosition::from_samples(640));
+        assert_eq!(clip.length(), TimeDuration::from_samples(320));
+        let audio = session.audio.get("audio/vox 1.wav".as_ref()).unwrap();
+        assert!(audio.channel(0).iter().all(|&s| s == 0.25));
+
+        // A punch-in behind the playhead is ignored: recording starts now.
+        transport::seek(&mut session, TimePosition::from_samples(2_000)).unwrap();
+        session::steps::render_blocks(&mut session, 1).unwrap();
+        punch_out(&mut session, None).unwrap();
+        let (_mic, blocks) = capture_queue(1, 64, 4).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            session.recording.as_ref().unwrap().punch_in(),
+            TimePosition::from_samples(2_000)
+        );
+        session::steps::render_blocks(&mut session, 1).unwrap();
+        assert_eq!(transport::state(&session), TransportState::Recording);
+        stop(&mut session).unwrap();
+        // The punch points are edits: undo clears the last one set.
+        assert!(session::undo(&mut session).unwrap());
+        assert_eq!(
+            session.memory.punch_out(),
+            Some(TimePosition::from_samples(960))
+        );
     }
 }

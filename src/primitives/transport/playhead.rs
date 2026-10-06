@@ -170,6 +170,8 @@ pub struct Transport {
     position: TimePosition,
     loop_range: Option<LoopRange>,
     loop_enabled: bool,
+    punch_in: Option<TimePosition>,
+    punch_out: Option<TimePosition>,
     tempo_map: TempoMap,
 }
 
@@ -186,6 +188,8 @@ impl Transport {
             position: TimePosition::ZERO,
             loop_range: None,
             loop_enabled: false,
+            punch_in: None,
+            punch_out: None,
             tempo_map,
         }
     }
@@ -282,6 +286,21 @@ impl Transport {
         self.loop_enabled = enabled;
     }
 
+    /// Sets the punch points: while playing, the transport switches to
+    /// recording when the playhead crosses `punch_in`, and while recording
+    /// back to playing when it crosses `punch_out`. Checked by
+    /// [`advance`](Self::advance) at block granularity; `None` clears a
+    /// point.
+    pub fn set_punch(&mut self, punch_in: Option<TimePosition>, punch_out: Option<TimePosition>) {
+        self.punch_in = punch_in;
+        self.punch_out = punch_out;
+    }
+
+    /// The punch points, `(in, out)`.
+    pub fn punch(&self) -> (Option<TimePosition>, Option<TimePosition>) {
+        (self.punch_in, self.punch_out)
+    }
+
     /// `true` if looping is enabled *and* a range is set.
     pub fn is_looping(&self) -> bool {
         self.loop_enabled && self.loop_range.is_some()
@@ -321,10 +340,22 @@ impl Transport {
                 end = s.end();
             }
             // If the last segment ended exactly on the loop end, wrap to start.
+            let from = self.position;
             self.position = match loop_range {
                 Some(l) if end == l.end() && frames > 0 => l.start(),
                 _ => end,
             };
+            // Punch points: crossed when the block ran over them.
+            let crossed = |p: Option<TimePosition>| p.is_some_and(|p| from < p && p <= end);
+            match self.state {
+                TransportState::Playing if crossed(self.punch_in) => {
+                    self.state = TransportState::Recording;
+                }
+                TransportState::Recording if crossed(self.punch_out) => {
+                    self.state = TransportState::Playing;
+                }
+                _ => {}
+            }
         }
         segs
     }
@@ -357,6 +388,35 @@ impl fmt::Display for TransportState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn punch_points_switch_the_state_as_the_playhead_crosses_them() {
+        let mut t = Transport::new(SampleRate::HZ_48K, 120.0);
+        t.set_punch(
+            Some(TimePosition::from_samples(100)),
+            Some(TimePosition::from_samples(250)),
+        );
+        assert_eq!(t.punch().0, Some(TimePosition::from_samples(100)));
+        t.play();
+        t.advance(64);
+        assert_eq!(t.state(), TransportState::Playing, "not there yet");
+        t.advance(64); // 64..128 crosses 100
+        assert_eq!(t.state(), TransportState::Recording);
+        t.advance(64);
+        assert_eq!(t.state(), TransportState::Recording);
+        t.advance(64); // 192..256 crosses 250
+        assert_eq!(t.state(), TransportState::Playing);
+        assert_eq!(t.position(), TimePosition::from_samples(256));
+        // Stopped transports never switch; cleared points never fire.
+        t.stop();
+        t.seek(TimePosition::ZERO);
+        t.advance(64);
+        assert_eq!(t.state(), TransportState::Stopped);
+        t.set_punch(None, None);
+        t.play();
+        t.advance(128);
+        assert_eq!(t.state(), TransportState::Playing);
+    }
 
     const R48: SampleRate = SampleRate::HZ_48K;
 

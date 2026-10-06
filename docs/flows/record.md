@@ -4,8 +4,10 @@ Start a recording, stop it, get a clip on every armed track.
 
 ## Purpose
 
-`start` records from a `Source` onto every armed track from the playhead;
-`stop` writes each track's audio as a WAV file into the session folder
+`start` records from a `Source` onto every armed track, from the playhead
+or from the punch-in point ahead of it, until `stop` or the punch-out
+point; the transport rolls from where it is and drops into and out of
+record at those points. `stop` writes each track's audio as a WAV file into the session folder
 (`audio/vox 1.wav`), keeps it in memory, and places one clip per armed
 track as a single undo step. Each clip is named after its file (`vox 1`,
 `vox 2`, ...) and holds the channels the track's input selects. The audio arrives
@@ -18,7 +20,8 @@ every block.
 
 | verb | does |
 |---|---|
-| `start(session, Source)` | begin at the playhead on every armed track; the transport rolls |
+| `start(session, Source)` | begin on every armed track at the playhead, or at the punch-in point when it lies ahead; the transport rolls from where it is |
+| `punch_in(session, Option<TimePosition>)` / `punch_out(session, Option<TimePosition>)` | where the next recording drops in and out; saved; edits that coalesce |
 | `collect(session) -> frames` | move waiting blocks into a queue recording (`session::steps::render_blocks` does this); nothing to do for a device recording |
 | `stop(session) -> Vec<ClipId>` | stop the transport, finish the recording, write the files, place clips ("Record") |
 
@@ -30,8 +33,8 @@ every block.
 | `Source::Queue { blocks, channels }` | a capture queue you fill yourself (`capture_queue` gives both ends) |
 
 `Recording` is the recording in progress, held in `session.recording`:
-`frames()`, `dropped()` (blocks lost to a full queue), `punch_in()`,
-`tracks()`, `channels()`.
+`frames()`, `dropped()` (blocks lost to a full queue), `started_at()`,
+`punch_in()`, `punch_out()`, `tracks()`, `channels()`.
 
 Arming and the input a track records from are track state: `track::arm`,
 `track::input`.
@@ -67,10 +70,12 @@ let clips = record::stop(&mut session)?;
 
 `start`: the armed tracks → for a device, `devices::input` if needed, its
 recording queue (64 blocks) and a collector thread →
-`session::steps::rebuild` if needed → `EngineHandle::send(Record)` →
-`transport::playhead` for the punch-in. `stop`: `EngineHandle::send(Stop)`
-→ drop the stream → drain the queue or finish the thread → one buffer from
-the planes → per track a file name nothing uses yet and the channels its
+`session::steps::rebuild` if needed → `EngineHandle::send(SetPunch)` →
+`EngineHandle::send(Record)`, or `Play` when the punch-in lies ahead →
+`transport::playhead` for where it started. `punch_in` / `punch_out`:
+`SetPunch` through `session::edit`. `stop`: `EngineHandle::send(SetPunch` cleared`)` → `EngineHandle::send(Stop)`
+→ drain the queue or finish the thread → drop what came before the
+punch-in and after the punch-out → one buffer from the planes → per track a file name nothing uses yet and the channels its
 `Input` selects (the whole capture, shared, when none is set) →
 `wav::write` into the session folder → `AudioCache::insert_shared` →
 `clip::add` (the clip takes the audio's length), inside one undo group →
@@ -90,4 +95,6 @@ rebuild.
   input get two copies of the capture on disk).
 * Undoing a recording removes its clips and deletes the files it wrote;
   redo writes them again. Nothing else deletes a file.
-* Punch-out, loop recording and pre-roll are not there yet.
+* The transport reports `Recording` from the punch-in to the punch-out,
+  at block granularity; the clip is cut at the exact samples.
+* Loop recording and pre-roll are not there yet.

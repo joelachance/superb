@@ -222,6 +222,12 @@ pub struct MemorySnapshot {
     /// Whether playback loops over it (absent in older files: off).
     #[serde(default)]
     pub looping: bool,
+    /// Punch-in point in samples (absent in older files).
+    #[serde(default)]
+    pub punch_in: Option<i64>,
+    /// Punch-out point in samples (absent in older files).
+    #[serde(default)]
+    pub punch_out: Option<i64>,
     /// Tracks in order.
     pub tracks: Vec<TrackSnapshot>,
     /// Markers in position order.
@@ -351,6 +357,8 @@ impl Memory {
             sample_rate_hz: self.sample_rate().hz(),
             tempo: TempoSnapshot::from(self.tempo_map()),
             looping: self.looping(),
+            punch_in: self.punch_in().map(|p| p.samples()),
+            punch_out: self.punch_out().map(|p| p.samples()),
             loop_range: self
                 .loop_range()
                 .map(|r| (r.start().samples(), r.end().samples())),
@@ -402,6 +410,8 @@ impl Memory {
         }
 
         memory.set_looping(snap.looping);
+        memory.set_punch_in(snap.punch_in.map(TimePosition::from_samples));
+        memory.set_punch_out(snap.punch_out.map(TimePosition::from_samples));
         if let Some((start, end)) = snap.loop_range {
             memory.set_loop_range(Some(LoopRange::new(
                 TimePosition::from_samples(start),
