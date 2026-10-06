@@ -66,8 +66,8 @@ name.
 ## Edits and state
 
 Every *edit* to the memory is a command on `session.history`, so it can
-be undone. Structural edits (add, move, archive, restore) are one step
-each; a continuous edit (volume, pan, send level, clip gain and fades, a clip
+be undone. Structural edits (add, move, split, archive, restore) are one
+step each; a continuous edit (volume, pan, send level, clip gain and fades, a clip
 drag or trim) coalesces:
 moves of the same control within half a second
 (`Session::COALESCE_WINDOW`) merge into one step, so a drag is one step and

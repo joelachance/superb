@@ -77,7 +77,12 @@ fn main() -> Result<()> {
     );
 
     // Undo works on everything above. Move the clip, change your mind.
-    clip::move_to(&mut session, clip, TimePosition::from_seconds(2.0, rate))?;
+    clip::move_to(
+        &mut session,
+        clip,
+        vox,
+        TimePosition::from_seconds(2.0, rate),
+    )?;
     // Moves of one clip within half a second merge into one undo step, so a
     // drag undoes in one go. Sealing on "mouse up" ends the step at once.
     session.history.seal();

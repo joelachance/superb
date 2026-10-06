@@ -1,20 +1,23 @@
-//! Clips: put audio or MIDI on a track, move and trim it, shape it, archive it.
+//! Clips: put audio or MIDI on a track, move, trim and split it, shape it,
+//! archive it.
 //!
 //! A clip is a region placed on a track. It plays audio the session holds
 //! in memory, named by the key it was stored under, or MIDI notes. [`add`]
 //! works out which from what you hand it and how long the clip is: the
-//! length of the audio, or the end of the last note. [`move_to`] and
-//! [`trim`] place its edges, [`gain`], [`fade_in`] and [`fade_out`] shape
-//! it, [`mute`] silences it as state. Nothing here deletes: [`archive`]
-//! takes a clip off the timeline (it stops playing and no longer counts
-//! toward the session's end) and [`restore`] brings it back, each one undo
-//! step. Every change here alters what the mixer plays, so it rebuilds the
-//! mixer.
+//! length of the audio, or the end of the last note. [`move_to`], [`trim`]
+//! and [`split`] place its edges, [`gain`], [`fade_in`] and [`fade_out`]
+//! shape it, [`mute`] silences it as state. Nothing here deletes:
+//! [`archive`] takes a clip off the timeline (it stops playing and no
+//! longer counts toward the session's end) and [`restore`] brings it back,
+//! each one undo step. Every change here alters what the mixer plays, so it
+//! rebuilds the mixer.
 //!
 //! Made of `superb::primitives::session` (`Clip`, `ClipSource` and the
 //! clip commands) and the audio held on the `Session`.
 
-use crate::primitives::session::commands::{self, AddClip, ArchiveClip, MoveClip, TrimClip};
+use crate::primitives::session::commands::{
+    self, AddClip, ArchiveClip, MoveClip, SplitClip, TrimClip,
+};
 use crate::primitives::session::{Clip, ClipSource};
 use crate::primitives::{
     BeatPosition, ClipId, Result, SuperbError, TimeDuration, TimePosition, TrackId,
@@ -83,13 +86,32 @@ pub fn add(
     Ok(id)
 }
 
-/// Moves a clip to start at `at`. Moves of the same clip within
+/// Moves a clip to `track`, starting at `at`. Pass the clip's own track to
+/// move it in time only. Moves of the same clip within
 /// [`Session::COALESCE_WINDOW`] of each other are one undo step, so a drag
-/// undoes in one go.
+/// undoes in one go. Buses take no clips.
 ///
-/// Made of: `MoveClip` through `session::structural`.
-pub fn move_to(session: &mut Session, clip: ClipId, at: TimePosition) -> Result<()> {
-    crate::session::structural(session, MoveClip::new(clip, at))
+/// Made of: `MoveClip::to_track` through `session::structural`.
+pub fn move_to(
+    session: &mut Session,
+    clip: ClipId,
+    track: TrackId,
+    at: TimePosition,
+) -> Result<()> {
+    crate::session::structural(session, MoveClip::new(clip, at).to_track(track))
+}
+
+/// Cuts a clip in two at `at`, which must fall inside it. The left part
+/// keeps the clip's id; the right part is returned. What is underneath
+/// stays put, fades stay at the outer edges, gain, mute and archived carry
+/// over, and both halves keep the name. One undo step.
+///
+/// Made of: `Memory::allocate_clip_id` → `SplitClip` through
+/// `session::structural`.
+pub fn split(session: &mut Session, clip: ClipId, at: TimePosition) -> Result<ClipId> {
+    let right = session.memory.allocate_clip_id();
+    crate::session::structural(session, SplitClip::new(clip, at, right))?;
+    Ok(right)
 }
 
 /// Moves the clip's edges to `start` and `end` on the timeline. What is
@@ -248,8 +270,8 @@ mod tests {
         session.audio.insert("tone.wav", tone);
         let clip = add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap();
         let steps = session.history.undo_len();
-        move_to(&mut session, clip, TimePosition::from_samples(100)).unwrap();
-        move_to(&mut session, clip, TimePosition::from_samples(200)).unwrap();
+        move_to(&mut session, clip, vox, TimePosition::from_samples(100)).unwrap();
+        move_to(&mut session, clip, vox, TimePosition::from_samples(200)).unwrap();
         assert_eq!(session.history.undo_len(), steps + 1, "a drag coalesces");
         assert_eq!(session.memory.clip(clip).unwrap().start().samples(), 200);
         assert_eq!(session.memory.end_position().samples(), 600);
@@ -404,5 +426,89 @@ mod tests {
             panic!("midi")
         };
         assert!((notes[0].beat + 1.0).abs() < 1e-9 && (notes[1].beat - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_split_leaves_two_clips_in_place_and_a_move_can_change_track() {
+        let mut session = session::create(session::scratch("split"), R, 64).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        let alt = track::add(&mut session, "alt", TrackKind::Audio).unwrap();
+        let bus = track::add(&mut session, "bus", TrackKind::Bus).unwrap();
+        let mut tone = PlanarBuffer::new(2, 400);
+        tone.fill(0.5);
+        session.audio.insert("tone.wav", tone);
+        let left = add(
+            &mut session,
+            vox,
+            "tone.wav",
+            TimePosition::from_samples(100),
+        )
+        .unwrap();
+        fade_in(&mut session, left, TimeDuration::from_samples(10)).unwrap();
+        fade_out(&mut session, left, TimeDuration::from_samples(20)).unwrap();
+        gain(&mut session, left, -3.0).unwrap();
+        session.history.seal();
+
+        assert!(split(&mut session, left, TimePosition::from_samples(100)).is_err());
+        assert!(split(&mut session, left, TimePosition::from_samples(500)).is_err());
+        let steps = session.history.undo_len();
+        let right = split(&mut session, left, TimePosition::from_samples(250)).unwrap();
+        assert_eq!(session.history.undo_len(), steps + 1);
+        let l = session.memory.clip(left).unwrap();
+        let r = session.memory.clip(right).unwrap();
+        assert_eq!((l.start().samples(), l.length().samples()), (100, 150));
+        assert_eq!((r.start().samples(), r.length().samples()), (250, 250));
+        assert_eq!(r.name, "tone");
+        assert!(matches!(&r.source, ClipSource::Audio { offset, .. } if offset.samples() == 150));
+        assert_eq!(l.state.fade_in.samples(), 10);
+        assert_eq!(l.state.fade_out.samples(), 0);
+        assert_eq!(r.state.fade_in.samples(), 0);
+        assert_eq!(r.state.fade_out.samples(), 20);
+        assert_eq!(r.state.gain_db, -3.0);
+        assert_eq!(session.memory.clip_track(right).unwrap(), vox);
+        // The two halves play as one: the sound is continuous across the cut.
+        transport::start(&mut session).unwrap();
+        let out = session::steps::render_blocks(&mut session, 8).unwrap();
+        assert!((out.channel(0)[245].abs() - out.channel(0)[255].abs()).abs() < 1e-3);
+
+        // Undo puts the one clip back; redo splits again.
+        assert!(session::undo(&mut session).unwrap());
+        assert!(session.memory.clip(right).is_err());
+        let l = session.memory.clip(left).unwrap();
+        assert_eq!(l.length().samples(), 400);
+        assert_eq!(l.state.fade_out.samples(), 20);
+        assert!(session::redo(&mut session).unwrap());
+        assert!(session.memory.clip(right).is_ok());
+
+        // Move the right half to another track; buses take no clips.
+        move_to(&mut session, right, alt, TimePosition::from_samples(0)).unwrap();
+        assert_eq!(session.memory.clip_track(right).unwrap(), alt);
+        assert_eq!(session.memory.clip(right).unwrap().start().samples(), 0);
+        assert!(move_to(&mut session, right, bus, TimePosition::ZERO).is_err());
+
+        // A MIDI split partitions the notes.
+        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
+        let midi = add(
+            &mut session,
+            keys,
+            vec![note(0.0, 1.0), note(2.0, 1.0)],
+            TimePosition::ZERO,
+        )
+        .unwrap();
+        // One beat is 24 000 samples at 120 bpm: split after the first beat.
+        let right = split(&mut session, midi, TimePosition::from_samples(24_000)).unwrap();
+        let ClipSource::Midi { notes: l } = &session.memory.clip(midi).unwrap().source else {
+            panic!()
+        };
+        let ClipSource::Midi { notes: r } = &session.memory.clip(right).unwrap().source else {
+            panic!()
+        };
+        assert_eq!(
+            l.len(),
+            2,
+            "the left keeps its notes; the scheduler cuts them at its end"
+        );
+        assert_eq!(r.len(), 1);
+        assert!((r[0].beat - 1.0).abs() < 1e-9);
     }
 }

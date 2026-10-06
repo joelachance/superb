@@ -374,8 +374,8 @@ mod tests {
             session.memory.clip(clip).unwrap().length(),
             TimeDuration::from_samples(50)
         );
-        clip::move_to(&mut session, clip, TimePosition::from_samples(200)).unwrap();
-        clip::move_to(&mut session, clip, TimePosition::from_samples(300)).unwrap();
+        clip::move_to(&mut session, clip, vox, TimePosition::from_samples(200)).unwrap();
+        clip::move_to(&mut session, clip, vox, TimePosition::from_samples(300)).unwrap();
         session.history.seal(); // "mouse up"; a pause would do the same
         let marker = add_marker(&mut session, "verse", TimePosition::ZERO).unwrap();
         set_tempo(&mut session, 90.0).unwrap();

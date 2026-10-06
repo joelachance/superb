@@ -50,7 +50,7 @@ use crate::primitives::{
 };
 
 use crate::primitives::session::{
-    Clip, ClipSource, Insert, Marker, Memory, MidiNote, Track, TrackKind, TrackSend,
+    Clip, ClipSource, ClipState, Insert, Marker, Memory, MidiNote, Track, TrackKind, TrackSend,
 };
 
 /// `kind` values of the [`CoalesceKey`]s used by this module.
@@ -863,6 +863,98 @@ impl Command<Memory> for TrimClip {
         let next = next.downcast::<Self>()?;
         self.start = next.start;
         self.end = next.end;
+        Ok(())
+    }
+}
+
+/// Splits a clip in two at a timeline position. The left clip keeps the
+/// clip's id and shrinks; the right one is new, starts at the split and
+/// shows what was underneath (a later audio offset, or the notes from the
+/// split on). Fades stay at the outer edges; gain, mute and archived are
+/// copied. One undo step.
+pub struct SplitClip {
+    id: ClipId,
+    at: TimePosition,
+    right: ClipId,
+    before: Option<(TimeDuration, ClipSource, ClipState)>,
+}
+
+impl SplitClip {
+    /// Splits `id` at `at`; the new right-hand clip gets `right`, an id
+    /// from `Memory::allocate_clip_id`.
+    pub fn new(id: ClipId, at: TimePosition, right: ClipId) -> Self {
+        Self {
+            id,
+            at,
+            right,
+            before: None,
+        }
+    }
+}
+
+impl Command<Memory> for SplitClip {
+    fn label(&self) -> &str {
+        "Split clip"
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let track = memory.clip_track(self.id)?;
+        let clip = memory.clip(self.id)?;
+        if self.at <= clip.start() || self.at >= clip.end() {
+            return Err(SuperbError::InvalidArgument {
+                what: "clip split (must fall inside the clip)",
+            });
+        }
+        let before = (clip.length(), clip.source.clone(), clip.state.clone());
+        let left_length = TimeDuration::from_samples(self.at.samples() - clip.start().samples());
+        let right_length = TimeDuration::from_samples(clip.end().samples() - self.at.samples());
+        let right_source = match &clip.source {
+            ClipSource::Audio { path, offset } => ClipSource::Audio {
+                path: path.clone(),
+                offset: TimeDuration::from_samples(offset.samples() + left_length.samples()),
+            },
+            ClipSource::Midi { notes } => {
+                let tempo = memory.tempo_map();
+                let delta = tempo.samples_to_beat(self.at).beats()
+                    - tempo.samples_to_beat(clip.start()).beats();
+                ClipSource::Midi {
+                    notes: notes
+                        .iter()
+                        .filter(|n| n.beat >= delta)
+                        .map(|n| MidiNote {
+                            beat: n.beat - delta,
+                            ..*n
+                        })
+                        .collect(),
+                }
+            }
+            ClipSource::Empty => ClipSource::Empty,
+        };
+        let mut right = Clip::with_id(
+            self.right,
+            clip.name.clone(),
+            self.at,
+            right_length,
+            right_source,
+        )?;
+        right.state = ClipState {
+            fade_in: TimeDuration::ZERO,
+            ..clip.state.clone()
+        };
+        memory.resize_clip(self.id, left_length)?;
+        memory.clip_mut(self.id)?.state.fade_out = TimeDuration::ZERO;
+        memory.add_clip(track, right)?;
+        self.before = Some(before);
+        Ok(())
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let (length, source, state) = self.before.take().ok_or_else(not_applied)?;
+        memory.remove_clip(self.right)?;
+        memory.resize_clip(self.id, length)?;
+        let left = memory.clip_mut(self.id)?;
+        left.source = source;
+        left.state = state;
         Ok(())
     }
 }
