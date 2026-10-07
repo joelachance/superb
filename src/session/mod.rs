@@ -95,6 +95,9 @@ pub struct Session {
     /// Hardware MIDI inputs connected so far. Dropping one disconnects it.
     #[cfg(feature = "midi-io")]
     pub midi_inputs: Vec<crate::primitives::midi::input::MidiInputBridge>,
+    /// Where state is kept, once [`state_file`] named a file; `None` means
+    /// state is not saved.
+    pub state_file: Option<PathBuf>,
 }
 
 impl Session {
@@ -130,6 +133,7 @@ impl Session {
             input: None,
             #[cfg(feature = "midi-io")]
             midi_inputs: Vec::new(),
+            state_file: None,
         })
     }
 }
@@ -222,9 +226,6 @@ pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session> {
     let memory = Memory::load(folder.join(folder::MEMORY_FILE))?;
     let mut session = Session::new(memory, folder, block_size)?;
     folder::load_audio(&mut session, folder);
-    session
-        .engine
-        .send(EngineCommand::Seek(session.memory.playhead()))?;
     Ok(session)
 }
 
@@ -240,11 +241,55 @@ pub fn save(session: &mut Session) -> Result<()> {
     std::fs::create_dir_all(&folder)
         .map_err(|e| SuperbError::Message(format!("cannot create {}: {e}", folder.display())))?;
     folder::write_missing_audio(session, &folder)?;
-    let playhead = session.engine.position();
-    session.memory.set_playhead(playhead);
     session.memory.save(folder.join(folder::MEMORY_FILE))?;
     session.history.mark_clean();
-    Ok(())
+    write_state(session)
+}
+
+/// Says where state is kept, or that it is not. State (a track's mute,
+/// solo, arm, monitor and input, a clip's mute, a send's on/off, looping,
+/// the click and its count-in, the playhead) is never written into
+/// `memory.json`: until an application names a file here, a session opens
+/// with all of it off. With a path, the file is read now if it exists (its
+/// state lands on the memory, the mixer and the engine) and rewritten
+/// after every state change and every [`save`], with the playhead. `None`
+/// stops writing; the file stays.
+///
+/// Made of: `Memory::load_state` → `Memory::apply_state` →
+/// `EngineHandle::send(SetLoopEnabled, Seek)` → `session::changed_structure`;
+/// then `Memory::save_state` from `session::set_state` and [`save`].
+pub fn state_file(session: &mut Session, path: Option<PathBuf>) -> Result<()> {
+    session.state_file = path.clone();
+    match path {
+        Some(path) if path.exists() => {
+            let state = Memory::load_state(&path)?;
+            session.memory.apply_state(&state)?;
+            session
+                .engine
+                .send(EngineCommand::SetLoopEnabled(session.memory.looping()))?;
+            session
+                .engine
+                .send(EngineCommand::Seek(session.memory.playhead()))?;
+            session
+                .mixer
+                .click
+                .set_enabled(session.memory.metronome().enabled);
+            changed_structure(session)
+        }
+        // A new file: what the session has now, so the file exists from here.
+        Some(_) => write_state(session),
+        None => Ok(()),
+    }
+}
+
+/// Writes the state file, if one is named, with where the playhead is.
+pub(crate) fn write_state(session: &mut Session) -> Result<()> {
+    let Some(path) = session.state_file.clone() else {
+        return Ok(());
+    };
+    let playhead = session.engine.position();
+    session.memory.set_playhead(playhead);
+    session.memory.save_state(path)
 }
 
 /// A fresh folder under the system temp directory for a test session.
@@ -363,17 +408,16 @@ pub(crate) fn changed_structure(session: &mut Session) -> Result<()> {
     Ok(())
 }
 
-/// Changes state (mute, solo, arm, monitor, input, send on/off, looping)
-/// on the memory. State is saved with the session but is not an edit: it never
-/// enters the undo history, so the history is told its saved point is gone
-/// and `history.is_clean()` turns false.
+/// Changes state (mute, solo, arm, monitor, input, clip mute, send on/off,
+/// looping, the click, count-in) on the memory. State is not an edit: it
+/// never enters the undo history and does not make the session unsaved;
+/// it is written to the state file at once, if [`state_file`] named one.
 pub(crate) fn set_state(
     session: &mut Session,
     flip: impl FnOnce(&mut Memory) -> Result<()>,
 ) -> Result<()> {
     flip(&mut session.memory)?;
-    session.history.mark_dirty();
-    Ok(())
+    write_state(session)
 }
 
 #[cfg(test)]
@@ -637,15 +681,77 @@ mod tests {
     fn the_playhead_is_remembered_across_save_and_open() {
         let folder = scratch("playhead");
         let mut session = create(&folder, R, 64).unwrap();
+        state_file(&mut session, Some(folder.join("state.json"))).unwrap();
         crate::transport::seek(&mut session, TimePosition::from_samples(4_800)).unwrap();
         steps::render_blocks(&mut session, 1).unwrap();
         save(&mut session).unwrap();
         assert_eq!(session.memory.playhead(), TimePosition::from_samples(4_800));
         let mut again = open(&folder, 64).unwrap();
+        state_file(&mut again, Some(folder.join("state.json"))).unwrap();
         steps::render_blocks(&mut again, 1).unwrap();
         assert_eq!(
             crate::transport::playhead(&again),
             TimePosition::from_samples(4_800)
         );
+    }
+
+    #[test]
+    fn state_is_saved_only_where_the_application_says() {
+        let folder = scratch("statefile");
+        let mut session = create(&folder, R, 64).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        save(&mut session).unwrap();
+        // Without a state file, a switch is not saved and does not make the
+        // session unsaved either.
+        track::mute(&mut session, vox, true).unwrap();
+        assert!(session.history.is_clean(), "state is not unsaved work");
+        save(&mut session).unwrap();
+        let text = std::fs::read_to_string(folder.join("memory.json")).unwrap();
+        assert!(
+            !text.contains("\"mute\""),
+            "memory.json carries no state: {text}"
+        );
+        let plain = open(&folder, 64).unwrap();
+        assert!(!plain.memory.track(vox).unwrap().state.mute);
+
+        // With one, every switch lands there at once, and comes back.
+        let state = folder.join("state.json");
+        state_file(&mut session, Some(state.clone())).unwrap();
+        assert!(state.is_file());
+        track::solo(&mut session, vox, true).unwrap();
+        crate::transport::looping(&mut session, true).unwrap();
+        crate::metronome::enable(&mut session, true).unwrap();
+        crate::metronome::count_in(&mut session, 1).unwrap();
+        let written = std::fs::read_to_string(&state).unwrap();
+        assert!(written.contains("\"solo\": true") && written.contains("\"looping\": true"));
+        crate::transport::seek(&mut session, TimePosition::from_samples(960)).unwrap();
+        steps::render_blocks(&mut session, 1).unwrap();
+        save(&mut session).unwrap();
+
+        let mut again = open(&folder, 64).unwrap();
+        assert!(
+            !again.memory.track(vox).unwrap().state.mute,
+            "not until asked"
+        );
+        state_file(&mut again, Some(state.clone())).unwrap();
+        let t = again.memory.track(vox).unwrap();
+        assert!(t.state.mute && t.state.solo);
+        assert!(again.memory.looping());
+        assert!(again.memory.metronome().enabled);
+        assert_eq!(again.memory.metronome().count_in, 1);
+        assert_eq!(again.memory.playhead(), TimePosition::from_samples(960));
+        steps::render_blocks(&mut again, 1).unwrap();
+        assert_eq!(
+            crate::transport::playhead(&again),
+            TimePosition::from_samples(960)
+        );
+        assert!(again.history.is_clean());
+
+        // `None` stops writing; the file stays as it was.
+        state_file(&mut again, None).unwrap();
+        track::mute(&mut again, vox, false).unwrap();
+        assert!(std::fs::read_to_string(&state)
+            .unwrap()
+            .contains("\"mute\": true"));
     }
 }

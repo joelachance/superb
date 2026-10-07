@@ -79,7 +79,7 @@ column is what not to say in code, docs or UI text.
 - **Punch in / punch out** — Dropping into record at one timeline position and out at another while the transport rolls. `record::punch_in` and `record::punch_out` set the points; `record::start` honours them.
 - **Recording** — A recording in progress. When it stops, every armed audio track gets a clip named after it (`vox 1`) and those clips share the audio; every armed MIDI track gets a clip of the notes that arrived.
 - **Insert** — An effect or instrument sitting in a track's signal path, in order. A primitive today (the memory stores it); the flow for it comes back with plugins.
-- **State vs. edit** — A track's mute, solo, arm, monitor and input, a send's on/off and whether playback loops are state: saved with the session, heard at once, never undo steps. Volume and pan are state too but continuous, so they are undoable edits that coalesce. Everything else you change is an edit.
+- **State vs. edit** — A track's mute, solo, arm, monitor and input, a clip's mute, a send's on/off, whether playback loops, the click and its count-in, and where the playhead is are state: heard at the next block, never in the undo history, never in `memory.json`, and saved only where the application says with `session::state_file` (a `state.json` beside the memory, say). Everything else you change is an edit: undoable, and saved with `session::save`.
 
 ## Plugin formats (short map)
 

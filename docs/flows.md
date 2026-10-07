@@ -77,12 +77,14 @@ precision calls the primitive `session.history.seal()`. `record::stop`
 groups the clips it places into one step called "Record".
 
 *State* (a track's mute, solo, arm, monitor and input; a clip's mute; a
-send's on/off; whether playback loops; the metronome's switch and
-count-in) is not an edit. It is saved with the session and heard at the next block,
-but it never enters the undo history: nobody expects Undo to un-mute a
-track. Flows set it through `session::set_state`, which also
-tells the history its saved point is gone, so `session.history.is_clean()`
-turns false.
+send's on/off; whether playback loops; the click and its count-in; where
+the playhead is) is not an edit. It is heard at the next block but never
+enters the undo history: nobody expects Undo to un-mute a track. Nor is
+it written into `memory.json`: an application that wants state kept
+names a file with `session::state_file`, and from then on every state
+change is written there at once (and the playhead at every save). Until
+it does, a session opens with all of it off. Flows set state through
+`session::set_state`; it does not make the session unsaved.
 
 Volume and pan are state too (they live in `TrackState`), but they are
 continuous, so they are edits in the history sense: they coalesce and

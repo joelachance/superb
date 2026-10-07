@@ -80,11 +80,14 @@ pub struct TempoSnapshot {
 /// The metronome.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MetronomeSnapshot {
-    /// On while the transport rolls.
+    /// On while the transport rolls. State: read from older files, never
+    /// written; the state file carries it.
+    #[serde(default, skip_serializing)]
     pub enabled: bool,
     /// Level in dB.
     pub level_db: f32,
-    /// Bars of count-in before a recording.
+    /// Bars of count-in before a recording. State, like `enabled`.
+    #[serde(default, skip_serializing)]
     pub count_in: u32,
 }
 
@@ -113,8 +116,9 @@ pub struct ClipSnapshot {
     pub source: ClipSource,
     /// Gain in dB.
     pub gain_db: f32,
-    /// Muted (`muted` in older files).
-    #[serde(alias = "muted")]
+    /// Muted. State: read from older files (`muted` too), never written;
+    /// the state file carries it.
+    #[serde(default, alias = "muted", skip_serializing)]
     pub mute: bool,
     /// Fade-in in samples.
     pub fade_in: i64,
@@ -136,8 +140,14 @@ pub struct SendSnapshot {
     pub level_db: f32,
     /// Pre-fader tap.
     pub pre_fader: bool,
-    /// On.
+    /// On. State: read from older files, never written; a send is on
+    /// unless the state file says otherwise.
+    #[serde(default = "default_true", skip_serializing)]
     pub enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// An effect in a track's insert chain.
@@ -177,22 +187,23 @@ pub struct TrackSnapshot {
     pub volume_db: f32,
     /// Pan `-1..=1`.
     pub pan: f32,
-    /// Muted (`muted` in older files).
-    #[serde(alias = "muted")]
+    /// Muted. State: read from older files (`muted` too), never written;
+    /// the state file carries it.
+    #[serde(default, alias = "muted", skip_serializing)]
     pub mute: bool,
-    /// Soloed (`soloed` in older files).
-    #[serde(alias = "soloed")]
+    /// Soloed. State, like `mute`.
+    #[serde(default, alias = "soloed", skip_serializing)]
     pub solo: bool,
-    /// Armed (`armed` in older files, where it also meant monitoring on a
-    /// MIDI track).
-    #[serde(alias = "armed")]
+    /// Armed. State, like `mute` (`armed` in older files, where it also
+    /// meant monitoring on a MIDI track).
+    #[serde(default, alias = "armed", skip_serializing)]
     pub arm: bool,
-    /// Monitoring (absent in older files: a MIDI track's `armed` is read as
-    /// monitoring instead).
-    #[serde(default)]
+    /// Monitoring. State, like `mute` (absent in older files: a MIDI
+    /// track's `armed` is read as monitoring instead).
+    #[serde(default, skip_serializing)]
     pub monitor: bool,
-    /// Which input channels the track records from (absent in older files).
-    #[serde(default)]
+    /// Which input channels the track records from. State, like `mute`.
+    #[serde(default, skip_serializing)]
     pub input: Option<Input>,
     /// Archived: kept with its clips but no strip (absent in older files).
     #[serde(default)]
@@ -241,8 +252,9 @@ pub struct MemorySnapshot {
     pub tempo: TempoSnapshot,
     /// Loop range as `[start, end)` samples.
     pub loop_range: Option<(i64, i64)>,
-    /// Whether playback loops over it (absent in older files: off).
-    #[serde(default)]
+    /// Whether playback loops over it. State: read from older files,
+    /// never written; the state file carries it.
+    #[serde(default, skip_serializing)]
     pub looping: bool,
     /// Punch-in point in samples (absent in older files).
     #[serde(default)]
@@ -254,8 +266,9 @@ pub struct MemorySnapshot {
     #[serde(default)]
     pub metronome: MetronomeSnapshot,
     /// Where the playhead was when the session was saved, in samples
-    /// (absent in older files: zero).
-    #[serde(default)]
+    /// State: read from older files, never written; the state file
+    /// carries it.
+    #[serde(default, skip_serializing)]
     pub playhead: i64,
     /// The master bus (absent in older files: a fresh one).
     #[serde(default)]
@@ -731,6 +744,30 @@ mod tests {
         s
     }
 
+    /// A snapshot with its state fields at their defaults: what comes back
+    /// from a file, since state is kept elsewhere.
+    fn stateless(mut s: MemorySnapshot) -> MemorySnapshot {
+        let tracks = s.tracks.iter_mut().chain(s.master.iter_mut());
+        for t in tracks {
+            t.mute = false;
+            t.solo = false;
+            t.arm = false;
+            t.monitor = false;
+            t.input = None;
+            for c in &mut t.clips {
+                c.mute = false;
+            }
+            for sd in &mut t.sends {
+                sd.enabled = true;
+            }
+        }
+        s.looping = false;
+        s.playhead = 0;
+        s.metronome.enabled = false;
+        s.metronome.count_in = 0;
+        s
+    }
+
     #[test]
     fn json_round_trip_preserves_everything() {
         let s = rich_session();
@@ -738,7 +775,11 @@ mod tests {
         assert!(json.contains("\"format_version\": 1"));
         assert!(json.contains("kick.wav"));
         let back = Memory::from_json(&json).unwrap();
-        assert_eq!(back.snapshot(), s.snapshot());
+        assert_eq!(
+            back.snapshot(),
+            stateless(s.snapshot()),
+            "everything but state, which lives in the state file"
+        );
         assert_eq!(back.name(), "rich");
         assert_eq!(
             back.tempo_map().tempo_at(BeatPosition::new(12.0)),
@@ -758,7 +799,7 @@ mod tests {
         assert!(renamed.contains("\"items\":"));
         assert_eq!(
             Memory::from_json(&renamed).unwrap().snapshot(),
-            s.snapshot()
+            stateless(s.snapshot())
         );
         // Routing survives, and files written before routing existed load
         // with master routing and no sends.
@@ -767,7 +808,10 @@ mod tests {
         assert_eq!(back.track(drums).unwrap().output(), Some(room));
         assert_eq!(back.send_count(), 2);
         assert!(back.tracks()[1].sends()[0].pre_fader);
-        assert!(!back.track(drums).unwrap().sends()[0].state.enabled);
+        assert!(
+            back.track(drums).unwrap().sends()[0].state.enabled,
+            "send on/off is state and not in memory.json"
+        );
         let verb = &back.track(room).unwrap().inserts()[0];
         assert_eq!(verb.plugin.id, "com.example.verb");
         assert!(verb.state.bypass);
@@ -808,7 +852,7 @@ mod tests {
         let path = dir.join("memory.superb.json");
         s.save(&path).unwrap();
         let loaded = Memory::load(&path).unwrap();
-        assert_eq!(loaded.snapshot(), s.snapshot());
+        assert_eq!(loaded.snapshot(), stateless(s.snapshot()));
         assert!(Memory::load(dir.join("missing.json")).is_err());
         std::fs::write(&path, "{ not json").unwrap();
         assert!(Memory::from_json("{ not json").is_err());
@@ -948,14 +992,25 @@ mod tests {
         let mut v: serde_json::Value = serde_json::from_str(&original.to_json().unwrap()).unwrap();
         for t in v["tracks"].as_array_mut().unwrap() {
             let o = t.as_object_mut().unwrap();
+            let ot = original
+                .track(TrackId::from_raw(o["id"].as_u64().unwrap()))
+                .unwrap();
             rename(o, "volume_db", "gain_db");
-            rename(o, "mute", "muted");
-            rename(o, "solo", "soloed");
-            rename(o, "arm", "armed");
+            // Old files carried state under old names; new ones carry none.
+            o.insert("muted".into(), serde_json::json!(ot.state.mute));
+            o.insert("soloed".into(), serde_json::json!(ot.state.solo));
+            o.insert("armed".into(), serde_json::json!(ot.state.arm));
             if let Some(clips) = o.get_mut("clips").and_then(|c| c.as_array_mut()) {
                 for clip in clips.iter_mut().filter_map(|c| c.as_object_mut()) {
-                    rename(clip, "mute", "muted");
                     clip.remove("archived");
+                }
+            }
+            if let Some(sends) = o.get_mut("sends").and_then(|c| c.as_array_mut()) {
+                for sd in sends.iter_mut().filter_map(|c| c.as_object_mut()) {
+                    let os = ot
+                        .send(SendId::from_raw(sd["id"].as_u64().unwrap()))
+                        .unwrap();
+                    sd.insert("enabled".into(), serde_json::json!(os.state.enabled));
                 }
             }
             o.remove("monitor");

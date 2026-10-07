@@ -149,15 +149,17 @@ mod tests {
         let dir = session.folder.clone();
         let range = LoopRange::new(TimePosition::ZERO, TimePosition::from_samples(100)).unwrap();
         session::set_loop(&mut session, Some(range)).unwrap();
+        session::state_file(&mut session, Some(dir.join("state.json"))).unwrap();
         let steps = session.history.undo_len();
         looping(&mut session, true).unwrap();
         assert!(session.memory.looping());
         assert_eq!(session.history.undo_len(), steps, "state, not an edit");
-        assert!(!session.history.is_clean());
         session::save(&mut session).unwrap();
 
-        // Reopened: the memory remembers, and the first start tells the engine.
+        // Reopened with its state file: the memory remembers, and the first
+        // start tells the engine.
         let mut again = session::open(&dir, 64).unwrap();
+        session::state_file(&mut again, Some(dir.join("state.json"))).unwrap();
         assert!(again.memory.looping());
         assert_eq!(again.memory.loop_range(), Some(range));
         start(&mut again).unwrap();

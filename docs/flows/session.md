@@ -17,6 +17,7 @@ moment it is created: `memory.json` beside an `audio/` folder of WAV files.
 |---|---|---|
 | `create(folder, sample_rate, block_size) -> Session` | a new session in `folder`, created now with its `audio/` folder and `memory.json`, named after the folder | — |
 | `open(folder, block_size)` / `save(session)` | the folder in and out: `memory.json` plus the WAV files clips refer to; `save` also writes any audio a clip refers to that is not on disk yet and remembers where the playhead is, so `open` starts there; `session.history.is_clean()` says whether anything changed since (state changes count) | — |
+| `state_file(session, Option<PathBuf>)` | where state is kept: read now if the file exists, rewritten after every state change and every `save`, playhead included; `None` stops writing. Until set, state is not saved | — |
 | `add_marker(session, name, at)` | | one |
 | `set_tempo(session, bpm)` | initial tempo of the tempo map; rebuilds, which hands the engine the map | one |
 | `tempo_change(session, beat, Option<bpm>)` | add or remove a tempo change at a beat; rebuilds | one per beat (coalesces) |

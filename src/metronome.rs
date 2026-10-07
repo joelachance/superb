@@ -92,13 +92,21 @@ mod tests {
         assert!(second.peak() > 0.2, "{}", second.peak());
         assert!(second.peak() < first.peak(), "beat 1 is not accented");
 
-        // Off: silent at once, no rebuild; the setting survives a save.
+        // Off: silent at once, no rebuild. The level is an edit and rides
+        // memory.json; the switch and the count-in are state and do not.
         enable(&mut session, false).unwrap();
         assert!(session::steps::render_blocks(&mut session, 40)
             .unwrap()
             .is_silent());
         let copy = Memory::from_json(&session.memory.to_json().unwrap()).unwrap();
-        assert_eq!(copy.metronome(), session.memory.metronome());
         assert!((copy.metronome().level_db + 6.0206).abs() < 1e-6);
+        assert_eq!(
+            copy.metronome().count_in,
+            0,
+            "state lives in the state file"
+        );
+        let state = session.memory.state_snapshot();
+        assert_eq!(state.count_in, 2);
+        assert!(!state.metronome);
     }
 }

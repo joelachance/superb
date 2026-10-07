@@ -426,7 +426,6 @@ mod tests {
         let steps = session.history.undo_len();
         mute(&mut session, clip, true).unwrap();
         assert_eq!(session.history.undo_len(), steps, "state, not an edit");
-        assert!(!session.history.is_clean());
         transport::rewind(&mut session).unwrap();
         assert!(session::steps::render_blocks(&mut session, 8)
             .unwrap()

@@ -40,7 +40,8 @@ cargo doc --no-deps
   `primitives::plugins::clap`.
 - Structural edits go through `session::structural` (rebuilds the mixer);
   state (mute, solo, arm, monitor, input, send on/off, looping) goes through
-  `session::set_state` and never enters the undo history; level edits
+  `session::set_state`, never enters the undo history and is saved only
+  where `session::state_file` says; level edits
   reach the memory and the live handle.
 - Names follow CONTRIBUTING.md "Naming" and the one-word table in
   docs/TERMINOLOGY.md: session / memory / mixer / recording / clip,
