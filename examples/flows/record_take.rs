@@ -8,8 +8,11 @@
 //!   what this example does
 //! - A monitoring audio track plays the session's audio input through its
 //!   strip, so you hear yourself while recording
-//! - `record::stop` writes the audio as a WAV file into the session folder,
-//!   places the clips as one undo step and stops the transport
+//! - The audio streams into a WAV file per armed track from the first
+//!   block, so a crash never costs the take; `Recording` counts frames,
+//!   sealed frames, dropped blocks and disk errors while it runs
+//! - `record::stop` finishes the files, places the clips as one undo step
+//!   and stops the transport; `record::recover` places what a crash left
 //!
 //! ```text
 //! cargo run --example record_take
@@ -64,7 +67,10 @@ fn main() -> Result<()> {
             channels: 1,
         },
     )?;
-    println!("recording: {}", session.recording.is_some());
+    println!(
+        "recording into {:?}",
+        session.recording.as_ref().map(|r| r.files().to_vec())
+    );
 
     // Half a second of "singing" (a 440 Hz tone), one block at a time,
     // while the engine keeps rolling. On a device both sides run on their
@@ -86,19 +92,23 @@ fn main() -> Result<()> {
         let heard = session::steps::render_blocks(&mut session, 1)?;
         monitored = monitored.max(heard.peak());
         if n == blocks / 2 {
+            let frames = record::collect(&mut session);
+            let r = session.recording.as_ref().expect("recording");
             println!(
-                "half way ({:?}): {} frames collected, {} dropped",
+                "half way ({:?}): {frames} frames, {} sealed on disk, {} dropped, {} disk errors, peak {:.2}",
                 transport::state(&session),
-                record::collect(&mut session),
-                session.recording.as_ref().map_or(0, |r| r.dropped())
+                r.sealed_frames(),
+                r.dropped(),
+                r.disk_errors(),
+                r.peaks()[0]
             );
         }
     }
 
     println!("heard while recording: peak {monitored:.3} on the vox strip");
 
-    // Stop: the recording is drained, written to the folder and placed on
-    // every armed track, starting at the punch-in point.
+    // Stop: the files are finished and a clip placed on every armed track,
+    // starting at the punch-in point.
     let clips = record::stop(&mut session)?;
     if let Ok(entries) = std::fs::read_dir(folder.join("audio")) {
         for entry in entries.flatten() {
@@ -125,12 +135,14 @@ fn main() -> Result<()> {
     let heard = session::steps::render_blocks(&mut session, 8)?;
     println!("playback of the clip, peak {:.3}", heard.peak());
 
-    // Undo removes the clip; the file and the audio in memory stay.
+    // Undo removes the clip and deletes its file; the audio in memory
+    // stays, so redo writes the file again.
     session::undo(&mut session)?;
     println!(
-        "after undo: {} clips, {} recording(s) in memory",
+        "after undo: {} clips, {} recording(s) in memory, {} unfinished on disk",
         session.memory.clip_count(),
-        session.audio.len()
+        session.audio.len(),
+        record::unfinished(&session).len()
     );
 
     // With a real interface:

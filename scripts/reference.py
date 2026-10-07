@@ -255,8 +255,12 @@ note("record::start", returns="nothing; `session.recording` holds the recording 
 note("record::punch_in", returns="nothing", errors="never in practice", undo=DRAG, example="record::punch_in(&mut session, Some(TimePosition::from_seconds(16.0, rate)))?;", at="`Some(position)` where the next recording drops in; `None` clears it")
 note("record::punch_out", returns="nothing", errors="never in practice", undo=DRAG, example="record::punch_out(&mut session, Some(TimePosition::from_seconds(24.0, rate)))?;", at="`Some(position)` where the recording drops out; `None` clears it")
 note("record::collect", returns="the audio frames gathered so far, or zero when nothing is recording", errors="never", undo="none", example="let frames = record::collect(&mut session);   // call from a timer while a device drives the engine")
-note("record::stop", returns="the ids of the clips placed, one per armed track that got something (audio captured, or notes that arrived)", errors="nothing recording; a WAV cannot be written; the collector thread failed", undo="one step labelled \"Record\": undo removes the clips and deletes the files they wrote" + REB,
+note("record::stop", returns="the ids of the clips placed, one per armed track that got something (audio inside the punch points, or notes that arrived)", errors="nothing recording; a file cannot be finished or read back; the collector thread failed", undo="one step labelled \"Record\": undo removes the clips and deletes the files they wrote, redo writes them again" + REB,
      example="let clips = record::stop(&mut session)?;")
+note("record::unfinished", returns="the files a crash left unfinished, as keys into the session folder (`audio/vox 1.wav`); empty when there are none", errors="never; a query", undo="none",
+     example="for key in record::unfinished(&session) { println!(\"unfinished: {}\", key.display()); }")
+note("record::recover", returns="the ids of the clips placed, one per unfinished file whose track still exists", errors="a recording running; a clip cannot be placed", undo="one step labelled \"Recover\": undo removes the clips and deletes nothing" + REB,
+     example="let placed = record::recover(&mut session)?;   // after session::open noted unfinished recordings")
 
 # ---- metronome ----
 note("metronome::enable", returns="nothing", errors="never", undo=STATE + "; heard at the next block", example="metronome::enable(&mut session, true)?;")

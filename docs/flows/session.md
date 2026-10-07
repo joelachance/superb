@@ -86,7 +86,8 @@ pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session>
 Opens a session folder written by `save`: reads `memory.json` and loads
 every WAV file the clips refer to into `Session::audio`. A file that is
 missing or at another sample rate is left out, and its clip plays as
-silence. The undo history starts empty and clean.
+silence. The undo history starts empty and clean. Recordings a crash left
+unfinished are noted in the log, not placed: `record::recover` does that.
 
 **Takes**
 - `folder: impl AsRef<Path>` — a session folder, one `create` made
@@ -98,7 +99,7 @@ silence. The undo history starts empty and clean.
 
 **Undo** none: not an edit.
 
-**Made of** `Memory::load` → `Session::new` → `wav::read` per audio clip.
+**Made of** `Memory::load` → `Session::new` → `wav::read` per audio clip → `record::unfinished`.
 
 **Example**
 

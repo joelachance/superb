@@ -228,9 +228,12 @@ pub fn create(
 /// Opens a session folder written by [`save`]: reads `memory.json` and
 /// loads every WAV file the clips refer to into [`Session::audio`]. A file
 /// that is missing or at another sample rate is left out, and its clip
-/// plays as silence. The undo history starts empty and clean.
+/// plays as silence. The undo history starts empty and clean. Recordings
+/// a crash left unfinished are noted in the log, not placed:
+/// [`record::recover`](crate::record::recover) does that.
 ///
-/// Made of: `Memory::load` → `Session::new` → `wav::read` per audio clip.
+/// Made of: `Memory::load` → `Session::new` → `wav::read` per audio clip →
+/// [`record::unfinished`](crate::record::unfinished).
 pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session> {
     let folder = folder.as_ref();
     let memory = Memory::load(folder.join(folder::MEMORY_FILE))?;
@@ -240,6 +243,19 @@ pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session> {
         "{}: opened; state (mute, solo, arm, monitor, input, MIDI channel, clip mute, send on/off, looping, click, count-in, playhead) is not saved until session::state_file names a file",
         folder.display()
     );
+    let unfinished = crate::record::unfinished(&session);
+    if !unfinished.is_empty() {
+        log::warn!(
+            "{}: {} recording(s) a crash left unfinished ({}); record::recover places them",
+            folder.display(),
+            unfinished.len(),
+            unfinished
+                .iter()
+                .map(|k| k.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
     Ok(session)
 }
 

@@ -183,8 +183,10 @@ format the decoder reads, resampled once to the session's rate, with a
 report of what came in; clip split, trim, gain and fades; notes added,
 changed and removed in MIDI clips; bouncing to WAV; device output, output
 switching, and input on every channel the device has; recording audio and
-MIDI into clips, lined up by the device clock, written into the session
-folder, with punch in and out and a metronome with count-in; hearing the
+MIDI into clips, lined up by the device clock, streamed into the session
+folder as it happens (a crash costs a second, and what it left is
+recovered), with live counters, punch in and out and a metronome with
+count-in; hearing the
 input and a live instrument on a track's strip; MIDI messages, a MIDI
 channel per track, and hardware input. In the primitives only, for now:
 insert chains and CLAP plugin hosting, automation envelopes and modes.

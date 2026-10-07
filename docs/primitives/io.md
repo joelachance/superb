@@ -58,8 +58,14 @@ resampling and bounce/export helpers.
   compiled, fed by `device::run_capture` or any producer.
 * `offline::render` / `offline::render_prepared` — drive an `Engine` as fast
   as possible into a returned `PlanarBuffer` (bounce / test rendering).
-* `wav::{write, write_to, read, read_from, WavFormat}` — minimal RIFF/WAVE
-  I/O; `WavFormat::{Pcm16, Float32}`.
+* `wav::{Writer, write, write_to, read, read_from, repair, WavFormat}` —
+  RIFF/WAVE: a `Writer` that streams audio to a file block by block,
+  keeps the header current at every `flush` and syncs, finishes it (RF64
+  past 4 GiB) at `finish`, and counts frames, sealed frames and disk
+  errors in atomics another thread can poll; one-shot `write`; a reader
+  that accepts a file a crash left unfinished, up to its last whole frame;
+  `repair` to finish such a header in place. 16-bit and 24-bit PCM and
+  32-bit float.
 * `device` (feature `devices`) — `output_devices` / `input_devices`,
   `OutputConfig` / `InputConfig`, `OutputStream` (`open`, `open_timed`) /
   `InputStream` (`open`, `open_timed`, `open_to_queue`), `run_engine` /
@@ -351,8 +357,8 @@ let (mut tx, mut rx) = capture_queue(2, 512, 8)?;
 
 ## Limitations / next
 
-* **Writing is WAV only** (PCM16 and float32, plain 44-byte header). The
-  `wav` module's own *reader* is equally minimal; for 24-bit, extensible
+* **Writing is WAV only** (PCM16, PCM24 and float32; RF64 past 4 GiB). The
+  `wav` module's own *reader* is equally plain; for extensible
   headers, FLAC and friends use `files::decode` (feature `files`).
 * **Decoding covers WAV + FLAC** in the default `files` build; MP3/AAC/
   Vorbis/OGG/MP4 need extra symphonia features (and a licence review for
