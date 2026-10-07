@@ -45,6 +45,7 @@
 use std::sync::atomic::{AtomicI64, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 
+use super::CapturedMidi;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::{live_pair_with_capacity, AudioGraph, GraphEditor, LiveGraph};
 use crate::primitives::midi::{MidiEvent, TimestampedMessage};
@@ -67,6 +68,8 @@ pub const SWAP_CAPACITY: usize = 2;
 pub const RETIRED_INPUT_CAPACITY: usize = 4;
 /// How many replaced tempo maps may wait to be reclaimed.
 pub const RETIRED_MAP_CAPACITY: usize = 4;
+/// How many incoming MIDI messages a recording may hold before it is drained.
+pub const MIDI_CAPTURE_CAPACITY: usize = 8192;
 
 /// A request from the control thread to the audio thread.
 ///
@@ -97,6 +100,10 @@ pub enum EngineCommand {
         /// Where recording ends, if set.
         punch_out: Option<TimePosition>,
     },
+    /// Captures incoming MIDI for a recording while the transport records,
+    /// stamped with its position, for [`EngineHandle::captured_midi`] to
+    /// drain; `false` stops.
+    CaptureMidi(bool),
     /// Choose how queued MIDI is placed in a block.
     SetMidiTiming(MidiTiming),
     /// Adds a MIDI source (for example a hardware input bridge). Its
@@ -126,6 +133,7 @@ impl core::fmt::Debug for EngineCommand {
                 punch_out,
             } => write!(f, "SetPunch({punch_in:?}, {punch_out:?})"),
             EngineCommand::SetMidiTiming(t) => write!(f, "SetMidiTiming({t:?})"),
+            EngineCommand::CaptureMidi(on) => write!(f, "CaptureMidi({on})"),
             EngineCommand::AddMidiInput(_) => f.write_str("AddMidiInput(..)"),
             EngineCommand::LiveInput(input) => write!(f, "LiveInput({input:?})"),
         }
@@ -205,6 +213,7 @@ pub struct EngineHandle {
     midi: Producer<TimestampedMessage>,
     retired_inputs: Consumer<LiveInput>,
     retired_maps: Consumer<TempoMap>,
+    captured: Consumer<CapturedMidi>,
     editor: GraphEditor,
     shared: Arc<Shared>,
     load: Arc<LoadMeter>,
@@ -307,6 +316,13 @@ impl EngineHandle {
         }
     }
 
+    /// The next incoming MIDI message a recording captured, with the
+    /// position it arrived at; `None` when the queue is empty. Drain it
+    /// while recording: the queue holds [`MIDI_CAPTURE_CAPACITY`] messages.
+    pub fn captured_midi(&mut self) -> Option<CapturedMidi> {
+        self.captured.pop()
+    }
+
     /// Blocks the audio thread has rendered so far.
     pub fn blocks_rendered(&self) -> u64 {
         self.shared.blocks.load(Ordering::Acquire)
@@ -401,6 +417,7 @@ impl AudioThread {
                     punch_out,
                 } => self.engine.transport_mut().set_punch(punch_in, punch_out),
                 EngineCommand::SetMidiTiming(timing) => self.engine.set_midi_timing(timing),
+                EngineCommand::CaptureMidi(on) => self.engine.capture_midi(on),
                 EngineCommand::AddMidiInput(consumer) => {
                     if let Some(slot) = self.extra_midi.iter_mut().find(|s| s.is_none()) {
                         *slot = Some(consumer);
@@ -563,6 +580,8 @@ fn pair(
     engine.prepare(sample_rate, max_frames)?;
     let (midi_tx, midi_rx) = spsc::channel::<TimestampedMessage>(MIDI_CAPACITY);
     engine.set_midi_input(Some(midi_rx));
+    let (capture_tx, capture_rx) = spsc::channel::<CapturedMidi>(MIDI_CAPTURE_CAPACITY);
+    engine.set_midi_capture(Some(capture_tx));
     let (cmd_tx, cmd_rx) = spsc::channel::<EngineCommand>(COMMAND_CAPACITY);
     let (retired_tx, retired_rx) = spsc::channel::<LiveInput>(RETIRED_INPUT_CAPACITY);
     let (maps_tx, maps_rx) = spsc::channel::<TempoMap>(RETIRED_MAP_CAPACITY);
@@ -581,6 +600,7 @@ fn pair(
             midi: midi_tx,
             retired_inputs: retired_rx,
             retired_maps: maps_rx,
+            captured: capture_rx,
             editor,
             shared: Arc::clone(&shared),
             load,

@@ -10,7 +10,10 @@ point; the transport rolls from where it is and drops into and out of
 record at those points. `stop` writes each track's audio as a WAV file into the session folder
 (`audio/vox 1.wav`), keeps it in memory, and places one clip per armed
 track as a single undo step. Each clip is named after its file (`vox 1`,
-`vox 2`, ...) and holds the channels the track's input selects. The audio arrives
+`vox 2`, ...) and holds the channels the track's input selects. An armed
+MIDI track gets a clip of the notes that reached the engine while the
+recording ran, from any connected port or `midi::play_note`, stamped
+where they arrived and named after the track. The audio arrives
 through a capture queue that holds only a fraction of a second, so
 something empties it as it fills: a hardware source gets a thread; a queue
 you fill yourself waits for `collect`, which `render_blocks` calls after
@@ -27,7 +30,7 @@ capture's own start never shifts the take. Nothing to set by hand.
 
 | verb | does |
 |---|---|
-| `start(session, Source)` | begin on every armed track at the playhead, or at the punch-in point when it lies ahead; the transport rolls from where it is, or from `metronome::count_in` bars before the playhead with the click sounding |
+| `start(session, Source)` | begin on every armed track, audio and MIDI, at the playhead, or at the punch-in point when it lies ahead; the transport rolls from where it is, or from `metronome::count_in` bars before the playhead with the click sounding |
 | `punch_in(session, Option<TimePosition>)` / `punch_out(session, Option<TimePosition>)` | where the next recording drops in and out; saved; edits that coalesce |
 | `collect(session) -> frames` | move waiting blocks into a queue recording (`session::steps::render_blocks` does this); nothing to do for a device recording |
 | `stop(session) -> Vec<ClipId>` | stop the transport, finish the recording, write the files, place clips ("Record") |
@@ -118,4 +121,11 @@ rebuild.
   What the clock cannot know (converter and USB latency the driver does
   not report) is not taken back; on a good interface that is a few
   samples.
+* MIDI is recorded omni: every armed MIDI track gets the same notes, from
+  every port and from `midi::play_note`. A note still down when the
+  recording stops ends there. Routing a port to one track comes later.
+* Incoming MIDI waits on a queue of `MIDI_CAPTURE_CAPACITY` messages until
+  `collect` or `stop` drains it; `render_blocks` collects after every
+  block, and with a device driving the engine `collect` from a timer keeps
+  a long take safe.
 * Loop recording is not there yet.

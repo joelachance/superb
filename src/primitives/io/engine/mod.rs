@@ -7,8 +7,8 @@ mod live;
 pub use input::LiveInput;
 pub use live::{
     AudioThread, BlockStart, EngineCommand, EngineHandle, RollStart, COMMAND_CAPACITY,
-    MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY, RETIRED_INPUT_CAPACITY, RETIRED_MAP_CAPACITY,
-    SWAP_CAPACITY,
+    MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY, MIDI_CAPTURE_CAPACITY, RETIRED_INPUT_CAPACITY,
+    RETIRED_MAP_CAPACITY, SWAP_CAPACITY,
 };
 
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,11 +17,11 @@ use std::sync::Arc;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::{BlockProcessor, BlockTime};
 use crate::primitives::midi::timing::FrameMapper;
-use crate::primitives::midi::{MidiEvent, MidiEventBuffer, TimestampedMessage};
-use crate::primitives::realtime::spsc::Consumer;
+use crate::primitives::midi::{MidiEvent, MidiEventBuffer, MidiMessage, TimestampedMessage};
+use crate::primitives::realtime::spsc::{Consumer, Producer};
 use crate::primitives::realtime::{LoadMeter, ProcessBudget};
-use crate::primitives::transport::Transport;
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::transport::{Transport, TransportState};
+use crate::primitives::{Result, SampleRate, SuperbError, TimePosition};
 
 /// Counters maintained by [`Engine::render`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -32,6 +32,18 @@ pub struct EngineStats {
     pub segments: usize,
     /// MIDI messages dropped because the block buffer was full.
     pub midi_dropped: usize,
+    /// Incoming MIDI a recording missed because the capture queue was full.
+    pub capture_dropped: usize,
+}
+
+/// One incoming MIDI message a recording captured, stamped with the
+/// transport position it arrived at.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CapturedMidi {
+    /// Where the transport was when the message arrived.
+    pub position: TimePosition,
+    /// The message.
+    pub message: MidiMessage,
 }
 
 /// How [`Engine::render`] turns a queued [`TimestampedMessage`] into a
@@ -75,6 +87,9 @@ pub struct Engine<P: BlockProcessor> {
     midi_block_start_us: Option<u64>,
     /// Captured audio on its way to the nodes, if an input is attached.
     live_input: Option<LiveInput>,
+    /// Where incoming MIDI goes while a recording captures it.
+    midi_capture: Option<Producer<CapturedMidi>>,
+    capturing_midi: bool,
 }
 
 impl<P: BlockProcessor> Engine<P> {
@@ -98,7 +113,28 @@ impl<P: BlockProcessor> Engine<P> {
             midi_timing: MidiTiming::default(),
             midi_block_start_us: None,
             live_input: None,
+            midi_capture: None,
+            capturing_midi: false,
         }
+    }
+
+    /// The queue incoming MIDI goes into while a recording captures it
+    /// ([`CapturedMidi`]); the control side drains it. The producer stays
+    /// here for the engine's life, [`capture_midi`](Self::capture_midi)
+    /// switches capture on and off.
+    pub fn set_midi_capture(&mut self, producer: Option<Producer<CapturedMidi>>) {
+        self.midi_capture = producer;
+    }
+
+    /// Captures incoming MIDI into the capture queue while the transport is
+    /// recording, stamped with the position it arrived at; or stops.
+    pub fn capture_midi(&mut self, on: bool) {
+        self.capturing_midi = on;
+    }
+
+    /// Whether incoming MIDI is being captured.
+    pub fn is_capturing_midi(&self) -> bool {
+        self.capturing_midi
     }
 
     /// Prepares the processor and aligns the transport's sample rate.
@@ -312,6 +348,21 @@ impl<P: BlockProcessor> Engine<P> {
             }
         }
         self.midi.sort_by_frame();
+        // A recording takes a copy of what arrived, stamped where it arrived.
+        if self.capturing_midi && self.transport.state() == TransportState::Recording {
+            if let Some(tx) = self.midi_capture.as_mut() {
+                let start = self.transport.position();
+                for event in self.midi.iter() {
+                    let captured = CapturedMidi {
+                        position: start.offset(i64::from(event.frame)),
+                        message: event.message,
+                    };
+                    if tx.push(captured).is_err() {
+                        self.stats.capture_dropped += 1;
+                    }
+                }
+            }
+        }
 
         // Captured audio for this block, if an input is attached.
         if let Some(live) = self.live_input.as_mut() {

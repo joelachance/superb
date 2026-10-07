@@ -77,7 +77,7 @@ column is what not to say in code, docs or UI text.
 - **Note** — One `MidiNote` in a MIDI clip: beat and length in beats from the clip start, pitch, velocity, channel. Edited with `clip::add_note`, `clip::remove_note` and `clip::change_note`; identified by its content, not an id.
 - **Metronome, click, count-in** — The click on every beat while the transport rolls (`metronome::enable`), and the bars it plays before a recording begins (`metronome::count_in`), during which the transport rolls early and the click sounds even when the metronome is off.
 - **Punch in / punch out** — Dropping into record at one timeline position and out at another while the transport rolls. `record::punch_in` and `record::punch_out` set the points; `record::start` honours them.
-- **Recording** — A recording in progress. When it stops, every armed track gets a clip named after it (`vox 1`); the clips share the audio.
+- **Recording** — A recording in progress. When it stops, every armed audio track gets a clip named after it (`vox 1`) and those clips share the audio; every armed MIDI track gets a clip of the notes that arrived.
 - **Insert** — An effect or instrument sitting in a track's signal path, in order. A primitive today (the memory stores it); the flow for it comes back with plugins.
 - **State vs. edit** — A track's mute, solo, arm, monitor and input, a send's on/off and whether playback loops are state: saved with the session, heard at once, never undo steps. Volume and pan are state too but continuous, so they are undoable edits that coalesce. Everything else you change is an edit.
 

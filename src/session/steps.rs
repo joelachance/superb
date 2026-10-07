@@ -90,6 +90,7 @@ pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffe
         out.copy_block_from(i * block, &scratch, block)?;
         if let Some(recording) = session.recording.as_mut() {
             recording.collect();
+            recording.gather_midi(&mut session.engine);
         }
     }
     session.engine.reclaim();

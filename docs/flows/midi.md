@@ -7,7 +7,8 @@ Sending notes, connecting a keyboard.
 MIDI that reaches the engine sounds on every MIDI track that is
 monitoring (`track::monitor`). Notes can come from the program
 (`play_note`, `send`) or, with the `midi-io` feature, from a hardware port
-(`connect_input`).
+(`connect_input`). While a recording runs, the same MIDI lands as notes on
+every armed MIDI track (`record`).
 
 ## Verbs
 

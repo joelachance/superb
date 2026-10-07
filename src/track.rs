@@ -127,15 +127,16 @@ pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
     Ok(())
 }
 
-/// Arms or disarms an audio track for recording. Armed tracks receive a
-/// clip when a recording stops. State, like mute. MIDI tracks
-/// [`monitor`] instead.
+/// Arms or disarms a track for recording. An armed audio track receives a
+/// clip of the captured audio when a recording stops, an armed MIDI track
+/// a clip of the notes that arrived meanwhile. State, like mute. Buses
+/// are not armed.
 ///
 /// Made of: `TrackState::arm` through `session::set_state`.
 pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
-    if session.memory.track(track)?.kind != TrackKind::Audio {
+    if session.memory.track(track)?.kind == TrackKind::Bus {
         return Err(SuperbError::InvalidArgument {
-            what: "only audio tracks are armed for recording",
+            what: "buses are not armed for recording",
         });
     }
     crate::session::set_state(session, |d| {
@@ -150,7 +151,7 @@ pub(crate) fn armed(session: &Session) -> Vec<TrackId> {
         .memory
         .tracks()
         .iter()
-        .filter(|t| t.kind == TrackKind::Audio && t.state.arm && !t.state.archived)
+        .filter(|t| t.kind != TrackKind::Bus && t.state.arm && !t.state.archived)
         .map(|t| t.id())
         .collect()
 }

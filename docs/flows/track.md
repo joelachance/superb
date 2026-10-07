@@ -26,7 +26,7 @@ archived, and comes back whole.
 | `volume(session, track, db)` | the fader, in dB; memory + live strip | drag (coalesces) |
 | `pan(session, track, pan)` | `-1.0` left to `1.0` right | drag |
 | `mute(session, track, on)` / `solo(session, track, on)` | state; memory + live strip | — |
-| `arm(session, track, on)` | state; audio tracks only; armed tracks get a clip when a recording stops | — |
+| `arm(session, track, on)` | state; audio and MIDI tracks, not buses; an armed track gets a clip when a recording stops: the audio captured, or the notes that arrived | — |
 | `monitor(session, track, on)` | state; a MIDI track carries a live instrument, an audio track plays the session's audio input (`devices::input`) on the channel(s) its input names; not for buses; rebuilds | — |
 | `input(session, track, Option<Input>)` | state; audio tracks only; which input channel(s) feed the track when it records: `Input::Mono(0)`, `Input::Stereo(0, 1)`, or `None` for everything captured | — |
 | `route(session, track, Some(bus) or None)` | output into a bus or the master; loops refused | one |

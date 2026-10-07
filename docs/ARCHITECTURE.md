@@ -179,7 +179,9 @@ to be freed, so a tempo or meter change never allocates there. Captured
 audio enters the same way: a
 `LiveInput` attached by command, pulled into a ring before each block and
 handed to every node as `ProcessContext::input`, so monitoring is a node
-on the strip and nothing locks. A published graph must be prepared for the engine's
+on the strip and nothing locks. Incoming MIDI leaves the same way while a
+recording captures it: stamped with the transport position and queued
+for the control side to turn into notes. A published graph must be prepared for the engine's
 sample rate and block size or it is rejected, never re-prepared on the
 audio thread. The swap queue holds two graphs; `session::steps::rebuild` reclaims
 retired graphs before building and, while the audio thread is still owned

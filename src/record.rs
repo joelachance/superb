@@ -6,7 +6,9 @@
 //! from where it is and drops into and out of record at those points.
 //! [`stop`] writes each track's audio as a WAV file into the session folder
 //! (`audio/vox 1.wav`), keeps it in memory, and places a clip on each of
-//! those tracks, as one undo step. The audio arrives through a capture
+//! those tracks, as one undo step. An armed MIDI track gets a clip of the
+//! notes that reached the engine meanwhile, from any port or
+//! `midi::play_note`, stamped where they arrived. The audio arrives through a capture
 //! queue that holds only a fraction of a second, so something has to empty
 //! it as it fills: a hardware source gets a thread that does so; a queue
 //! you fill yourself waits for [`collect`], which
@@ -28,9 +30,11 @@ use std::thread::JoinHandle;
 
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
-use crate::primitives::io::{EngineCommand, RollStart};
+use crate::primitives::io::{CapturedMidi, EngineCommand, RollStart};
+use crate::primitives::midi::MidiMessage;
 use crate::primitives::session::commands::{AddClip, PunchPoint, SetPunch};
-use crate::primitives::session::{Clip, ClipSource, Input, Memory, TrackKind};
+use crate::primitives::session::{Clip, ClipSource, Input, Memory, MidiNote, TrackKind};
+use crate::primitives::transport::TempoMap;
 use crate::primitives::undo::Command;
 use crate::primitives::{
     BeatPosition, ClipId, Result, SampleRate, SuperbError, TimeDuration, TimePosition, TrackId,
@@ -63,7 +67,10 @@ pub enum Source {
 /// A recording in progress: what [`Session::recording`] holds between
 /// [`start`] and [`stop`].
 pub struct Recording {
-    capture: Capture,
+    /// The audio capture, when an audio track is armed.
+    capture: Option<Capture>,
+    /// Incoming MIDI gathered so far, for the armed MIDI tracks.
+    midi: Vec<CapturedMidi>,
     started_at: TimePosition,
     punch_in: TimePosition,
     punch_out: Option<TimePosition>,
@@ -77,13 +84,13 @@ pub struct Recording {
 impl Recording {
     /// Frames gathered so far.
     pub fn frames(&self) -> usize {
-        self.capture.frames()
+        self.capture.as_ref().map_or(0, Capture::frames)
     }
 
     /// Blocks the input side could not queue because the queue was full.
     /// Anything above zero means a gap in the recording.
     pub fn dropped(&self) -> u64 {
-        self.capture.dropped()
+        self.capture.as_ref().map_or(0, Capture::dropped)
     }
 
     /// Where the transport started rolling: at or before the punch-in.
@@ -106,14 +113,26 @@ impl Recording {
         &self.tracks
     }
 
-    /// Channels being captured.
+    /// Audio channels being captured; zero when no audio track is armed.
     pub fn channels(&self) -> usize {
         self.channels
     }
 
+    /// Incoming MIDI messages gathered so far.
+    pub fn midi_messages(&self) -> usize {
+        self.midi.len()
+    }
+
     /// Moves waiting blocks into a queue recording; see [`collect`].
     pub(crate) fn collect(&mut self) -> usize {
-        steps::collect(&mut self.capture)
+        self.capture.as_mut().map_or(0, steps::collect)
+    }
+
+    /// Takes the MIDI the engine captured since the last call.
+    pub(crate) fn gather_midi(&mut self, engine: &mut crate::primitives::io::EngineHandle) {
+        while let Some(message) = engine.captured_midi() {
+            self.midi.push(message);
+        }
     }
 }
 
@@ -127,7 +146,11 @@ impl core::fmt::Debug for Recording {
             .field("channels", &self.channels)
             .field("frames", &self.frames())
             .field("dropped", &self.dropped())
-            .field("threaded", &matches!(self.capture, Capture::Threaded(_)))
+            .field(
+                "threaded",
+                &matches!(self.capture, Some(Capture::Threaded(_))),
+            )
+            .field("midi", &self.midi.len())
             .finish()
     }
 }
@@ -244,9 +267,17 @@ pub fn start(session: &mut Session, source: Source) -> Result<()> {
         ));
     }
     if crate::track::armed(session).is_empty() {
-        return Err(SuperbError::Message(
-            "arm an audio track before recording".into(),
-        ));
+        return Err(SuperbError::Message("arm a track before recording".into()));
+    }
+    let audio = crate::track::armed(session).iter().any(|t| {
+        session
+            .memory
+            .track(*t)
+            .is_ok_and(|t| t.kind == TrackKind::Audio)
+    });
+    if !audio {
+        // MIDI only: nothing to capture from the audio side.
+        return begin(session, None, 0);
     }
     match source {
         #[cfg(feature = "devices")]
@@ -261,22 +292,22 @@ pub fn start(session: &mut Session, source: Source) -> Result<()> {
             let channels = input.channels();
             let blocks = input.begin_recording()?;
             let collector = steps::spawn_collector(blocks, channels)?;
-            begin(session, Capture::Threaded(collector), channels)
+            begin(session, Some(Capture::Threaded(collector)), channels)
         }
         Source::Queue { blocks, channels } => begin(
             session,
-            Capture::Manual {
+            Some(Capture::Manual {
                 blocks,
                 planes: vec![Vec::new(); channels],
                 first_us: None,
-            },
+            }),
             channels,
         ),
     }
 }
 
 /// What every source has in common once the capture exists.
-fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()> {
+fn begin(session: &mut Session, capture: Option<Capture>, channels: usize) -> Result<()> {
     let tracks = crate::track::armed(session);
     if session.needs_rebuild {
         session::steps::rebuild(session)?;
@@ -293,6 +324,9 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
     if started_at != playhead {
         session.engine.send(EngineCommand::Seek(started_at))?;
     }
+    // Incoming MIDI from here on belongs to this recording.
+    while session.engine.captured_midi().is_some() {}
+    session.engine.send(EngineCommand::CaptureMidi(true))?;
     session.engine.send(EngineCommand::SetPunch {
         punch_in: (started_at < punch_in).then_some(punch_in),
         punch_out,
@@ -304,6 +338,7 @@ fn begin(session: &mut Session, capture: Capture, channels: usize) -> Result<()>
     })?;
     session.recording = Some(Recording {
         capture,
+        midi: Vec::new(),
         started_at,
         punch_in,
         punch_out,
@@ -356,20 +391,20 @@ pub fn punch_out(session: &mut Session, at: Option<TimePosition>) -> Result<()> 
     session::edit(session, SetPunch::new(PunchPoint::Out, at))
 }
 
-/// Moves waiting blocks into the recording when the source is a queue
-/// ([`Source::Queue`]); a device recording has its thread and needs
-/// nothing. Returns the frames gathered in total, or zero when nothing is
-/// recording. [`session::steps::render_blocks`] calls this after every
-/// block; with a device driving the engine and a queue source, call it
-/// from a timer.
+/// Moves waiting audio blocks into the recording when the source is a
+/// queue ([`Source::Queue`]), and the MIDI that arrived since the last call
+/// either way; a device recording's audio has its own thread. Returns the
+/// frames gathered in total, or zero when nothing is recording.
+/// [`session::steps::render_blocks`] calls this after every block; with a
+/// device driving the engine, call it from a timer during long takes, so
+/// the MIDI queue (`MIDI_CAPTURE_CAPACITY` messages) never fills.
 pub fn collect(session: &mut Session) -> usize {
-    match session.recording.as_mut() {
-        Some(recording) => {
-            recording.collect();
-            recording.frames()
-        }
-        None => 0,
-    }
+    let Some(recording) = session.recording.as_mut() else {
+        return 0;
+    };
+    recording.collect();
+    recording.gather_midi(&mut session.engine);
+    recording.frames()
 }
 
 /// Stops the recording and the transport and places one clip per armed
@@ -398,6 +433,8 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         .take()
         .ok_or_else(|| SuperbError::Message("nothing is being recorded".into()))?;
     session.mixer.click.set_count_in_until(None);
+    session.engine.send(EngineCommand::CaptureMidi(false))?;
+    let ended_at = session.engine.position();
     session.engine.send(EngineCommand::SetPunch {
         punch_in: None,
         punch_out: None,
@@ -405,6 +442,7 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     session.engine.send(EngineCommand::Stop)?;
     let Recording {
         capture,
+        mut midi,
         started_at,
         punch_in,
         punch_out,
@@ -412,46 +450,73 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
         rolls_before,
         ..
     } = recording;
-    let (planes, first_us) = match capture {
-        Capture::Manual {
-            mut blocks,
-            mut planes,
-            mut first_us,
-        } => {
-            steps::append_blocks(&mut blocks, &mut planes, &mut first_us);
-            (planes, first_us)
-        }
-        Capture::Threaded(collector) => {
-            let (planes, blocks, first_us) = collector.finish()?;
-            #[cfg(feature = "devices")]
-            if let Some(input) = session.input.as_mut() {
-                input.end_recording(blocks);
-            }
-            #[cfg(not(feature = "devices"))]
-            drop(blocks);
-            (planes, first_us)
+    while let Some(message) = session.engine.captured_midi() {
+        midi.push(message);
+    }
+    // The audio side, when an audio track was armed and something came in.
+    let whole = match capture {
+        None => None,
+        Some(capture) => {
+            let (planes, first_us) = match capture {
+                Capture::Manual {
+                    mut blocks,
+                    mut planes,
+                    mut first_us,
+                } => {
+                    steps::append_blocks(&mut blocks, &mut planes, &mut first_us);
+                    (planes, first_us)
+                }
+                Capture::Threaded(collector) => {
+                    let (planes, blocks, first_us) = collector.finish()?;
+                    #[cfg(feature = "devices")]
+                    if let Some(input) = session.input.as_mut() {
+                        input.end_recording(blocks);
+                    }
+                    #[cfg(not(feature = "devices"))]
+                    drop(blocks);
+                    (planes, first_us)
+                }
+            };
+            // Frame 0 of the capture is where the transport began rolling, when the
+            // device clock can say so.
+            let lead = steps::capture_lead(
+                first_us,
+                session.engine.roll_start(),
+                rolls_before,
+                started_at,
+                session.memory.sample_rate(),
+            );
+            let planes = steps::align_planes(planes, lead);
+            let planes = steps::trim_planes(planes, started_at, punch_in, punch_out);
+            let audio = steps::finish_recording(planes);
+            (audio.frames() > 0).then(|| Arc::new(audio))
         }
     };
-    // Frame 0 of the capture is where the transport began rolling, when the
-    // device clock can say so.
-    let lead = steps::capture_lead(
-        first_us,
-        session.engine.roll_start(),
-        rolls_before,
-        started_at,
-        session.memory.sample_rate(),
-    );
-    let planes = steps::align_planes(planes, lead);
-    let planes = steps::trim_planes(planes, started_at, punch_in, punch_out);
-    let audio = steps::finish_recording(planes);
-    if audio.frames() == 0 {
-        return Ok(Vec::new());
-    }
-    let whole = Arc::new(audio);
     let rate = session.memory.sample_rate();
     session.history.begin_group("Record");
     let mut clips = Vec::with_capacity(tracks.len());
     for track in &tracks {
+        let kind = session
+            .memory
+            .track(*track)
+            .map(|t| t.kind)
+            .unwrap_or(TrackKind::Audio);
+        if kind == TrackKind::Midi {
+            let until = punch_out.unwrap_or(ended_at);
+            let Some(clip) = steps::midi_clip(session, *track, &midi, punch_in, until) else {
+                continue;
+            };
+            let id = clip.id();
+            if let Err(e) = session::structural(session, AddClip::new(*track, clip)) {
+                session.history.cancel_group(&mut session.memory)?;
+                return Err(e);
+            }
+            clips.push(id);
+            continue;
+        }
+        let Some(whole) = whole.as_ref() else {
+            continue;
+        };
         let (key, input) = match steps::audio_key(session, *track) {
             Ok(key) => (key, session.memory.track(*track)?.state.input),
             Err(e) => {
@@ -460,8 +525,8 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
             }
         };
         let audio = match input {
-            None => Arc::clone(&whole),
-            Some(input) => Arc::new(steps::select_input(&whole, input)),
+            None => Arc::clone(whole),
+            Some(input) => Arc::new(steps::select_input(whole, input)),
         };
         session.audio.insert_shared(key.clone(), Arc::clone(&audio));
         let id = session.memory.allocate_clip_id();
@@ -743,6 +808,94 @@ pub(crate) mod steps {
             .collect()
     }
 
+    /// The notes among captured MIDI inside `[from, until)`, as a clip
+    /// starting at `from` would hold them: beats from `from`, a note-on
+    /// closed by its note-off, a retrigger closing the one before, and
+    /// whatever is still down closed at `until`. Other messages are left
+    /// out.
+    pub(crate) fn notes_from(
+        midi: &[CapturedMidi],
+        from: TimePosition,
+        until: TimePosition,
+        tempo: &TempoMap,
+    ) -> Vec<MidiNote> {
+        let start_beat = tempo.samples_to_beat(from).beats();
+        let beat_at = |at: TimePosition| tempo.samples_to_beat(at).beats() - start_beat;
+        // (channel, note, onset beat, velocity)
+        let mut down: Vec<(u8, u8, f64, u8)> = Vec::new();
+        let mut notes = Vec::new();
+        let mut close = |down: &mut Vec<(u8, u8, f64, u8)>, channel: u8, note: u8, at: f64| {
+            if let Some(i) = down.iter().position(|d| d.0 == channel && d.1 == note) {
+                let (_, _, on, velocity) = down.remove(i);
+                notes.push(MidiNote {
+                    beat: on,
+                    length: (at - on).max(1.0 / 960.0),
+                    note,
+                    velocity,
+                    channel,
+                });
+            }
+        };
+        let mut sorted: Vec<&CapturedMidi> = midi
+            .iter()
+            .filter(|m| m.position >= from && m.position < until)
+            .collect();
+        sorted.sort_by_key(|m| m.position);
+        for m in sorted {
+            let at = beat_at(m.position);
+            match m.message {
+                MidiMessage::NoteOn {
+                    channel,
+                    note,
+                    velocity,
+                } => {
+                    close(&mut down, channel.index(), note, at);
+                    down.push((channel.index(), note, at, velocity));
+                }
+                MidiMessage::NoteOff { channel, note, .. } => {
+                    close(&mut down, channel.index(), note, at);
+                }
+                _ => {}
+            }
+        }
+        let end = beat_at(until);
+        for (channel, note, on, velocity) in down {
+            notes.push(MidiNote {
+                beat: on,
+                length: (end - on).max(1.0 / 960.0),
+                note,
+                velocity,
+                channel,
+            });
+        }
+        notes.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        notes
+    }
+
+    /// The MIDI clip a recording leaves on `track`: the notes captured
+    /// between `from` and `until`, named after the track. `None` when no
+    /// note arrived.
+    pub(crate) fn midi_clip(
+        session: &mut Session,
+        track: TrackId,
+        midi: &[CapturedMidi],
+        from: TimePosition,
+        until: TimePosition,
+    ) -> Option<Clip> {
+        let notes = notes_from(midi, from, until, session.memory.tempo_map());
+        let length = TimeDuration::from_samples(until.samples() - from.samples());
+        if notes.is_empty() || length.samples() <= 0 {
+            return None;
+        }
+        let name = session
+            .memory
+            .track(track)
+            .map(|t| t.name.clone())
+            .unwrap_or_else(|_| "midi".into());
+        let id = session.memory.allocate_clip_id();
+        Clip::with_id(id, name, from, length, ClipSource::Midi { notes }).ok()
+    }
+
     /// Turns collected planes into one buffer. Empty planes give a buffer
     /// with no frames.
     pub(crate) fn finish_recording(planes: Vec<Vec<f32>>) -> PlanarBuffer {
@@ -982,10 +1135,10 @@ mod tests {
     #[test]
     fn errors_are_explicit() {
         let mut session = session::create(session::scratch("rec"), R, 64).unwrap();
-        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
+        let bus = track::add(&mut session, "bus", TrackKind::Bus).unwrap();
         assert!(
-            track::arm(&mut session, keys, true).is_err(),
-            "MIDI tracks monitor, they do not record audio"
+            track::arm(&mut session, bus, true).is_err(),
+            "buses are not armed"
         );
         assert!(
             matches!(stop(&mut session), Err(SuperbError::Message(_))),
@@ -1039,7 +1192,7 @@ mod tests {
         // counts as a drop, so the accounting below must balance exactly.)
         let (mut mic, blocks) = capture_queue(1, 64, 64).unwrap();
         let collector = steps::spawn_collector(blocks, 1).unwrap();
-        begin(&mut session, Capture::Threaded(collector), 1).unwrap();
+        begin(&mut session, Some(Capture::Threaded(collector)), 1).unwrap();
         let mut block = PlanarBuffer::new(1, 64);
         block.fill(0.5);
         for i in 0..200u64 {
@@ -1398,5 +1551,62 @@ mod tests {
             align_planes(planes, -2),
             vec![vec![0.0, 0.0, 1.0, 2.0, 3.0, 4.0]]
         );
+    }
+
+    #[test]
+    fn a_midi_take_becomes_a_clip_on_the_armed_midi_track() {
+        let mut session = session::create(session::scratch("midi-rec"), R, 64).unwrap();
+        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
+        let bus = track::add(&mut session, "bus", TrackKind::Bus).unwrap();
+        assert!(track::arm(&mut session, bus, true).is_err());
+        track::arm(&mut session, keys, true).unwrap();
+        transport::start(&mut session).unwrap();
+        session::steps::render_blocks(&mut session, 10).unwrap(); // the playhead at 640
+        let (_mic, blocks) = capture_queue(1, 64, 4).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            session.recording.as_ref().unwrap().channels(),
+            0,
+            "no audio track armed, no audio captured"
+        );
+        crate::midi::play_note(&mut session, 0, 60, 100).unwrap();
+        session::steps::render_blocks(&mut session, 10).unwrap();
+        crate::midi::release_note(&mut session, 0, 60).unwrap();
+        session::steps::render_blocks(&mut session, 10).unwrap();
+        crate::midi::play_note(&mut session, 0, 64, 90).unwrap(); // left down
+        session::steps::render_blocks(&mut session, 5).unwrap();
+        assert_eq!(session.recording.as_ref().unwrap().midi_messages(), 3);
+
+        let clips = stop(&mut session).unwrap();
+        assert_eq!(clips.len(), 1);
+        assert_eq!(session.memory.clip_track(clips[0]).unwrap(), keys);
+        let clip = session.memory.clip(clips[0]).unwrap();
+        assert_eq!(clip.name, "keys");
+        assert_eq!(clip.start(), TimePosition::from_samples(640));
+        assert_eq!(clip.length(), TimeDuration::from_samples(1_600));
+        let ClipSource::Midi { notes } = &clip.source else {
+            panic!("a MIDI clip");
+        };
+        assert_eq!(notes.len(), 2);
+        let beat = 1.0 / 24_000.0; // one sample, in beats, at 120 bpm and 48 kHz
+        assert!(notes[0].beat.abs() < 1e-9);
+        assert!((notes[0].length - 640.0 * beat).abs() < 1e-9);
+        assert_eq!((notes[0].note, notes[0].velocity), (60, 100));
+        assert!((notes[1].beat - 1_280.0 * beat).abs() < 1e-9);
+        assert!(
+            (notes[1].length - 320.0 * beat).abs() < 1e-9,
+            "closed where the recording stopped"
+        );
+        assert_eq!(notes[1].note, 64);
+        assert_eq!(session.history.undo_label(), Some("Record"));
+        assert!(session::undo(&mut session).unwrap());
+        assert!(session.memory.clip(clips[0]).is_err());
     }
 }

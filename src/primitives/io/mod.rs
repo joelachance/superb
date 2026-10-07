@@ -65,9 +65,9 @@ pub mod offline;
 pub mod wav;
 
 pub use engine::{
-    AudioThread, BlockStart, Engine, EngineCommand, EngineHandle, EngineStats, LiveInput,
-    MidiTiming, RollStart, COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY,
-    RETIRED_INPUT_CAPACITY, RETIRED_MAP_CAPACITY, SWAP_CAPACITY,
+    AudioThread, BlockStart, CapturedMidi, Engine, EngineCommand, EngineHandle, EngineStats,
+    LiveInput, MidiTiming, RollStart, COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY,
+    MIDI_CAPTURE_CAPACITY, RETIRED_INPUT_CAPACITY, RETIRED_MAP_CAPACITY, SWAP_CAPACITY,
 };
 
 /// Whether this build includes the `files` module.

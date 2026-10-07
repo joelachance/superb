@@ -43,7 +43,11 @@ resampling and bounce/export helpers.
   `Engine::set_live_input` (or `EngineCommand::LiveInput(Some(..))` on a
   live engine, `None` to detach; a replaced or detached input comes back
   through `reclaim`). `EngineCommand::TempoMap` replaces the transport's
-  tempo map the same way, the old map coming back through `reclaim`. Before each block
+  tempo map the same way, the old map coming back through `reclaim`.
+  `EngineCommand::CaptureMidi(on)` stamps incoming MIDI with the transport
+  position while it records and queues it as `CapturedMidi`
+  (`MIDI_CAPTURE_CAPACITY` deep) for `EngineHandle::captured_midi` to
+  drain. Before each block
   the engine pulls the queued blocks into a ring four blocks deep and hands
   the frames to every node as `ProcessContext::input`; `LiveInputNode`
   plays chosen channels of it on a strip. Overruns drop the oldest frames,
