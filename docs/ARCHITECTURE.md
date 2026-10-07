@@ -188,8 +188,7 @@ up. When a device drives it, the audio thread publishes where and when
 the transport began rolling on the device clock (`RollStart`, at the
 block's playback instant); captured blocks carry their capture instant, so
 a recording that lines its first frame up with the roll start has taken
-the buffers in and out back without a setting. What the clock cannot know
-is measured once by `record::calibrate` and kept with the session.
+the buffers in and out back without a setting.
 
 **Automation.** Envelope edits allocate and belong on the control thread.
 The read path evaluates into atomics or a caller's scratch buffer without

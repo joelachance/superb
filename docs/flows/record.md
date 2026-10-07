@@ -21,10 +21,7 @@ what you play arrives late, by the buffers in and out; the recording lines
 its first frame up with where the transport began rolling by comparing the
 input's capture instants with the output's playback instants on the device
 clock (`RollStart`), so those buffers are taken back by themselves and the
-capture's own start never shifts the take. What the clock cannot know
-(converters, a USB hop) `calibrate` measures once with a loopback cable
-(feature `devices`) and keeps as the session's recording offset. Nothing
-to set by hand.
+capture's own start never shifts the take. Nothing to set by hand.
 
 ## Verbs
 
@@ -34,7 +31,6 @@ to set by hand.
 | `punch_in(session, Option<TimePosition>)` / `punch_out(session, Option<TimePosition>)` | where the next recording drops in and out; saved; edits that coalesce |
 | `collect(session) -> frames` | move waiting blocks into a queue recording (`session::steps::render_blocks` does this); nothing to do for a device recording |
 | `stop(session) -> Vec<ClipId>` | stop the transport, finish the recording, write the files, place clips ("Record") |
-| `calibrate(session) -> TimeDuration` (feature `devices`) | with an output looped back into the input, `devices::output` playing and `devices::input` open: play one click, record it, keep how late it still came back as the session's recording offset; about two seconds; a few samples on a good interface |
 
 `Source` says where the audio comes from:
 
@@ -86,8 +82,7 @@ recording queue (64 blocks) and a collector thread →
 `transport::playhead` for where it started. `punch_in` / `punch_out`:
 `SetPunch` through `session::edit`. `stop`: `EngineHandle::send(SetPunch` cleared`)` → `EngineHandle::send(Stop)`
 → drain the queue or finish the thread → frame 0 lined up with the
-`RollStart` when the device clock gives one → the take moved earlier by
-the recording offset `calibrate` found → drop what came before the punch-in and after the
+`RollStart` when the device clock gives one → drop what came before the punch-in and after the
 punch-out → one buffer from the planes → per track a file name nothing uses yet and the channels its
 `Input` selects (the whole capture, shared, when none is set) →
 `wav::write` into the session folder → `AudioCache::insert_shared` →
@@ -120,7 +115,7 @@ rebuild.
 * Lining frame 0 up with the roll start needs a device clock on both
   sides: blocks stamped by the input stream and the audio thread driven
   by `devices::output`. Otherwise frame 0 is where the recording started.
-  The recording offset a calibration kept applies either way, to
-  `Source::Queue` too; it is one number per session, so calibrate again
-  after changing the interface.
+  What the clock cannot know (converter and USB latency the driver does
+  not report) is not taken back; on a good interface that is a few
+  samples.
 * Loop recording is not there yet.

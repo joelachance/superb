@@ -142,9 +142,7 @@ fn main() -> Result<()> {
         } else {
             track::arm(&mut session, vox, true)?;
             // Through a device the take is lined up with the transport by the
-            // stream clock; `record::calibrate` (an output looped into the
-            // input, `devices::output` playing) measures what the clock
-            // cannot know and keeps it with the session.
+            // stream clock, so it lands where it was played.
             // The default input; a thread gathers the audio.
             record::start(&mut session, record::Source::Device(None))?;
             std::thread::sleep(std::time::Duration::from_millis(500));

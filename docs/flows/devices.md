@@ -57,7 +57,4 @@ reads as its `LiveInput`, one a recording drains while it runs) →
 * The input's channel count comes from the tracks' inputs when it opens;
   to widen it, close and open it again.
 * A device take is lined up with the transport by the stream clock, so
-  the buffers in and out never shift it. `record::calibrate` measures what
-  the clock cannot know through a loopback (an output into an input) and
-  keeps it as the session's recording offset. It needs `output` playing
-  and `input` open.
+  the buffers in and out never shift it.

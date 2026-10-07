@@ -253,10 +253,6 @@ pub struct MemorySnapshot {
     /// The metronome (absent in older files: off, unity, no count-in).
     #[serde(default)]
     pub metronome: MetronomeSnapshot,
-    /// Samples a recording is placed earlier than it arrived (absent in
-    /// older files: none).
-    #[serde(default)]
-    pub recording_offset: i64,
     /// Tracks in order.
     pub tracks: Vec<TrackSnapshot>,
     /// Markers in position order.
@@ -393,7 +389,6 @@ impl Memory {
                 level_db: self.metronome().level_db,
                 count_in: self.metronome().count_in,
             },
-            recording_offset: self.recording_offset().samples(),
             loop_range: self
                 .loop_range()
                 .map(|r| (r.start().samples(), r.end().samples())),
@@ -452,7 +447,6 @@ impl Memory {
             level_db: snap.metronome.level_db,
             count_in: snap.metronome.count_in,
         };
-        memory.set_recording_offset(TimeDuration::from_samples(snap.recording_offset));
         if let Some((start, end)) = snap.loop_range {
             memory.set_loop_range(Some(LoopRange::new(
                 TimePosition::from_samples(start),
