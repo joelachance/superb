@@ -10,7 +10,9 @@ use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::Path;
 
+use symphonia::core::audio::sample::SampleFormat;
 use symphonia::core::audio::GenericAudioBufferRef;
+use symphonia::core::codecs::audio::well_known as codec;
 use symphonia::core::codecs::audio::AudioDecoderOptions;
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::errors::Error as SymError;
@@ -154,15 +156,92 @@ fn decode_source<'s>(source: Box<dyn MediaSource + 's>, hint: &Hint) -> Result<A
         rate_hz.ok_or_else(|| SuperbError::Message("audio file declares no sample rate".into()))?;
     let sample_rate = SampleRate::new(hz)?;
     if planes.is_empty() {
-        let channels = params.channels.map(|c| c.count()).unwrap_or(1).max(1);
+        let channels = params
+            .channels
+            .as_ref()
+            .map(|c| c.count())
+            .unwrap_or(1)
+            .max(1);
         return Ok(AudioFile {
             buffer: PlanarBuffer::new(channels, 0),
             sample_rate,
+            bits_per_sample: bits_in(&params),
         });
     }
     let refs: Vec<&[f32]> = planes.iter().map(|p| p.as_slice()).collect();
     Ok(AudioFile {
         buffer: PlanarBuffer::from_planes(&refs)?,
         sample_rate,
+        bits_per_sample: bits_in(&params),
     })
+}
+
+/// Bits per sample a codec's sample format implies, when it gives no count
+/// (float WAVs say F32 and nothing else).
+fn bits_of(format: SampleFormat) -> u32 {
+    match format {
+        SampleFormat::U8 | SampleFormat::S8 => 8,
+        SampleFormat::U16 | SampleFormat::S16 => 16,
+        SampleFormat::U24 | SampleFormat::S24 => 24,
+        SampleFormat::U32 | SampleFormat::S32 | SampleFormat::F32 => 32,
+        SampleFormat::F64 => 64,
+    }
+}
+
+/// The depth a file's samples were stored at: what the codec parameters
+/// say, or what the sample format or the PCM codec itself implies (a float
+/// WAV says only that it is PCM_F32). `None` for lossy codecs.
+fn bits_in(params: &symphonia::core::codecs::audio::AudioCodecParameters) -> Option<u32> {
+    params
+        .bits_per_sample
+        .or(params.bits_per_coded_sample)
+        .or_else(|| params.sample_format.map(bits_of))
+        .or_else(|| bits_of_codec(params.codec))
+}
+
+/// Bits per sample a PCM codec id implies.
+fn bits_of_codec(id: symphonia::core::codecs::audio::AudioCodecId) -> Option<u32> {
+    use codec::*;
+    let bits = match id {
+        CODEC_ID_PCM_S8
+        | CODEC_ID_PCM_S8_PLANAR
+        | CODEC_ID_PCM_U8
+        | CODEC_ID_PCM_U8_PLANAR
+        | CODEC_ID_PCM_ALAW
+        | CODEC_ID_PCM_MULAW => 8,
+        CODEC_ID_PCM_S16LE
+        | CODEC_ID_PCM_S16LE_PLANAR
+        | CODEC_ID_PCM_S16BE
+        | CODEC_ID_PCM_S16BE_PLANAR
+        | CODEC_ID_PCM_U16LE
+        | CODEC_ID_PCM_U16LE_PLANAR
+        | CODEC_ID_PCM_U16BE
+        | CODEC_ID_PCM_U16BE_PLANAR => 16,
+        CODEC_ID_PCM_S24LE
+        | CODEC_ID_PCM_S24LE_PLANAR
+        | CODEC_ID_PCM_S24BE
+        | CODEC_ID_PCM_S24BE_PLANAR
+        | CODEC_ID_PCM_U24LE
+        | CODEC_ID_PCM_U24LE_PLANAR
+        | CODEC_ID_PCM_U24BE
+        | CODEC_ID_PCM_U24BE_PLANAR => 24,
+        CODEC_ID_PCM_S32LE
+        | CODEC_ID_PCM_S32LE_PLANAR
+        | CODEC_ID_PCM_S32BE
+        | CODEC_ID_PCM_S32BE_PLANAR
+        | CODEC_ID_PCM_U32LE
+        | CODEC_ID_PCM_U32LE_PLANAR
+        | CODEC_ID_PCM_U32BE
+        | CODEC_ID_PCM_U32BE_PLANAR
+        | CODEC_ID_PCM_F32LE
+        | CODEC_ID_PCM_F32LE_PLANAR
+        | CODEC_ID_PCM_F32BE
+        | CODEC_ID_PCM_F32BE_PLANAR => 32,
+        CODEC_ID_PCM_F64LE
+        | CODEC_ID_PCM_F64LE_PLANAR
+        | CODEC_ID_PCM_F64BE
+        | CODEC_ID_PCM_F64BE_PLANAR => 64,
+        _ => return None,
+    };
+    Some(bits)
 }

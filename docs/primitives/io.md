@@ -65,7 +65,9 @@ resampling and bounce/export helpers.
   `InputStream` (`open`, `open_timed`, `open_to_queue`), `run_engine` /
   `run_capture`, `capture_queue` (recycle SPSC of planar `CaptureBlock`s),
   built on `cpal` 0.18 (Apache-2.0).
-* `files` (feature `files`) — `AudioFile { buffer, sample_rate }`,
+* `files` (feature `files`) — `AudioFile { buffer, sample_rate, bits_per_sample }`
+  from WAV, AIFF, FLAC, ALAC, MP3, AAC (MP4/M4A), Ogg Vorbis, CAF and
+  Matroska;
   `decode`/`decode_from`/`decode_bytes`, `decode_at_rate`, `resample`,
   `resampled_frames`, `bounce`, `bounce_wav`, `export_wav`. See "File I/O"
   below. `superb::primitives::io::FILES_FEATURE` reports whether the build has it.

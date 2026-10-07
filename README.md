@@ -110,7 +110,7 @@ default build and test run need nothing but Rust.
 | `devices` | audio input and output streams through cpal |
 | `midi-io` | hardware MIDI input through midir |
 | `hardware` | both of the above |
-| `files` | audio file decoding (WAV, FLAC), resampling and bounce helpers |
+| `files` | audio file decoding (WAV, AIFF, FLAC, ALAC, MP3, AAC in MP4/M4A, Ogg Vorbis, CAF, Matroska), resampling and bounce helpers |
 
 On Debian or Ubuntu the hardware features need `pkg-config libasound2-dev`.
 

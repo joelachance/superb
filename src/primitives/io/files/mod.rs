@@ -63,13 +63,16 @@ pub use bounce::{bounce, bounce_wav, export_wav};
 pub use resample::{resample, resampled_frames};
 
 /// A fully decoded audio file: planar `f32` samples plus the rate they were
-/// recorded at.
+/// recorded at and, when the format has one, the depth they were stored at.
 #[derive(Clone, Debug)]
 pub struct AudioFile {
     /// The samples, one plane per channel, in file channel order.
     pub buffer: PlanarBuffer,
     /// The sample rate declared by the container / codec.
     pub sample_rate: SampleRate,
+    /// Bits per sample in the file when it has a fixed depth (16, 24, 32);
+    /// `None` for lossy codecs, which have none.
+    pub bits_per_sample: Option<u32>,
 }
 
 impl AudioFile {
@@ -97,6 +100,7 @@ impl AudioFile {
         Ok(AudioFile {
             buffer: resample(&self.buffer, self.sample_rate, target)?,
             sample_rate: target,
+            bits_per_sample: self.bits_per_sample,
         })
     }
 

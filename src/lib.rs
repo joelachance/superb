@@ -167,6 +167,7 @@ mod tests {
         let file = AudioFile {
             buffer: PlanarBuffer::new(1, 48),
             sample_rate: SampleRate::HZ_48K,
+            bits_per_sample: Some(32),
         };
         let cd = file.resampled_to(SampleRate::CD).unwrap();
         assert_eq!(

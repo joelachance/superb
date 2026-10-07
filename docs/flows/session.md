@@ -17,7 +17,7 @@ moment it is created: `memory.json` beside an `audio/` folder of WAV files.
 |---|---|---|
 | `create(folder, sample_rate, block_size) -> Session` | a new session in `folder`, created now with its `audio/` folder and `memory.json`, named after the folder | — |
 | `open(folder, block_size)` / `save(session)` | the folder in and out: `memory.json` plus the WAV files clips refer to; `save` also writes any audio a clip refers to that is not on disk yet and remembers where the playhead is, so `open` starts there; `session.history.is_clean()` says whether anything changed since (state changes count) | — |
-| `import_audio(session, file) -> key` | a file into the session: decoded and resampled to the session's rate with `files` (a WAV at the session's rate without), written as `audio/<name>.wav` (`<name> 2.wav` if taken) and kept in memory; `clip::add` places it | — (the placing is the edit) |
+| `import_audio(session, file) -> Imported` | a file into the session: with `files`, WAV, AIFF, FLAC, ALAC, MP3, AAC (MP4/M4A), Ogg Vorbis, CAF and Matroska, resampled to the session's rate when they differ (a WAV at the session's rate without `files`); written as 32-bit float `audio/<name>.wav` (`<name> 2.wav` if taken) and kept in memory; `Imported` says the key, the file's rate and bit depth, channels, frames and whether it was resampled; `clip::add` places it | — (the placing is the edit) |
 | `state_file(session, Option<PathBuf>)` | where state is kept: read now if the file exists, rewritten after every state change and every `save`, playhead included; `None` stops writing. Until set, state is not saved | — |
 | `set_tempo(session, bpm)` | initial tempo of the tempo map; rebuilds, which hands the engine the map | one |
 | `tempo_change(session, beat, Option<bpm>)` | add or remove a tempo change at a beat; rebuilds | one per beat (coalesces) |
@@ -111,3 +111,12 @@ The crate-private helpers `edit`, `structural`, `changed_structure` and
   file, the first state change that will not be saved, a save that left
   state out. Applications pick the logger (`env_logger`, say); without
   one the lines go nowhere.
+* An audio file is described by its sample rate (samples per second per
+  channel: 44 100, 48 000, 96 000 Hz), its bit depth (how many bits each
+  sample is stored in: 16 or 24 for integer PCM, 32 for float; lossy codecs
+  such as MP3 and AAC have none), its channel count, and the container and
+  codec it uses (WAV and AIFF hold PCM; FLAC and ALAC compress without
+  loss; MP3, AAC and Vorbis lose detail). A session has one sample rate, so
+  `import_audio` resamples a file at another rate once, on the way in, and
+  stores every file as 32-bit float, which holds 24-bit audio exactly. The
+  returned `Imported` reports all of this, and the log notes a resample.

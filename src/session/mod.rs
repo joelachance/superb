@@ -266,40 +266,115 @@ pub fn save(session: &mut Session) -> Result<()> {
     write_state(session)
 }
 
-/// Brings an audio file into the session: read (and, with the `files`
-/// feature, decoded from any format and resampled to the session's rate;
-/// without it, a WAV at the session's rate), written into the folder as
-/// `audio/<name>.wav` (`<name> 2.wav` when that is taken) and kept in
-/// memory. Returns the key a clip refers to it by; `clip::add` places it.
+/// What [`import_audio`] brought in: the key a clip refers to the audio
+/// by, and what the file was, so an application can say "44.1 kHz,
+/// 24-bit, stereo, resampled". Whatever the file was, the session stores
+/// it as 32-bit float at its own rate.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Imported {
+    /// `audio/<name>.wav`: the key a clip refers to the audio by.
+    pub key: PathBuf,
+    /// The file's own sample rate.
+    pub source_rate: SampleRate,
+    /// The file's own bits per sample when it has a fixed depth (16, 24,
+    /// 32); `None` for lossy codecs such as MP3 and AAC, which have none.
+    pub source_bits: Option<u32>,
+    /// Channels.
+    pub channels: usize,
+    /// Frames as stored, at the session's rate.
+    pub frames: usize,
+    /// The session's rate, which the stored audio is at.
+    pub stored_rate: SampleRate,
+    /// Whether the audio was resampled from `source_rate` to `stored_rate`.
+    pub resampled: bool,
+}
+
+impl core::fmt::Display for Imported {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{}: {} Hz", self.key.display(), self.source_rate.hz())?;
+        match self.source_bits {
+            Some(bits) => write!(f, ", {bits}-bit")?,
+            None => write!(f, ", lossy")?,
+        }
+        write!(f, ", {} channel(s)", self.channels)?;
+        if self.resampled {
+            write!(f, ", resampled to {} Hz", self.stored_rate.hz())?;
+        }
+        write!(f, ", stored as 32-bit float")
+    }
+}
+
+/// Brings an audio file into the session and says what it was. With the
+/// `files` feature any format symphonia decodes is read (WAV, AIFF, FLAC,
+/// ALAC, MP3, AAC in MP4 or M4A, Ogg Vorbis, CAF, Matroska) and resampled
+/// to the session's rate when it differs; without it, a WAV already at the
+/// session's rate. The audio is written into the folder as 32-bit float at
+/// the session's rate, `audio/<name>.wav` (`<name> 2.wav` when that is
+/// taken), and kept in memory; `clip::add` places it by the returned key.
 /// Not an edit: the file joins the folder and stays, placing it is the
 /// undo step.
 ///
-/// Made of: `io::files::decode_at_rate` or `io::wav::read` →
-/// `folder::free_key` → `folder::write_audio` → `AudioCache::insert`.
-pub fn import_audio(session: &mut Session, file: impl AsRef<Path>) -> Result<PathBuf> {
+/// Made of: `io::files::decode` → `AudioFile::resampled_to` (or
+/// `io::wav::read_with_format`) → `folder::free_key` → `folder::write_audio`
+/// → `AudioCache::insert`.
+pub fn import_audio(session: &mut Session, file: impl AsRef<Path>) -> Result<Imported> {
     let file = file.as_ref();
     let rate = session.memory.sample_rate();
-    let audio = read_audio(file, rate)?;
+    let (audio, source_rate, source_bits) = read_audio(file, rate)?;
+    let resampled = source_rate != rate;
+    if resampled {
+        log::info!(
+            "{}: resampled from {} Hz to the session's {} Hz",
+            file.display(),
+            source_rate.hz(),
+            rate.hz()
+        );
+    }
     let stem = file
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "audio".into());
     let key = folder::free_key(session, &stem);
     folder::write_audio(&session.folder, &key, &audio, rate)?;
+    let (channels, frames) = (audio.channels(), audio.frames());
     session.audio.insert(key.clone(), audio);
-    Ok(key)
+    Ok(Imported {
+        key,
+        source_rate,
+        source_bits,
+        channels,
+        frames,
+        stored_rate: rate,
+        resampled,
+    })
 }
 
-/// The audio of a file at the session's rate: any format, resampled.
+/// A file's audio at the session's rate, with the rate and depth it had.
 #[cfg(feature = "files")]
-fn read_audio(file: &Path, rate: SampleRate) -> Result<crate::primitives::buffers::PlanarBuffer> {
-    Ok(crate::primitives::io::files::decode_at_rate(file, rate)?.buffer)
+fn read_audio(
+    file: &Path,
+    rate: SampleRate,
+) -> Result<(
+    crate::primitives::buffers::PlanarBuffer,
+    SampleRate,
+    Option<u32>,
+)> {
+    let decoded = crate::primitives::io::files::decode(file)?;
+    let (source_rate, bits) = (decoded.sample_rate, decoded.bits_per_sample);
+    Ok((decoded.resampled_to(rate)?.buffer, source_rate, bits))
 }
 
-/// The audio of a WAV file already at the session's rate.
+/// A WAV file's audio, which has to be at the session's rate already.
 #[cfg(not(feature = "files"))]
-fn read_audio(file: &Path, rate: SampleRate) -> Result<crate::primitives::buffers::PlanarBuffer> {
-    let (audio, file_rate) = crate::primitives::io::wav::read(file)?;
+fn read_audio(
+    file: &Path,
+    rate: SampleRate,
+) -> Result<(
+    crate::primitives::buffers::PlanarBuffer,
+    SampleRate,
+    Option<u32>,
+)> {
+    let (audio, file_rate, format) = crate::primitives::io::wav::read_with_format(file)?;
     if file_rate != rate {
         return Err(SuperbError::Message(format!(
             "{} is at {} Hz and the session at {} Hz; the `files` feature resamples and reads other formats",
@@ -308,7 +383,7 @@ fn read_audio(file: &Path, rate: SampleRate) -> Result<crate::primitives::buffer
             rate.hz()
         )));
     }
-    Ok(audio)
+    Ok((audio, file_rate, Some(format.bits())))
 }
 
 /// Says where state is kept, or that it is not. State (a track's mute,
@@ -835,8 +910,14 @@ mod tests {
         )
         .unwrap();
         let steps = session.history.undo_len();
-        let key = import_audio(&mut session, &file).unwrap();
+        let imported = import_audio(&mut session, &file).unwrap();
+        let key = imported.key.clone();
         assert_eq!(key, PathBuf::from("audio/tone.wav"));
+        assert_eq!(imported.source_rate, R);
+        assert_eq!(imported.source_bits, Some(32));
+        assert!(!imported.resampled);
+        assert_eq!((imported.channels, imported.frames), (1, 4_800));
+        assert!(imported.to_string().contains("32-bit"), "{imported}");
         assert!(
             folder.join(&key).is_file(),
             "copied into the session folder"
@@ -850,7 +931,7 @@ mod tests {
             TimeDuration::from_samples(4_800)
         );
         let again = import_audio(&mut session, &file).unwrap();
-        assert_eq!(again, PathBuf::from("audio/tone 2.wav"), "a free name");
+        assert_eq!(again.key, PathBuf::from("audio/tone 2.wav"), "a free name");
         assert!(import_audio(&mut session, folder.join("missing.wav")).is_err());
 
         // A file at another rate: resampled with `files`, refused without.
@@ -864,7 +945,12 @@ mod tests {
         .unwrap();
         let slow = import_audio(&mut session, &other);
         if cfg!(feature = "files") {
-            let frames = session.audio.get(&slow.unwrap()).unwrap().frames();
+            let slow = slow.unwrap();
+            assert!(
+                slow.resampled && slow.source_rate == SampleRate::CD,
+                "{slow}"
+            );
+            let frames = session.audio.get(&slow.key).unwrap().frames();
             assert!(
                 (frames as i64 - 4_800 * 48_000 / 44_100).abs() <= 2,
                 "{frames}"

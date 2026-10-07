@@ -23,6 +23,14 @@ pub enum WavFormat {
 }
 
 impl WavFormat {
+    /// Bits per sample: 16 or 32.
+    pub fn bits(self) -> u32 {
+        match self {
+            WavFormat::Pcm16 => 16,
+            WavFormat::Float32 => 32,
+        }
+    }
+
     fn bytes_per_sample(self) -> u16 {
         match self {
             Self::Pcm16 => 2,
@@ -104,12 +112,22 @@ pub fn write_to(
 
 /// Reads a WAV file written by [`write()`] (or any plain PCM16 / float32 WAV).
 pub fn read(path: impl AsRef<Path>) -> Result<(PlanarBuffer, SampleRate)> {
+    read_with_format(path).map(|(audio, rate, _)| (audio, rate))
+}
+
+/// Like [`read`], also saying which format the file was stored in.
+pub fn read_with_format(path: impl AsRef<Path>) -> Result<(PlanarBuffer, SampleRate, WavFormat)> {
     let file = File::open(path).map_err(io_err)?;
-    read_from(&mut BufReader::new(file))
+    read_from_with_format(&mut BufReader::new(file))
 }
 
 /// Reads a WAV stream.
 pub fn read_from(r: &mut impl Read) -> Result<(PlanarBuffer, SampleRate)> {
+    read_from_with_format(r).map(|(audio, rate, _)| (audio, rate))
+}
+
+/// Like [`read_from`], also saying which format the stream was stored in.
+pub fn read_from_with_format(r: &mut impl Read) -> Result<(PlanarBuffer, SampleRate, WavFormat)> {
     let mut bytes = Vec::new();
     r.read_to_end(&mut bytes).map_err(io_err)?;
     if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
@@ -179,7 +197,7 @@ pub fn read_from(r: &mut impl Read) -> Result<(PlanarBuffer, SampleRate)> {
             i += bps;
         }
     }
-    Ok((audio, sample_rate))
+    Ok((audio, sample_rate, format))
 }
 
 #[cfg(test)]

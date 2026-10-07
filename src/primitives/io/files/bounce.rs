@@ -31,6 +31,7 @@ pub fn bounce<P: BlockProcessor>(
     Ok(AudioFile {
         buffer,
         sample_rate,
+        bits_per_sample: Some(32),
     })
 }
 
