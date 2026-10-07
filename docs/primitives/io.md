@@ -34,7 +34,8 @@ resampling and bounce/export helpers.
   MIDI, position and state atomics, `reclaim` of retired graphs) and
   `AudioThread` is the audio side (`tick` renders one block, `tick_timed`
   one that starts at a `BlockStart` on the device clock; with `devices`,
-  `run_on_device` moves it into an output callback). When the transport
+  `run_on_device` moves it into an output callback and returns a
+  `LiveOutput`, whose `stop` hands the thread back). When the transport
   starts rolling under a device clock the audio thread publishes a
   `RollStart` (position and playback instant) that
   `EngineHandle::roll_start` reads, and a recording lines its first frame

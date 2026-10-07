@@ -62,8 +62,8 @@ pub(crate) fn output_config(session: &Session, device: Option<&str>) -> OutputCo
 ///
 /// Made of: an `OutputConfig` matching the session →
 /// [`session::steps::rebuild`](crate::session::steps::rebuild) when needed
-/// → `AudioThread::run_on_device`; the stream is kept in
-/// [`Session::output`] and stops when dropped.
+/// → `AudioThread::run_on_device`; the result is kept in
+/// [`Session::output`] until [`close_output`].
 #[cfg(feature = "devices")]
 pub fn output(session: &mut Session, device: Option<&str>) -> Result<()> {
     let config = output_config(session, device);
@@ -74,12 +74,35 @@ pub fn output(session: &mut Session, device: Option<&str>) -> Result<()> {
         SuperbError::Message("the audio thread is already running on a device stream".into())
     })?;
     match audio_thread.run_on_device(&config) {
-        Ok(stream) => {
-            session.output = Some(stream);
+        Ok(output) => {
+            session.output = Some(output);
             Ok(())
         }
         Err(e) => Err(e),
     }
+}
+
+/// Stops playing through the device and takes the audio thread back into
+/// the session: the engine, the transport's position, the live input and
+/// the MIDI ports stay as they were,
+/// [`session::steps::render_blocks`](crate::session::steps::render_blocks)
+/// works again, and [`output`] can start another device. Refused while a
+/// recording runs.
+///
+/// Made of: `LiveOutput::stop` → [`Session::audio_thread`].
+#[cfg(feature = "devices")]
+pub fn close_output(session: &mut Session) -> Result<()> {
+    if session.recording.is_some() {
+        return Err(SuperbError::Message(
+            "stop the recording before closing the output".into(),
+        ));
+    }
+    let output = session
+        .output
+        .take()
+        .ok_or_else(|| SuperbError::Message("no device output is open".into()))?;
+    session.audio_thread = Some(output.stop()?);
+    Ok(())
 }
 
 /// An input configuration at the session's sample rate and block size with
@@ -160,8 +183,8 @@ impl core::fmt::Debug for AudioInput {
 
 /// Opens the session's audio input (`None` for the default device, or a
 /// name from [`inputs`]): a stream at the session's sample rate and block
-/// size with as many channels as the audio tracks' inputs name, at least
-/// two. From then on a monitoring audio track
+/// size with every channel the device has, so any of them can feed a track
+/// (the tracks' inputs' width, at least two, when the device does not say). From then on a monitoring audio track
 /// ([`track::monitor`](crate::track::monitor)) hears it through its strip,
 /// and `record::start` with `Source::Device` records from it. One input
 /// per session, until [`close_input`].
@@ -177,7 +200,15 @@ pub fn input(session: &mut Session, device: Option<&str>) -> Result<()> {
             "the audio input is already open".into(),
         ));
     }
-    let channels = crate::record::steps::input_width(session).max(2);
+    let channels = inputs()?
+        .iter()
+        .find(|d| match device {
+            Some(name) => d.name == name,
+            None => d.is_default,
+        })
+        .map(|d| d.max_channels)
+        .filter(|c| *c > 0)
+        .unwrap_or_else(|| crate::record::steps::input_width(session).max(2));
     let config = input_config(session, device, channels);
     let max_frames = session.engine.max_frames();
     let (mut live, live_rx) = capture_queue(channels, max_frames, 8)?;
@@ -266,5 +297,8 @@ mod tests {
         // Enumeration must not panic on a machine without hardware.
         let _ = outputs();
         let _ = inputs();
+        let mut session = session;
+        assert!(close_output(&mut session).is_err(), "nothing to close");
+        assert!(session.audio_thread.is_some(), "the thread stays home");
     }
 }

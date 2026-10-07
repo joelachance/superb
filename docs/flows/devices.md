@@ -15,8 +15,9 @@ ports. Without them the module is empty and the session renders through
 |---|---|---|
 | `outputs()` / `inputs()` | `devices` | device listings with the default marked and the channel count when known |
 | `output(session, Option<name>)` | `devices` | play the session through that device (`None` = default): the audio thread moves into a stream matched to the session, and structural edits rebuild at once |
-| `input(session, Option<name>)` | `devices` | open the session's audio input on that device: as many channels as the audio tracks' inputs name, at least two; monitoring audio tracks hear it and `record::start(Source::Device)` records from it; one per session, kept in `session.input` |
-| `close_input(session)` | `devices` | close it; refused while a device recording runs. Open again to change the device or the channel count |
+| `input(session, Option<name>)` | `devices` | open the session's audio input on that device, with every channel it has; monitoring audio tracks hear it and `record::start(Source::Device)` records from it; one per session, kept in `session.input` |
+| `close_output(session)` | `devices` | stop playing through the device and take the audio thread back: engine, position, input and MIDI ports intact; `output` can then start another device. Refused while recording |
+| `close_input(session)` | `devices` | close it; refused while a device recording runs. Open again to change the device |
 | `midi_inputs()` | `midi-io` | MIDI input ports |
 
 ## Usage
@@ -54,7 +55,10 @@ reads as its `LiveInput`, one a recording drains while it runs) →
   mismatch.
 * Device indices and names are a snapshot; re-list after plugging
   something in.
-* The input's channel count comes from the tracks' inputs when it opens;
-  to widen it, close and open it again.
+* The input opens with every channel the device has, so a track can pick
+  any of them; when the device does not say how many, the tracks' inputs
+  decide, at least two.
+* Switching outputs is `close_output` then `output`: the engine keeps
+  playing position, live input and MIDI ports across the move.
 * A device take is lined up with the transport by the stream clock, so
   the buffers in and out never shift it.

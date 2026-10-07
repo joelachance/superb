@@ -81,9 +81,10 @@ pub struct Session {
     /// `steps::render_blocks` rebuilds and clears it. With a device attached
     /// the edit rebuilds at once instead.
     pub(crate) needs_rebuild: bool,
-    /// The running output stream, once started.
+    /// The device output, once `devices::output` started one: the audio
+    /// thread lives inside it until `devices::close_output`.
     #[cfg(feature = "devices")]
-    pub output: Option<crate::primitives::io::device::OutputStream>,
+    pub output: Option<crate::primitives::io::LiveOutput>,
     /// The audio input, once `devices::input` opened it: what monitoring
     /// audio tracks hear and device recordings capture.
     #[cfg(feature = "devices")]

@@ -44,6 +44,8 @@
 
 use std::sync::atomic::{AtomicI64, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
+#[cfg(feature = "devices")]
+use std::sync::Mutex;
 
 use super::CapturedMidi;
 use crate::primitives::buffers::PlanarBuffer;
@@ -517,9 +519,9 @@ impl AudioThread {
     /// with the device clock.
     #[cfg(feature = "devices")]
     pub fn run_on_device(
-        mut self,
+        self,
         config: &crate::primitives::io::device::OutputConfig,
-    ) -> Result<crate::primitives::io::device::OutputStream> {
+    ) -> Result<LiveOutput> {
         let (rate, frames) = self
             .engine
             .prepared_config()
@@ -530,15 +532,83 @@ impl AudioThread {
             });
         }
         let load = self.engine.load();
-        crate::primitives::io::device::OutputStream::open_with_meter(
+        let thread = Arc::new(Mutex::new(Some(self)));
+        let worker = Arc::clone(&thread);
+        let stream = crate::primitives::io::device::OutputStream::open_with_meter(
             config,
             move |block: &mut PlanarBuffer, start: BlockStart| {
-                if self.tick_timed(block, start).is_err() {
+                // Never waits: the control side holds this lock only to
+                // take the thread back, and then the stream is going away.
+                let Ok(mut slot) = worker.try_lock() else {
                     block.clear();
+                    return;
+                };
+                match slot.as_mut() {
+                    Some(thread) => {
+                        if thread.tick_timed(block, start).is_err() {
+                            block.clear();
+                        }
+                    }
+                    None => block.clear(),
                 }
             },
             load,
-        )
+        )?;
+        Ok(LiveOutput { stream, thread })
+    }
+}
+
+/// A device output stream with the audio thread inside it: what
+/// [`AudioThread::run_on_device`] returns. [`stop`](Self::stop) takes the
+/// thread back out, engine, transport, live input and MIDI ports intact,
+/// so a session can go on without a device or move to another one.
+#[cfg(feature = "devices")]
+pub struct LiveOutput {
+    stream: crate::primitives::io::device::OutputStream,
+    thread: Arc<Mutex<Option<AudioThread>>>,
+}
+
+#[cfg(feature = "devices")]
+impl LiveOutput {
+    /// Name of the device in use.
+    pub fn device_name(&self) -> &str {
+        self.stream.device_name()
+    }
+
+    /// The stream's sample rate.
+    pub fn sample_rate(&self) -> SampleRate {
+        self.stream.sample_rate()
+    }
+
+    /// The stream's channel count.
+    pub fn channels(&self) -> usize {
+        self.stream.channels()
+    }
+
+    /// The engine's DSP load meter.
+    pub fn load(&self) -> Arc<LoadMeter> {
+        self.stream.load()
+    }
+
+    /// Stops the stream and hands the audio thread back.
+    pub fn stop(self) -> Result<AudioThread> {
+        drop(self.stream);
+        let mut slot = self
+            .thread
+            .lock()
+            .map_err(|_| SuperbError::Message("the audio thread panicked on the device".into()))?;
+        slot.take()
+            .ok_or_else(|| SuperbError::Message("the audio thread is gone".into()))
+    }
+}
+
+#[cfg(feature = "devices")]
+impl core::fmt::Debug for LiveOutput {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LiveOutput")
+            .field("device", &self.stream.device_name())
+            .field("channels", &self.stream.channels())
+            .finish()
     }
 }
 

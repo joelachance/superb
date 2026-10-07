@@ -5,6 +5,8 @@ mod input;
 mod live;
 
 pub use input::LiveInput;
+#[cfg(feature = "devices")]
+pub use live::LiveOutput;
 pub use live::{
     AudioThread, BlockStart, EngineCommand, EngineHandle, RollStart, COMMAND_CAPACITY,
     MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY, MIDI_CAPTURE_CAPACITY, RETIRED_INPUT_CAPACITY,

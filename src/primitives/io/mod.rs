@@ -64,6 +64,8 @@ pub mod files;
 pub mod offline;
 pub mod wav;
 
+#[cfg(feature = "devices")]
+pub use engine::LiveOutput;
 pub use engine::{
     AudioThread, BlockStart, CapturedMidi, Engine, EngineCommand, EngineHandle, EngineStats,
     LiveInput, MidiTiming, RollStart, COMMAND_CAPACITY, MAX_EXTRA_MIDI_INPUTS, MIDI_CAPACITY,

@@ -187,7 +187,10 @@ audio thread. The swap queue holds two graphs; `session::steps::rebuild` reclaim
 retired graphs before building and, while the audio thread is still owned
 by the `Session`, applies the swap itself so repeated rebuilds never back
 up. While a device drives it, a burst of edits in one go waits for the
-queue to empty, one graph per block, instead of failing. When a device drives it, the audio thread publishes where and when
+queue to empty, one graph per block, instead of failing. The device
+stream holds the audio thread behind a lock it only ever tries, never
+waits on, so the control side can take the thread back (`LiveOutput::stop`)
+to go offline or move to another device without losing the engine. When a device drives it, the audio thread publishes where and when
 the transport began rolling on the device clock (`RollStart`, at the
 block's playback instant); captured blocks carry their capture instant, so
 a recording that lines its first frame up with the roll start has taken
