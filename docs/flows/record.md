@@ -49,6 +49,190 @@ capture's own start never shifts the take. Nothing to set by hand.
 Arming and the input a track records from are track state: `track::arm`,
 `track::input`.
 
+## Reference
+
+Every function of the `record` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+
+### `start`
+
+```rust
+pub fn start(session: &mut Session, source: Source) -> Result<()>
+```
+
+Starts recording from `source` onto every armed track. Recording begins at
+the playhead, or at the punch-in point when one is set ahead of it
+([`punch_in`]): the transport rolls from where it is and drops into record
+there. With a punch-out point ([`punch_out`]) it drops out of record there
+and keeps playing; [`stop`] finishes either way. A recording that starts at
+the playhead gets the metronome's count-in (`metronome::count_in`): the
+transport rolls that many bars early with the click sounding.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `source: Source` — `Source::Device(Some(name))` or `Source::Device(None)` for the default input (feature `devices`); `Source::Queue { blocks, channels }` for audio you push yourself
+
+**Returns** `Result<()>` — nothing; `session.recording` holds the recording until `stop`
+
+**Errors** a recording already running; no armed track; the device input cannot be opened; the command queue is full.
+
+**Undo** none: not an edit until `stop`.
+
+**Made of** [`track::arm`](crate::track::arm)ed tracks → for a device, `devices::input` if needed, its recording queue and a collector thread → [`session::steps::rebuild`] when needed → `EngineHandle::send(SetPunch)` → `EngineHandle::send(Record)`, or `Play` when the punch-in is ahead → [`transport::playhead`] for where it all started.
+
+**Example**
+
+```rust
+record::start(&mut session, record::Source::Device(None))?;   // the default input
+// ... play ...
+let clips = record::stop(&mut session)?;
+```
+
+### `punch_in`
+
+```rust
+pub fn punch_in(session: &mut Session, at: Option<TimePosition>) -> Result<()>
+```
+
+Sets or clears the punch-in point: where the next recording begins when it
+lies ahead of the playhead. Saved with the session; an edit that coalesces
+like a drag.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `at: Option<TimePosition>` — `Some(position)` where the next recording drops in; `None` clears it
+
+**Returns** `Result<()>` — nothing
+
+**Errors** never in practice.
+
+**Undo** one undo step per drag: calls within `Session::COALESCE_WINDOW` (half a second) merge.
+
+**Made of** `SetPunch` through `session::edit`.
+
+**Example**
+
+```rust
+record::punch_in(&mut session, Some(TimePosition::from_seconds(16.0, rate)))?;
+```
+
+### `punch_out`
+
+```rust
+pub fn punch_out(session: &mut Session, at: Option<TimePosition>) -> Result<()>
+```
+
+Sets or clears the punch-out point: where a recording drops out of record on
+its own and keeps playing. Saved with the session; an edit that coalesces
+like a drag.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `at: Option<TimePosition>` — `Some(position)` where the recording drops out; `None` clears it
+
+**Returns** `Result<()>` — nothing
+
+**Errors** never in practice.
+
+**Undo** one undo step per drag: calls within `Session::COALESCE_WINDOW` (half a second) merge.
+
+**Made of** `SetPunch` through `session::edit`.
+
+**Example**
+
+```rust
+record::punch_out(&mut session, Some(TimePosition::from_seconds(24.0, rate)))?;
+```
+
+### `collect`
+
+```rust
+pub fn collect(session: &mut Session) -> usize
+```
+
+Moves waiting audio blocks into the recording when the source is a queue
+([`Source::Queue`]), and the MIDI that arrived since the last call either
+way; a device recording's audio has its own thread. Returns the frames
+gathered in total, or zero when nothing is recording.
+[`session::steps::render_blocks`] calls this after every block; with a
+device driving the engine, call it from a timer during long takes, so the
+MIDI queue (`MIDI_CAPTURE_CAPACITY` messages) never fills.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+
+**Returns** `usize` — the audio frames gathered so far, or zero when nothing is recording
+
+**Errors** never.
+
+**Undo** none.
+
+**Example**
+
+```rust
+let frames = record::collect(&mut session);   // call from a timer while a device drives the engine
+```
+
+### `stop`
+
+```rust
+pub fn stop(session: &mut Session) -> Result<Vec<ClipId>>
+```
+
+Stops the recording and the transport and places one clip per armed track
+starting at the punch-in point. Audio captured before the punch-in (while
+rolling towards it) and after the punch-out is left out. Each clip holds the
+channels its track's [`Input`] selects (tracks without one share the whole
+capture) and refers to `audio/<track> <n>.wav` (`audio/vox 1.wav`), so it is
+named `vox 1`; the file is written into [`Session::folder`] before the clip
+is placed. Returns the new clips (none if nothing was captured). The whole
+placement is one undo step called "Record": undoing it removes the clips and
+deletes the files it wrote, redo writes them again; the audio stays in
+memory either way.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+
+**Returns** `Result<Vec<ClipId>>` — the ids of the clips placed, one per armed track that got something (audio captured, or notes that arrived)
+
+**Errors** nothing recording; a WAV cannot be written; the collector thread failed.
+
+**Undo** one step labelled "Record": undo removes the clips and deletes the files they wrote; rebuilds the mixer (at once while a device plays, otherwise at the next start).
+
+**Made of** `EngineHandle::send(Stop)` → drain the queue or `Collector::finish` (and hand the audio input its queue back) → frame 0 lined up with the `RollStart` when the device clock gives one → trimmed to the punch points → the planes become one buffer → per track, a file name nothing uses yet and the channels its `Input` selects → `wav::write` into the session folder → `AudioCache::insert_shared` → [`clip::add`](crate::clip::add), inside one undo group; rebuilds the mixer so the clips play back on their strips.
+
+**Example**
+
+```rust
+let clips = record::stop(&mut session)?;
+```
+
+## Types
+
+### `Source`
+
+Where a recording's audio comes from.
+
+| variant | type | meaning |
+|---|---|---|
+| `Device` | `(Option<String>)` | The session's audio input (`devices::input`). If it is not open yet, this opens it on the named device (`None` for the default). Every channel the input carries is captured, and a thread gathers the audio until [`stop`]; each track keeps the channel(s) its [`track::input`](crate::track::input) names. |
+| `Queue` | `{ blocks: CaptureConsumer, channels: usize }` | A capture queue you fill yourself (a file, a generator, a test) with blocks of `channels` channels. Blocks wait on the queue until [`collect`] runs; [`session::steps::render_blocks`] does that after every block, so an offline program never calls it. |
+
+### `Recording`
+
+A recording in progress: what [`Session::recording`] holds between [`start`]
+and [`stop`].
+
+| method | meaning |
+|---|---|
+| `fn frames(&self) -> usize` | Frames gathered so far. |
+| `fn dropped(&self) -> u64` | Blocks the input side could not queue because the queue was full. Anything above zero means a gap in the recording. |
+| `fn started_at(&self) -> TimePosition` | Where the transport started rolling: at or before the punch-in. |
+| `fn punch_in(&self) -> TimePosition` | Where the recording begins and the clips will start. |
+| `fn punch_out(&self) -> Option<TimePosition>` | Where the recording ends on its own, if a punch-out point was set. |
+| `fn tracks(&self) -> &[TrackId]` | The tracks that were armed when it started; each gets a clip. |
+| `fn channels(&self) -> usize` | Audio channels being captured; zero when no audio track is armed. |
+| `fn midi_messages(&self) -> usize` | Incoming MIDI messages gathered so far. |
+
 ## Usage
 
 Offline, from a queue you fill yourself:

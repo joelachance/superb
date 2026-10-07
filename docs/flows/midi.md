@@ -19,6 +19,125 @@ every armed MIDI track (`record`).
 | `send(session, MidiMessage)` | queue any message |
 | `connect_input(session, port_index)` (feature `midi-io`) | route a port (listed by `devices::midi_inputs`) into the engine; the connection lives in `session.midi_inputs` |
 
+## Reference
+
+Every function of the `midi` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+
+### `play_note`
+
+```rust
+pub fn play_note(session: &mut Session, channel: u8, note: u8, velocity: u8) -> Result<()>
+```
+
+Plays a note on the engine's software input. It sounds at the start of the
+next block on every monitoring track. `channel` is `0..=15`, `note` and
+`velocity` are `0..=127`; a velocity of `0` releases the note.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `channel: u8` — the MIDI channel, `0..=15`
+- `note: u8` — the MIDI note number, `0..=127` (60 is middle C)
+- `velocity: u8` — `1..=127`; `0` releases the note
+
+**Returns** `Result<()>` — nothing
+
+**Errors** a channel above 15, a note or velocity above 127; the MIDI queue is full.
+
+**Undo** none: not an edit.
+
+**Made of** `MidiMessage::note_on` → [`send`].
+
+**Example**
+
+```rust
+midi::play_note(&mut session, 0, 60, 100)?;   // middle C on channel 1
+```
+
+### `release_note`
+
+```rust
+pub fn release_note(session: &mut Session, channel: u8, note: u8) -> Result<()>
+```
+
+Releases a note started with [`play_note`].
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `channel: u8` — the MIDI channel, `0..=15`
+- `note: u8` — the MIDI note number
+
+**Returns** `Result<()>` — nothing
+
+**Errors** a channel above 15 or a note above 127; the MIDI queue is full.
+
+**Undo** none: not an edit.
+
+**Made of** `MidiMessage::note_off` → [`send`].
+
+**Example**
+
+```rust
+midi::release_note(&mut session, 0, 60)?;
+```
+
+### `send`
+
+```rust
+pub fn send(session: &mut Session, message: MidiMessage) -> Result<()>
+```
+
+Queues any MIDI message for the start of the engine's next block.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `message: MidiMessage` — any `MidiMessage`
+
+**Returns** `Result<()>` — nothing
+
+**Errors** the MIDI queue is full.
+
+**Undo** none: not an edit.
+
+**Made of** `EngineHandle::push_midi` with a zero timestamp.
+
+**Example**
+
+```rust
+midi::send(&mut session, MidiMessage::control_change(MidiChannel::new(0)?, 1, 64)?)?;
+```
+
+### `connect_input`
+
+```rust
+pub fn connect_input(session: &mut Session, port_index: usize) -> Result<()>
+```
+
+*Feature `midi-io`.*
+
+Connects a hardware MIDI input (an index from
+[`devices::midi_inputs`](crate::devices::midi_inputs)) to the engine. Its
+notes land at the start of the block they arrive in and play on every
+monitoring track. The connection lives in [`Session::midi_inputs`] and
+closes when removed from there.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `port_index: usize` — the port's `index` from `devices::midi_inputs()`, a snapshot that changes when devices are plugged in
+
+**Returns** `Result<()>` — nothing
+
+**Errors** no port at that index; the port cannot be opened.
+
+**Undo** none: not an edit.
+
+**Made of** `MidiInputBridge::connect` → `EngineHandle::send(AddMidiInput)`.
+
+**Example**
+
+```rust
+for port in devices::midi_inputs()? { midi::connect_input(&mut session, port.index)?; }
+```
+
 ## Usage
 
 ```rust

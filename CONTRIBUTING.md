@@ -180,6 +180,12 @@ request that adds unsafe elsewhere needs a very good reason.
 * Each primitive module has a usage note in `docs/primitives/<module>.md`
   and each flow in `docs/flows/<flow>.md`. Update them when the public API
   changes.
+* A flow page's `## Reference` and `## Types` sections are generated:
+  `python3 scripts/reference.py` from the repository root reads every
+  public function's signature, doc comment and "Made of:" line and the
+  notes in the script (what each argument means, what comes back, what
+  fails, how it undoes). When you add or change a verb, add or change its
+  note there and rerun the script; do not edit the generated text.
 * Examples live in `examples/flows/` and `examples/primitives/` and are
   registered in `Cargo.toml`. Keep them runnable without hardware unless
   hardware is the point of the example, and keep the line-by-line

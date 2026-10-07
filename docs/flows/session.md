@@ -44,6 +44,399 @@ fader can move without a rebuild. The memory's and the mixer's ids are
 separate namespaces; the handles hide the mixer's. The `session_steps`
 example builds a mixer this way without a `Session`.
 
+## Reference
+
+Every function of the `session` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+
+### `create`
+
+```rust
+pub fn create( folder: impl AsRef<Path>, sample_rate: SampleRate, block_size: usize, ) -> Result<Session>
+```
+
+Starts a new, empty session at 120 bpm in 4/4 in `folder`, which is created
+(with its `audio/` folder) and given its `memory.json` at once, so it can be
+opened from here on. The session is named after the folder.
+
+**Takes**
+- `folder: impl AsRef<Path>` — where the session lives; created now, with an `audio/` folder inside; the session is named after it
+- `sample_rate: SampleRate` — the one sample rate everything in the session runs at
+- `block_size: usize` — frames per engine block, the largest block any node sees
+
+**Returns** `Result<Session>` — the new `Session`, running an offline engine; nothing plays until `devices::output` or `session::steps::render_blocks`
+
+**Errors** the folder cannot be created or `memory.json` cannot be written; a block size of zero.
+
+**Undo** none: not an edit.
+
+**Made of** `create_dir_all` → `Memory::new` → `Session::new` → `Memory::save`.
+
+**Example**
+
+```rust
+let mut session = session::create("~/songs/demo", SampleRate::HZ_48K, 256)?;
+```
+
+### `open`
+
+```rust
+pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session>
+```
+
+Opens a session folder written by [`save`]: reads `memory.json` and loads
+every WAV file the clips refer to into [`Session::audio`]. A file that is
+missing or at another sample rate is left out, and its clip plays as
+silence. The undo history starts empty and clean.
+
+**Takes**
+- `folder: impl AsRef<Path>` — a session folder, one `create` made
+- `block_size: usize` — frames per engine block
+
+**Returns** `Result<Session>` — the `Session` as saved: memory, routing, tempo, and the audio its clips refer to, read from `audio/`; state comes back only once `state_file` is named
+
+**Errors** no `memory.json` in the folder, a file written by a newer version, or malformed JSON; a missing audio file leaves its clip silent rather than failing.
+
+**Undo** none: not an edit.
+
+**Made of** `Memory::load` → `Session::new` → `wav::read` per audio clip.
+
+**Example**
+
+```rust
+let mut session = session::open("~/songs/demo", 256)?;
+session::state_file(&mut session, Some(session.folder.join("state.json")))?;
+```
+
+### `save`
+
+```rust
+pub fn save(session: &mut Session) -> Result<()>
+```
+
+Saves the session into its folder: the memory as `memory.json`, after
+writing any audio a clip refers to that is not on disk yet (recordings
+already are). The history remembers this state as saved
+(`session.history.is_clean()`).
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+
+**Returns** `Result<()>` — nothing; `session.history.is_clean()` is `true` afterwards
+
+**Errors** the folder or `memory.json` cannot be written; audio a clip refers to cannot be written.
+
+**Undo** none: not an edit.
+
+**Made of** `wav::write` per audio clip not yet on disk → `Memory::save` → `UndoStack::mark_clean`.
+
+**Example**
+
+```rust
+session::save(&mut session)?;
+```
+
+### `import_audio`
+
+```rust
+pub fn import_audio(session: &mut Session, file: impl AsRef<Path>) -> Result<Imported>
+```
+
+Brings an audio file into the session and says what it was. With the `files`
+feature any format symphonia decodes is read (WAV, AIFF, FLAC, ALAC, MP3,
+AAC in MP4 or M4A, Ogg Vorbis, CAF, Matroska) and resampled to the session's
+rate when it differs; without it, a WAV already at the session's rate. The
+audio is written into the folder as 32-bit float at the session's rate,
+`audio/<name>.wav` (`<name> 2.wav` when that is taken), and kept in memory;
+`clip::add` places it by the returned key. Not an edit: the file joins the
+folder and stays, placing it is the undo step.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `file: impl AsRef<Path>` — the audio file to bring in; WAV, AIFF, FLAC, ALAC, MP3, AAC (MP4/M4A), Ogg Vorbis, CAF or Matroska with the `files` feature
+
+**Returns** `Result<Imported>` — an `Imported`: the key (`audio/<name>.wav`) a clip refers to the audio by, the file's own sample rate and bit depth, channels, frames, and whether it was resampled
+
+**Errors** the file cannot be read or decoded; without the `files` feature, anything but a WAV at the session's rate.
+
+**Undo** none: not an edit; placing the clip with `clip::add` is the undo step.
+
+**Made of** `io::files::decode` → `AudioFile::resampled_to` (or `io::wav::read_with_format`) → `folder::free_key` → `folder::write_audio` → `AudioCache::insert`.
+
+**Example**
+
+```rust
+let take = session::import_audio(&mut session, "/music/take.flac")?;
+println!("{take}");   // audio/take.wav: 44100 Hz, 24-bit, 2 channel(s), resampled to 48000 Hz, stored as 32-bit float
+clip::add(&mut session, vox, take.key, TimePosition::ZERO)?;
+```
+
+### `state_file`
+
+```rust
+pub fn state_file(session: &mut Session, path: Option<PathBuf>) -> Result<()>
+```
+
+Says where state is kept, or that it is not. State (a track's mute, solo,
+arm, monitor and input, a clip's mute, a send's on/off, looping, the click
+and its count-in, the playhead) is never written into `memory.json`: until
+an application names a file here, a session opens with all of it off. With a
+path, the file is read now if it exists (its state lands on the memory, the
+mixer and the engine) and rewritten after every state change and every
+[`save`], with the playhead. `None` stops writing; the file stays.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `path: Option<PathBuf>` — `Some(path)`: keep state there, reading it now if it exists; `None`: stop keeping state
+
+**Returns** `Result<()>` — nothing
+
+**Errors** the file exists but cannot be read, is malformed or was written by a newer version; the file cannot be written.
+
+**Undo** none: not an edit.
+
+**Made of** `Memory::load_state` → `Memory::apply_state` → `EngineHandle::send(SetLoopEnabled, Seek)` → `session::changed_structure`; then `Memory::save_state` from `session::set_state` and [`save`].
+
+**Example**
+
+```rust
+session::state_file(&mut session, Some(session.folder.join("state.json")))?;   // read now, written from here on
+session::state_file(&mut session, None)?;                                            // stop writing; the file stays
+```
+
+### `set_tempo`
+
+```rust
+pub fn set_tempo(session: &mut Session, bpm: f64) -> Result<()>
+```
+
+Sets the memory's tempo at the start. Consecutive changes are one undo step.
+MIDI clips are scheduled through the tempo map, so the mixer rebuilds, and
+the rebuild hands the engine the new map.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `bpm: f64` — beats (quarter notes) per minute
+
+**Returns** `Result<()>` — nothing
+
+**Errors** a tempo at or below zero.
+
+**Undo** one undo step per drag: calls within `Session::COALESCE_WINDOW` (half a second) merge; rebuilds the mixer (at once while a device plays, otherwise at the next start).
+
+**Made of** `SetTempo` at beat 0 through `session::structural`.
+
+**Example**
+
+```rust
+session::set_tempo(&mut session, 100.0)?;
+```
+
+### `tempo_change`
+
+```rust
+pub fn tempo_change(session: &mut Session, beat: BeatPosition, bpm: Option<f64>) -> Result<()>
+```
+
+Adds a tempo change at `beat` (`Some(bpm)`), or removes the one there
+(`None`); the tempo at beat zero is set with [`set_tempo`] and cannot be
+removed. Changes to the same beat coalesce. Rebuilds the mixer, which hands
+the engine the new map.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `beat: BeatPosition` — where the change takes effect, in quarter notes from the start
+- `bpm: Option<f64>` — `Some(bpm)` adds or changes the tempo there; `None` removes the change
+
+**Returns** `Result<()>` — nothing
+
+**Errors** a beat before zero; removing the change at beat zero (use `set_tempo`); removing a change that is not there.
+
+**Undo** one step per beat; changes to the same beat coalesce; rebuilds the mixer (at once while a device plays, otherwise at the next start).
+
+**Made of** `SetTempo` or `RemoveTempo` through `session::structural`.
+
+**Example**
+
+```rust
+session::tempo_change(&mut session, BeatPosition::new(16.0), Some(140.0))?;   // faster from bar 5
+session::tempo_change(&mut session, BeatPosition::new(16.0), None)?;          // and back
+```
+
+### `meter_change`
+
+```rust
+pub fn meter_change( session: &mut Session, bar: u32, signature: Option<TimeSignature>, ) -> Result<()>
+```
+
+Sets the meter (time signature) from `bar` on (`Some`), or removes the
+change at that bar (`None`); bar 1 always has a meter. Beats stay quarter
+notes whatever the signature, as in Logic and Cubase; the click ticks on the
+notated beat. Rebuilds the mixer, which hands the engine the new map.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `bar: u32` — the 1-based bar the new meter starts at
+- `signature: Option<TimeSignature>` — `Some(signature)` sets the meter from that bar on; `None` removes the change there
+
+**Returns** `Result<()>` — nothing
+
+**Errors** bar 0; removing the meter at bar 1; removing a change that is not there.
+
+**Undo** one undo step; rebuilds the mixer (at once while a device plays, otherwise at the next start).
+
+**Made of** `SetMeter` through `session::structural`.
+
+**Example**
+
+```rust
+session::meter_change(&mut session, 9, Some(TimeSignature::new(6, 8)?))?;
+```
+
+### `set_loop`
+
+```rust
+pub fn set_loop(session: &mut Session, range: Option<LoopRange>) -> Result<()>
+```
+
+Sets or clears the loop range in the memory and on the running engine. Turn
+looping on with [`transport::looping`](crate::transport::looping).
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+- `range: Option<LoopRange>` — `Some(range)` sets the loop range, told to the engine at once; `None` clears it
+
+**Returns** `Result<()>` — nothing
+
+**Errors** a range whose end is not after its start.
+
+**Undo** one undo step per drag: calls within `Session::COALESCE_WINDOW` (half a second) merge.
+
+**Made of** push `SetLoopRange` → `EngineHandle::send(SetLoop)`.
+
+**Example**
+
+```rust
+session::set_loop(&mut session, Some(LoopRange::new(TimePosition::ZERO, TimePosition::from_seconds(8.0, rate))?))?;
+transport::looping(&mut session, true)?;
+```
+
+### `undo`
+
+```rust
+pub fn undo(session: &mut Session) -> Result<bool>
+```
+
+Reverts the last edit. Returns `false` if there was nothing to undo.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+
+**Returns** `Result<bool>` — `true` when a step was undone, `false` when there was nothing to undo
+
+**Errors** a command fails to revert (should not happen).
+
+**Undo** this is the undo.
+
+**Made of** `UndoStack::undo`; the mixer is marked for a rebuild because the undone edit may have been structural.
+
+**Example**
+
+```rust
+if session::undo(&mut session)? { println!("undid {:?}", session.history.redo_label()); }
+```
+
+### `redo`
+
+```rust
+pub fn redo(session: &mut Session) -> Result<bool>
+```
+
+Re-applies the last undone edit.
+
+**Takes**
+- `session: &mut Session` — the open session, borrowed mutably
+
+**Returns** `Result<bool>` — `true` when a step was redone, `false` when there was nothing to redo
+
+**Errors** a command fails to apply again.
+
+**Undo** this is the redo.
+
+**Made of** `UndoStack::redo`, then the same rebuild marking as [`undo`].
+
+**Example**
+
+```rust
+session::redo(&mut session)?;
+```
+
+## Types
+
+### `Session`
+
+A session: the memory you edit plus everything needed to play it.  Plain
+record, public fields, constructors only. Every flow function takes `&mut
+Session`; reach into any field and call a primitive directly when a flow
+does not do exactly what you want.
+
+| field | type | meaning |
+|---|---|---|
+| `memory` | `Memory` | The memory: tracks, clips, markers, routing, tempo. |
+| `history` | `UndoStack<Memory>` | Undo history for `memory`. Every flow edit pushes through this stack, so every edit is reversible. Consecutive edits of the same control (a fader, a knob, a clip being dragged) merge into one step while they arrive within [`Session::COALESCE_WINDOW`] of each other; a pause starts a new step. Call `history.seal()` to end a step sooner (on mouse up, say). |
+| `audio` | `AudioCache` | Audio held in memory, keyed by the path clips refer to, relative to the session folder (`audio/vox 1.wav`). |
+| `folder` | `PathBuf` | The folder the session lives in: `memory.json` and the `audio/` folder of recordings are inside. Set when the session is created or opened; recordings are written there as they stop. |
+| `engine` | `EngineHandle` | Control handle to the engine: commands, graph swaps, position. |
+| `audio_thread` | `Option<AudioThread>` | The engine's audio side. Present until a device takes it (`devices::output`, feature `devices`); while present, [`steps::render_blocks`] ticks it by hand. |
+| `mixer` | `MixerHandles` | The live controls of the mixer built by the last [`steps::rebuild`]: one per strip and send, keyed by the memory's ids. |
+| `recording` | `Option<crate::record::Recording>` | A take being recorded, if any. |
+| `channels` | `usize` | Channels per strip and at the output: 2, stereo. Change it before the first rebuild if you need another width. |
+| `output` | `Option<crate::primitives::io::LiveOutput>` | The device output, once `devices::output` started one: the audio thread lives inside it until `devices::close_output`. |
+| `input` | `Option<crate::devices::AudioInput>` | The audio input, once `devices::input` opened it: what monitoring audio tracks hear and device recordings capture. |
+| `midi_inputs` | `Vec<crate::primitives::midi::input::MidiInputBridge>` | Hardware MIDI inputs connected so far. Dropping one disconnects it. |
+| `state_file` | `Option<PathBuf>` | Where state is kept, once [`state_file`] named a file; `None` means state is not saved. |
+
+| method | meaning |
+|---|---|
+| `const COALESCE_WINDOW: core::time::Duration` | How long a pause between two edits of the same control turns them into separate undo steps. |
+| `fn new(memory: Memory, folder: impl Into<PathBuf>, block_size: usize) -> Result<Session>` | A stereo session around `memory` living in `folder`, with an engine that renders blocks of at most `block_size` frames at the memory's sample rate. Records the folder and touches nothing on disk; [`create`] and [`open`] do. |
+
+### `MixerHandles`
+
+The live controls of the mixer the engine is running, keyed by the track or
+send each was built for.  Filled by every [`steps::rebuild`]. The `Mixer`
+itself becomes the graph the engine runs; what the control side keeps are
+these handles, whose atomics the audio thread reads every block, so a change
+made through them is heard at the next block. Handles from before a rebuild
+are stale: look them up again.
+
+| field | type | meaning |
+|---|---|---|
+| `strips` | `Vec<(TrackId, Arc<StripParams>)>` | A track or bus in the memory → its strip: volume, pan, mute, solo, pan law and the peak meter. |
+| `sends` | `Vec<(SendId, Arc<SendParams>)>` | A send in the memory → its level and on/off. |
+| `click` | `Arc<ClickParams>` | The metronome's click on the master: on/off, level, count-in. |
+
+| method | meaning |
+|---|---|
+| `fn strip(&self, track: TrackId) -> Option<&Arc<StripParams>>` | The live strip of a track or bus. |
+| `fn send(&self, send: SendId) -> Option<&Arc<SendParams>>` | The live controls of a send. |
+
+### `Imported`
+
+What [`import_audio`] brought in: the key a clip refers to the audio by, and
+what the file was, so an application can say "44.1 kHz, 24-bit, stereo,
+resampled". Whatever the file was, the session stores it as 32-bit float at
+its own rate.
+
+| field | type | meaning |
+|---|---|---|
+| `key` | `PathBuf` | `audio/<name>.wav`: the key a clip refers to the audio by. |
+| `source_rate` | `SampleRate` | The file's own sample rate. |
+| `source_bits` | `Option<u32>` | The file's own bits per sample when it has a fixed depth (16, 24, 32); `None` for lossy codecs such as MP3 and AAC, which have none. |
+| `channels` | `usize` | Channels. |
+| `frames` | `usize` | Frames as stored, at the session's rate. |
+| `stored_rate` | `SampleRate` | The session's rate, which the stored audio is at. |
+| `resampled` | `bool` | Whether the audio was resampled from `source_rate` to `stored_rate`. |
+
 ## Usage
 
 ```rust

@@ -2,22 +2,24 @@
 
 The top tier of the `superb` crate: one module per thing you work with or
 task you do, each a set of free functions over a [`Session`](#the-session).
-This page covers what they share; each flow has its own note in
-`docs/flows/`.
+This page covers what they share; each flow has its own page in
+`docs/flows/`, with a full reference of every function (what it takes,
+returns, refuses, and how it undoes) generated from the source by
+`scripts/reference.py`.
 
 | flow | doc |
 |---|---|
-| `session` — new, open, save; markers, tempo, loop range; undo; the engine side in `session::steps` | [session.md](flows/session.md) |
-| `track` — add, remove, rename; a track's state: mute, solo, arm, monitor, input, volume, pan, route; meters | [track.md](flows/track.md) |
-| `clip` — audio or MIDI on a track: add, move, archive, restore | [clip.md](flows/clip.md) |
+| `session` — new, open, save; import an audio file; the state file; tempo, meter, loop range; undo; the engine side in `session::steps` | [session.md](flows/session.md) |
+| `track` — add, archive, restore, rename, reorder, colour; mute, solo, arm, monitor, input, MIDI channel; volume, pan, route; meters; the master | [track.md](flows/track.md) |
+| `clip` — audio or MIDI on a track: add, move, split, trim, gain, fades, mute, rename, archive, restore; notes in a MIDI clip | [clip.md](flows/clip.md) |
 | `transport` — start, stop, seek, rewind, loop; where the playhead is | [transport.md](flows/transport.md) |
 | `send` — a copy of a track into a bus: add, remove, level, on/off | [send.md](flows/send.md) |
-| `midi` — send notes, connect a keyboard | [midi.md](flows/midi.md) |
-| `record` — start a recording, stop it, get clips; punch points | [record.md](flows/record.md) |
+| `midi` — play and release notes, send any message, connect a keyboard | [midi.md](flows/midi.md) |
+| `record` — start a recording, stop it, get clips, audio and MIDI; punch points | [record.md](flows/record.md) |
 | `marker` — named places on the timeline: add, move, rename, remove | [marker.md](flows/marker.md) |
 | `metronome` — a click while the transport rolls; its level; bars of count-in before a recording | [metronome.md](flows/metronome.md) |
 | `export` — bounce the session, or a range of it, to WAV | [export.md](flows/export.md) |
-| `devices` — audio and MIDI hardware; play through an output | [devices.md](flows/devices.md) |
+| `devices` — audio and MIDI hardware; play through an output, switch outputs, open an input | [devices.md](flows/devices.md) |
 
 ## Why free functions
 
@@ -49,9 +51,10 @@ pub struct Session {
     pub mixer: MixerHandles,         // live strip and send controls from the last rebuild
     pub recording: Option<Recording>,
     pub channels: usize,             // 2 = stereo
-    pub output: Option<OutputStream>,          // feature devices
+    pub output: Option<LiveOutput>,            // feature devices: the device output, the audio thread inside it
     pub input: Option<AudioInput>,             // feature devices: the audio input, once opened
     pub midi_inputs: Vec<MidiInputBridge>,      // feature midi-io
+    pub state_file: Option<PathBuf>, // where state is kept, once named; None = not saved
 }
 ```
 
