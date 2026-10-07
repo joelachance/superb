@@ -1,9 +1,9 @@
 # Superb
 
+<!-- ANCHOR: intro -->
 An open-source Rust toolkit for building a digital audio workstation (DAW).
 One crate, `superb`, dual-licensed Apache-2.0 OR MIT.
 
-<!-- ANCHOR: intro -->
 Superb is the engine side of a DAW: sample-accurate time, audio buffers, a
 real-time-safe processing graph, a mixer with tracks, buses, sends and
 insert chains, MIDI, automation, the session's memory (tracks, clips,
