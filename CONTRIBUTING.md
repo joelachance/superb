@@ -186,6 +186,11 @@ request that adds unsafe elsewhere needs a very good reason.
   notes in the script (what each argument means, what comes back, what
   fails, how it undoes). When you add or change a verb, add or change its
   note there and rerun the script; do not edit the generated text.
+* The documentation site under `website/` (Fumadocs on Next.js) is built
+  from the same Markdown: `cd website && pnpm install && pnpm dev` turns
+  `README.md`, `docs/`, `examples/README.md` and `CONTRIBUTING.md` into
+  pages and serves them. Nothing under `website/content/` is committed;
+  edit the Markdown.
 * Examples live in `examples/flows/` and `examples/primitives/` and are
   registered in `Cargo.toml`. Keep them runnable without hardware unless
   hardware is the point of the example, and keep the line-by-line
