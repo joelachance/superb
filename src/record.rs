@@ -862,7 +862,11 @@ mod tests {
         transport::start(&mut session).unwrap();
         let heard = session::steps::render_blocks(&mut session, 4).unwrap();
         assert!(heard.channel(0)[200].abs() > 0.2, "two tracks of the clip");
-        assert_eq!(session.mixer.strips.len(), 3, "one handle per track");
+        assert_eq!(
+            session.mixer.strips.len(),
+            4,
+            "one handle per track and the master"
+        );
 
         // One undo removes both clips.
         assert!(session::undo(&mut session).unwrap());

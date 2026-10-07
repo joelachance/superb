@@ -66,6 +66,11 @@ for `monitor` (a `MonoSynthNode` or a `LiveInputNode` on the strip). `route`: `S
 
 ## Notes
 
+* The master is a track too: `session.memory.master()` gives it, and
+  `volume`, `pan`, `mute`, `rename` and `peak` work on it like on any
+  track. It is not in `memory.tracks()`, is always there, and refuses
+  archive, solo, arm, monitor, input, routing and sends; routing a track
+  to it is the default, spelled `None`.
 * Meters hold the peak since the last read on the first two channels.
 * Pan law is a live-strip setting (`StripParams::set_pan_law`), not in the
   memory; tracks default to constant power (−3 dB centre), buses to

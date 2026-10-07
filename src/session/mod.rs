@@ -222,6 +222,9 @@ pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session> {
     let memory = Memory::load(folder.join(folder::MEMORY_FILE))?;
     let mut session = Session::new(memory, folder, block_size)?;
     folder::load_audio(&mut session, folder);
+    session
+        .engine
+        .send(EngineCommand::Seek(session.memory.playhead()))?;
     Ok(session)
 }
 
@@ -237,6 +240,8 @@ pub fn save(session: &mut Session) -> Result<()> {
     std::fs::create_dir_all(&folder)
         .map_err(|e| SuperbError::Message(format!("cannot create {}: {e}", folder.display())))?;
     folder::write_missing_audio(session, &folder)?;
+    let playhead = session.engine.position();
+    session.memory.set_playhead(playhead);
     session.memory.save(folder.join(folder::MEMORY_FILE))?;
     session.history.mark_clean();
     Ok(())
@@ -626,5 +631,21 @@ mod tests {
         assert_eq!(session.memory.tempo_map().meter_points().len(), 1);
         assert!(undo(&mut session).unwrap());
         assert_eq!(session.memory.tempo_map().meter_points().len(), 2);
+    }
+
+    #[test]
+    fn the_playhead_is_remembered_across_save_and_open() {
+        let folder = scratch("playhead");
+        let mut session = create(&folder, R, 64).unwrap();
+        crate::transport::seek(&mut session, TimePosition::from_samples(4_800)).unwrap();
+        steps::render_blocks(&mut session, 1).unwrap();
+        save(&mut session).unwrap();
+        assert_eq!(session.memory.playhead(), TimePosition::from_samples(4_800));
+        let mut again = open(&folder, 64).unwrap();
+        steps::render_blocks(&mut again, 1).unwrap();
+        assert_eq!(
+            crate::transport::playhead(&again),
+            TimePosition::from_samples(4_800)
+        );
     }
 }

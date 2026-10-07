@@ -155,7 +155,7 @@ mod tests {
         let (mixer, handles) =
             crate::session::steps::build_mixer(&memory, &AudioCache::new(), 2).unwrap();
         assert_eq!(mixer.tracks().len(), 0);
-        assert!(handles.strips.is_empty());
+        assert_eq!(handles.strips.len(), 1, "the master");
         let _ = TrackSend::new(track);
     }
 

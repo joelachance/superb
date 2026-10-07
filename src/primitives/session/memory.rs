@@ -57,6 +57,12 @@ pub struct Memory {
     punch_in: Option<TimePosition>,
     punch_out: Option<TimePosition>,
     metronome: MetronomeState,
+    /// Where the playhead was when the session was last saved.
+    playhead: TimePosition,
+    /// The bus every track ends up in. A track like the others for volume,
+    /// pan, mute and metering, but not in `tracks`: always there, never
+    /// archived, routed or sent to.
+    master: Track,
     tracks: Vec<Track>,
     markers: Vec<Marker>,
     next_id: RawId,
@@ -75,9 +81,11 @@ impl Memory {
             punch_in: None,
             punch_out: None,
             metronome: MetronomeState::default(),
+            playhead: TimePosition::ZERO,
+            master: Track::with_id(TrackId::from_raw(1), "Master", TrackKind::Bus),
             tracks: Vec::new(),
             markers: Vec::new(),
-            next_id: 1,
+            next_id: 2,
             revision: 0,
         }
     }
@@ -164,6 +172,37 @@ impl Memory {
     pub fn set_punch_out(&mut self, at: Option<TimePosition>) {
         self.punch_out = at;
         self.touch();
+    }
+
+    /// Where the playhead was when the session was last saved; `save`
+    /// records it and `open` starts there.
+    pub fn playhead(&self) -> TimePosition {
+        self.playhead
+    }
+
+    /// Remembers the playhead for the next open.
+    pub fn set_playhead(&mut self, at: TimePosition) {
+        self.playhead = at;
+        self.touch();
+    }
+
+    /// The master bus: the track every other track ends up in. Volume,
+    /// pan, mute and the meter work on it like on any track; it is not in
+    /// [`tracks`](Self::tracks) and cannot be archived, soloed, routed or
+    /// sent to.
+    pub fn master(&self) -> &Track {
+        &self.master
+    }
+
+    /// Mutable master access (bumps the revision).
+    pub fn master_mut(&mut self) -> &mut Track {
+        self.touch();
+        &mut self.master
+    }
+
+    /// `true` for the master's id.
+    pub fn is_master(&self, id: TrackId) -> bool {
+        self.master.id == id
     }
 
     /// The metronome's state: on or off, level, bars of count-in.
@@ -402,14 +441,20 @@ impl Memory {
             })
     }
 
-    /// Looks up a track.
+    /// Looks up a track, the master included.
     pub fn track(&self, id: TrackId) -> Result<&Track> {
+        if self.is_master(id) {
+            return Ok(&self.master);
+        }
         let i = self.track_index(id)?;
         Ok(&self.tracks[i])
     }
 
-    /// Mutable track access (bumps the revision).
+    /// Mutable track access, the master included (bumps the revision).
     pub fn track_mut(&mut self, id: TrackId) -> Result<&mut Track> {
+        if self.is_master(id) {
+            return Ok(self.master_mut());
+        }
         let i = self.track_index(id)?;
         self.touch();
         Ok(&mut self.tracks[i])
@@ -436,6 +481,13 @@ impl Memory {
     /// itself, or would close a bus → bus cycle. A no-op change does not
     /// bump the revision.
     pub fn set_track_output(&mut self, track: TrackId, bus: Option<TrackId>) -> Result<()> {
+        if self.is_master(track) {
+            return Err(SuperbError::InvalidArgument {
+                what: "the master has no output; everything ends there",
+            });
+        }
+        // Routing into the master is the default, spelled `None`.
+        let bus = bus.filter(|b| !self.is_master(*b));
         let idx = self.track_index(track)?;
         if let Some(bus) = bus {
             self.check_bus(bus)?;
@@ -488,6 +540,16 @@ impl Memory {
     /// `send.bus()`. A send without an ID gets a fresh one; a send with an
     /// ID must not collide. Bus tracks cannot send.
     pub fn add_send(&mut self, track: TrackId, mut send: TrackSend) -> Result<SendId> {
+        if self.is_master(track) {
+            return Err(SuperbError::InvalidArgument {
+                what: "the master has no sends",
+            });
+        }
+        if self.is_master(send.bus) {
+            return Err(SuperbError::InvalidArgument {
+                what: "sends cannot target the master; every track already feeds it",
+            });
+        }
         let ti = self.track_index(track)?;
         if self.tracks[ti].kind == TrackKind::Bus {
             return Err(SuperbError::InvalidArgument {
@@ -1378,5 +1440,46 @@ mod tests {
             .insert_marker(Marker::new("free", TimePosition::ZERO))
             .unwrap();
         assert!(fresh.is_valid());
+    }
+
+    #[test]
+    fn the_master_is_a_track_you_reach_but_never_remove() {
+        let mut memory = Memory::new("m", SampleRate::HZ_48K);
+        let master = memory.master().id();
+        assert_eq!(memory.master().kind, TrackKind::Bus);
+        assert_eq!(memory.master().name, "Master");
+        assert!(memory.tracks().is_empty(), "not among the tracks");
+        assert_eq!(memory.track(master).unwrap().name, "Master");
+        let vox = memory.add_track("vox", TrackKind::Audio);
+        assert_ne!(vox, master, "ids never collide");
+        memory.track_mut(master).unwrap().state.volume_db = -3.0;
+        assert_eq!(memory.master().state.volume_db, -3.0);
+        // Routing into the master is the default, spelled `None`.
+        memory.set_track_output(vox, Some(master)).unwrap();
+        assert_eq!(memory.track(vox).unwrap().output(), None);
+        assert!(memory.set_track_output(master, None).is_err());
+        assert!(memory.add_send(vox, TrackSend::new(master)).is_err());
+        assert!(memory.add_send(master, TrackSend::new(vox)).is_err());
+        // Saved and loaded, with the playhead.
+        memory.set_playhead(TimePosition::from_samples(4_800));
+        let snap = memory.snapshot();
+        let again = Memory::from_snapshot(&snap).unwrap();
+        assert_eq!(again.master().id(), master);
+        assert_eq!(again.master().state.volume_db, -3.0);
+        assert_eq!(again.playhead(), TimePosition::from_samples(4_800));
+        // A file from before the master was a track gets one with an id no
+        // track uses.
+        let mut old = snap.clone();
+        old.master = None;
+        old.playhead = 0;
+        let loaded = Memory::from_snapshot(&old).unwrap();
+        assert!(loaded
+            .tracks()
+            .iter()
+            .all(|t| t.id() != loaded.master().id()));
+        assert_eq!(
+            loaded.track(loaded.master().id()).unwrap().kind,
+            TrackKind::Bus
+        );
     }
 }

@@ -37,6 +37,7 @@ pub fn add(session: &mut Session, name: &str, kind: TrackKind) -> Result<TrackId
 ///
 /// Made of: `ArchiveTrack` through `session::structural`.
 pub fn archive(session: &mut Session, track: TrackId) -> Result<()> {
+    not_master(session, track, "the master is not archived")?;
     crate::session::structural(session, ArchiveTrack::new(track, true))
 }
 
@@ -44,7 +45,17 @@ pub fn archive(session: &mut Session, track: TrackId) -> Result<()> {
 ///
 /// Made of: `ArchiveTrack` (restoring) through `session::structural`.
 pub fn restore(session: &mut Session, track: TrackId) -> Result<()> {
+    not_master(session, track, "the master is not archived")?;
     crate::session::structural(session, ArchiveTrack::new(track, false))
+}
+
+/// The master is a track for volume, pan, mute and metering, and nothing
+/// else.
+fn not_master(session: &Session, track: TrackId, what: &'static str) -> Result<()> {
+    if session.memory.is_master(track) {
+        return Err(SuperbError::InvalidArgument { what });
+    }
+    Ok(())
 }
 
 /// Renames a track. Quick successive renames of one track are one undo step.
@@ -101,6 +112,11 @@ pub fn mute(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 /// Made of: `TrackState::solo` through `session::set_state` →
 /// `StripParams::set_solo` on the live strip.
 pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
+    not_master(
+        session,
+        track,
+        "the master is not soloed; it is what solo leaves audible",
+    )?;
     crate::session::set_state(session, |d| {
         d.track_mut(track)?.state.solo = on;
         Ok(())
@@ -298,5 +314,40 @@ mod tests {
         assert!(copy.track(vox).unwrap().state.archived);
         assert!(!copy.track(vox).unwrap().sends().is_empty());
         let _ = TrackSend::new(room);
+    }
+
+    #[test]
+    fn the_master_takes_volume_and_mute_and_refuses_the_rest() {
+        let mut session =
+            session::create(session::scratch("master"), SampleRate::HZ_48K, 64).unwrap();
+        let master = session.memory.master().id();
+        let vox = add(&mut session, "vox", TrackKind::Audio).unwrap();
+        volume(&mut session, master, -6.0).unwrap();
+        mute(&mut session, master, true).unwrap();
+        pan(&mut session, master, 0.25).unwrap();
+        transport::start(&mut session).unwrap();
+        session::steps::render_blocks(&mut session, 1).unwrap();
+        let strip = session
+            .mixer
+            .strip(master)
+            .expect("the master has a handle");
+        assert_eq!(strip.volume_db(), -6.0);
+        assert!(strip.is_muted());
+        assert!(peak(&session, master).is_some());
+        assert!(archive(&mut session, master).is_err());
+        assert!(solo(&mut session, master, true).is_err());
+        assert!(route(&mut session, master, Some(vox)).is_err());
+        assert!(arm(&mut session, master, true).is_err(), "a bus");
+        assert!(crate::send::add(
+            &mut session,
+            vox,
+            master,
+            -6.0,
+            crate::primitives::mixer::SendTap::PostFader
+        )
+        .is_err());
+        // Routing a track "to the master" is the default and stays `None`.
+        route(&mut session, vox, Some(master)).unwrap();
+        assert_eq!(session.memory.track(vox).unwrap().output(), None);
     }
 }

@@ -183,8 +183,9 @@ fn strip_params(mixer: &Mixer, strip: StripId) -> Result<Arc<StripParams>> {
 }
 
 /// A strip per audio or MIDI track and a bus per bus track, each carrying
-/// the track's volume, pan, mute and solo. Archived tracks get none, so
-/// nothing on them plays and nothing routes into them.
+/// the track's volume, pan, mute and solo, and the mixer's master bus
+/// carrying the master track's. Archived tracks get none, so nothing on
+/// them plays and nothing routes into them.
 fn add_strips(memory: &Memory, mixer: &mut Mixer) -> Result<Strips> {
     let mut strips = Vec::with_capacity(memory.track_count());
     for track in memory.tracks() {
@@ -204,6 +205,15 @@ fn add_strips(memory: &Memory, mixer: &mut Mixer) -> Result<Strips> {
         params.set_solo(track.state.solo);
         strips.push((track.id(), strip));
     }
+    // The master is a track in the memory too: its state drives the
+    // mixer's master bus, which every unrouted strip feeds.
+    let master = memory.master();
+    let bus = mixer.master();
+    let params = mixer.bus_params(bus)?;
+    params.set_volume_db(master.state.volume_db);
+    params.set_pan(master.state.pan);
+    params.set_mute(master.state.mute);
+    strips.push((master.id(), StripId::Bus(bus)));
     Ok(strips)
 }
 
@@ -534,7 +544,11 @@ mod tests {
         memory.send_mut(send).unwrap().state.enabled = false;
 
         let (mixer, handles) = build_mixer(&memory, &AudioCache::new(), 2).unwrap();
-        assert_eq!(handles.strips.len(), 2, "one handle per track and bus");
+        assert_eq!(
+            handles.strips.len(),
+            3,
+            "one handle per track, bus and master"
+        );
         assert_eq!(mixer.tracks().len(), 1);
         assert_eq!(mixer.buses().len(), 2, "fx and the master");
         let strip = handles.strip(lead).unwrap();
@@ -825,7 +839,7 @@ mod tests {
             track::add(&mut session, &format!("t{i}"), TrackKind::Audio).unwrap();
             rebuild(&mut session).unwrap_or_else(|e| panic!("rebuild {i}: {e}"));
         }
-        assert_eq!(session.mixer.strips.len(), 6);
+        assert_eq!(session.mixer.strips.len(), 7, "six tracks and the master");
         stop.store(true, Ordering::Release);
         let audio = ticker.join().unwrap();
         drop(audio);

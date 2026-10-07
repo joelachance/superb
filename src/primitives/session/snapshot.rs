@@ -253,6 +253,13 @@ pub struct MemorySnapshot {
     /// The metronome (absent in older files: off, unity, no count-in).
     #[serde(default)]
     pub metronome: MetronomeSnapshot,
+    /// Where the playhead was when the session was saved, in samples
+    /// (absent in older files: zero).
+    #[serde(default)]
+    pub playhead: i64,
+    /// The master bus (absent in older files: a fresh one).
+    #[serde(default)]
+    pub master: Option<TrackSnapshot>,
     /// Tracks in order.
     pub tracks: Vec<TrackSnapshot>,
     /// Markers in position order.
@@ -389,6 +396,8 @@ impl Memory {
                 level_db: self.metronome().level_db,
                 count_in: self.metronome().count_in,
             },
+            playhead: self.playhead().samples(),
+            master: Some(TrackSnapshot::from(self.master())),
             loop_range: self
                 .loop_range()
                 .map(|r| (r.start().samples(), r.end().samples())),
@@ -556,6 +565,28 @@ impl Memory {
         }
 
         memory.reserve(snap.next_id.saturating_sub(1));
+        memory.set_playhead(TimePosition::from_samples(snap.playhead));
+        match &snap.master {
+            Some(m) => {
+                let mut master =
+                    Track::with_id(TrackId::from_raw(m.id), m.name.clone(), TrackKind::Bus);
+                if !master.id.is_valid() {
+                    return Err(SuperbError::InvalidArgument {
+                        what: "master id 0",
+                    });
+                }
+                master.state.volume_db = m.volume_db;
+                master.state.pan = m.pan;
+                master.state.mute = m.mute;
+                memory.reserve(m.id);
+                *memory.master_mut() = master;
+            }
+            None => {
+                // Before the master was a track; give it an id no track uses.
+                let id = memory.allocate_track_id();
+                *memory.master_mut() = Track::with_id(id, "Master", TrackKind::Bus);
+            }
+        }
         Ok(memory)
     }
 
@@ -934,6 +965,10 @@ mod tests {
                 rename(io, "preset", "state");
             }
         }
+        // Files from before the master was a track have neither it nor the playhead.
+        let top = v.as_object_mut().unwrap();
+        top.remove("master");
+        top.remove("playhead");
         let json = v.to_string();
         assert!(!json.contains("monitor") && !json.contains("volume_db"));
         let back = Memory::from_json(&json).unwrap();
