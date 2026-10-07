@@ -27,6 +27,9 @@ rebuilds the mixer.
 | `fade_in(session, clip, length)` / `fade_out(session, clip, length)` | fades from the start and to the end | drag (coalesces) |
 | `archive(session, clip)` | kept with its place and audio, silent, not counted toward the session's end | one |
 | `restore(session, clip)` | back on the timeline | one |
+| `add_note(session, clip, MidiNote)` | a note into a MIDI clip, beats from the clip start; a note past the end extends the clip | one |
+| `remove_note(session, clip, MidiNote)` | the first note equal to it | one |
+| `change_note(session, clip, from, to)` | replace a note with another: moved, longer, louder, whatever differs | drag (note changes in one clip coalesce) |
 
 ## Usage
 
@@ -72,3 +75,8 @@ through `session::structural`. `move_to`: `MoveClip::to_track`; `trim`:
 * A clip's settable fields live in `Clip.state: ClipState { gain_db, mute,
   fade_in, fade_out, archived }`.
 * Both halves of a split keep the clip's name and share its audio.
+* Notes are their content: a `MidiNote` is identified by its beat, length,
+  pitch, velocity and channel, so there is no note id to keep. Two
+  identical notes are one note twice, and `remove_note` takes the first.
+  How notes are picked, drawn, quantised or auditioned is the caller's
+  business; the verbs only change the data, with undo.

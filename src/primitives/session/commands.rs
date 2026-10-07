@@ -89,6 +89,9 @@ pub mod keys {
     pub const CLIP_FADE_OUT: u64 = 26;
     /// [`TrimClip`](super::TrimClip).
     pub const CLIP_TRIM: u64 = 27;
+    /// A note changed inside a clip (one key per clip; merges only while
+    /// the same note keeps changing).
+    pub const CLIP_NOTE: u64 = 28;
     /// [`MoveMarker`](super::MoveMarker).
     pub const MARKER_MOVE: u64 = 30;
     /// [`set_marker_name`](super::set_marker_name).
@@ -1258,6 +1261,230 @@ impl Command<Memory> for SetMeter {
             Some(signature) => map.add_meter(self.bar, signature),
             None => map.remove_meter(self.bar),
         }
+    }
+}
+
+/// A note is valid when it starts at or after the clip start, lasts,
+/// and keeps its numbers in MIDI range.
+fn check_note(note: &MidiNote) -> Result<()> {
+    if note.beat.is_nan() || note.beat < 0.0 || note.length.is_nan() || note.length <= 0.0 {
+        return Err(SuperbError::InvalidArgument {
+            what: "a note starts at or after the clip start and has a length",
+        });
+    }
+    if note.note > 127 || note.velocity == 0 || note.velocity > 127 || note.channel > 15 {
+        return Err(SuperbError::InvalidArgument {
+            what: "note 0..=127, velocity 1..=127, channel 0..=15",
+        });
+    }
+    Ok(())
+}
+
+/// The notes of a MIDI clip, or an error for any other clip.
+fn notes_mut(memory: &mut Memory, clip: ClipId) -> Result<&mut Vec<MidiNote>> {
+    match &mut memory.clip_mut(clip)?.source {
+        ClipSource::Midi { notes } => Ok(notes),
+        _ => Err(SuperbError::InvalidArgument {
+            what: "only a MIDI clip holds notes",
+        }),
+    }
+}
+
+/// Where a note ends, as a clip-relative duration, given the clip's place
+/// on the tempo map.
+fn note_end(memory: &Memory, clip: ClipId, note: &MidiNote) -> Result<TimeDuration> {
+    let start = memory.clip(clip)?.start();
+    let tempo = memory.tempo_map();
+    let start_beat = tempo.samples_to_beat(start).beats();
+    let end = tempo.beat_to_samples(BeatPosition::new(start_beat + note.beat + note.length));
+    Ok(TimeDuration::from_samples(end.samples() - start.samples()))
+}
+
+/// Grows the clip so `note` fits, remembering the length it had.
+fn fit_note(memory: &mut Memory, clip: ClipId, note: &MidiNote) -> Result<Option<TimeDuration>> {
+    let end = note_end(memory, clip, note)?;
+    let length = memory.clip(clip)?.length();
+    if end > length {
+        memory.resize_clip(clip, end)?;
+        return Ok(Some(length));
+    }
+    Ok(None)
+}
+
+/// Adds a note to a MIDI clip; a note that ends past the clip end extends
+/// the clip. One undo step. Notes are identified by their content, so two
+/// identical notes are one note twice.
+pub struct AddNote {
+    clip: ClipId,
+    note: MidiNote,
+    grew_from: Option<TimeDuration>,
+}
+
+impl AddNote {
+    /// Creates the command.
+    pub fn new(clip: ClipId, note: MidiNote) -> Self {
+        Self {
+            clip,
+            note,
+            grew_from: None,
+        }
+    }
+}
+
+impl Command<Memory> for AddNote {
+    fn label(&self) -> &str {
+        "Add note"
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        check_note(&self.note)?;
+        notes_mut(memory, self.clip)?;
+        self.grew_from = fit_note(memory, self.clip, &self.note)?;
+        let notes = notes_mut(memory, self.clip)?;
+        notes.push(self.note);
+        notes.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        Ok(())
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let notes = notes_mut(memory, self.clip)?;
+        let i = notes
+            .iter()
+            .position(|n| *n == self.note)
+            .ok_or(SuperbError::NotFound {
+                kind: "note",
+                id: u64::from(self.note.note),
+            })?;
+        notes.remove(i);
+        if let Some(length) = self.grew_from.take() {
+            memory.resize_clip(self.clip, length)?;
+        }
+        Ok(())
+    }
+}
+
+/// Removes a note from a MIDI clip; undo puts it back. One undo step.
+pub struct RemoveNote {
+    clip: ClipId,
+    note: MidiNote,
+}
+
+impl RemoveNote {
+    /// Creates the command.
+    pub fn new(clip: ClipId, note: MidiNote) -> Self {
+        Self { clip, note }
+    }
+}
+
+impl Command<Memory> for RemoveNote {
+    fn label(&self) -> &str {
+        "Remove note"
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        let notes = notes_mut(memory, self.clip)?;
+        let i = notes
+            .iter()
+            .position(|n| *n == self.note)
+            .ok_or(SuperbError::NotFound {
+                kind: "note",
+                id: u64::from(self.note.note),
+            })?;
+        notes.remove(i);
+        Ok(())
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let notes = notes_mut(memory, self.clip)?;
+        notes.push(self.note);
+        notes.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        Ok(())
+    }
+}
+
+/// Replaces one note of a MIDI clip with another: moved, lengthened,
+/// louder, on another channel, whatever differs. A note that ends past the
+/// clip end extends the clip. Coalesces per clip, so a drag is one undo
+/// step; the merge only folds changes to the same note into one command.
+pub struct ChangeNote {
+    clip: ClipId,
+    from: MidiNote,
+    to: MidiNote,
+    grew_from: Option<TimeDuration>,
+}
+
+impl ChangeNote {
+    /// Creates the command.
+    pub fn new(clip: ClipId, from: MidiNote, to: MidiNote) -> Self {
+        Self {
+            clip,
+            from,
+            to,
+            grew_from: None,
+        }
+    }
+}
+
+impl Command<Memory> for ChangeNote {
+    fn label(&self) -> &str {
+        "Change note"
+    }
+
+    fn apply(&mut self, memory: &mut Memory) -> Result<()> {
+        check_note(&self.to)?;
+        let notes = notes_mut(memory, self.clip)?;
+        let i = notes
+            .iter()
+            .position(|n| *n == self.from)
+            .ok_or(SuperbError::NotFound {
+                kind: "note",
+                id: u64::from(self.from.note),
+            })?;
+        notes[i] = self.to;
+        notes.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        self.grew_from = fit_note(memory, self.clip, &self.to)?;
+        Ok(())
+    }
+
+    fn revert(&mut self, memory: &mut Memory) -> Result<()> {
+        let notes = notes_mut(memory, self.clip)?;
+        let i = notes
+            .iter()
+            .position(|n| *n == self.to)
+            .ok_or(SuperbError::NotFound {
+                kind: "note",
+                id: u64::from(self.to.note),
+            })?;
+        notes[i] = self.from;
+        notes.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        if let Some(length) = self.grew_from.take() {
+            memory.resize_clip(self.clip, length)?;
+        }
+        Ok(())
+    }
+
+    fn coalesce_key(&self) -> Option<CoalesceKey> {
+        Some(CoalesceKey::new(keys::CLIP_NOTE, self.clip.raw()))
+    }
+
+    fn merge(
+        &mut self,
+        next: Box<dyn Command<Memory>>,
+    ) -> core::result::Result<(), Box<dyn Command<Memory>>> {
+        // Only the same note, still moving: another note's change in the
+        // same clip stays its own command.
+        if !next.is::<Self>() {
+            return Err(next);
+        }
+        let other = next.downcast::<Self>()?;
+        if other.from != self.to {
+            return Err(other);
+        }
+        self.to = other.to;
+        if self.grew_from.is_none() {
+            self.grew_from = other.grew_from;
+        }
+        Ok(())
     }
 }
 

@@ -16,9 +16,9 @@
 //! clip commands) and the audio held on the `Session`.
 
 use crate::primitives::session::commands::{
-    self, AddClip, ArchiveClip, MoveClip, SplitClip, TrimClip,
+    self, AddClip, AddNote, ArchiveClip, ChangeNote, MoveClip, RemoveNote, SplitClip, TrimClip,
 };
-use crate::primitives::session::{Clip, ClipSource};
+use crate::primitives::session::{Clip, ClipSource, MidiNote};
 use crate::primitives::{
     BeatPosition, ClipId, Result, SuperbError, TimeDuration, TimePosition, TrackId,
 };
@@ -180,6 +180,40 @@ pub fn archive(session: &mut Session, clip: ClipId) -> Result<()> {
 /// Made of: `ArchiveClip` (restoring) through `session::structural`.
 pub fn restore(session: &mut Session, clip: ClipId) -> Result<()> {
     crate::session::structural(session, ArchiveClip::new(clip, false))
+}
+
+/// Adds a note to a MIDI clip. `note.beat` and `note.length` are beats
+/// from the clip start; a note that ends past the clip end extends the
+/// clip. Notes are their content: two identical notes are one note twice,
+/// and [`remove_note`] or [`change_note`] takes the first. One undo step;
+/// how notes are picked, drawn or quantised is the caller's business.
+///
+/// Made of: `AddNote` through `session::structural`.
+pub fn add_note(session: &mut Session, clip: ClipId, note: MidiNote) -> Result<()> {
+    crate::session::structural(session, AddNote::new(clip, note))
+}
+
+/// Removes a note from a MIDI clip; undo puts it back.
+///
+/// Made of: `RemoveNote` through `session::structural`.
+pub fn remove_note(session: &mut Session, clip: ClipId, note: MidiNote) -> Result<()> {
+    crate::session::structural(session, RemoveNote::new(clip, note))
+}
+
+/// Replaces a note of a MIDI clip with another: moved, lengthened, louder,
+/// on another channel, whatever differs. Changes to the same note within
+/// [`Session::COALESCE_WINDOW`] are one undo step, so a drag that calls
+/// this as it goes undoes in one. A note that ends past the clip end
+/// extends the clip.
+///
+/// Made of: `ChangeNote` through `session::structural`.
+pub fn change_note(
+    session: &mut Session,
+    clip: ClipId,
+    from: MidiNote,
+    to: MidiNote,
+) -> Result<()> {
+    crate::session::structural(session, ChangeNote::new(clip, from, to))
 }
 
 #[cfg(test)]
@@ -510,5 +544,94 @@ mod tests {
         );
         assert_eq!(r.len(), 1);
         assert!((r[0].beat - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn notes_are_added_changed_and_removed_with_undo() {
+        let mut session = session::create(session::scratch("notes"), R, 64).unwrap();
+        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        let clip = add(&mut session, keys, vec![note(0.0, 1.0)], TimePosition::ZERO).unwrap();
+        let one_beat = session.memory.clip(clip).unwrap().length();
+        let steps = session.history.undo_len();
+
+        // Adding past the end grows the clip; undo shrinks it back.
+        let late = MidiNote {
+            note: 64,
+            ..note(2.0, 1.0)
+        };
+        add_note(&mut session, clip, late).unwrap();
+        let notes = |s: &Session| match &s.memory.clip(clip).unwrap().source {
+            ClipSource::Midi { notes } => notes.clone(),
+            _ => unreachable!(),
+        };
+        assert_eq!(notes(&session).len(), 2);
+        assert_eq!(
+            session.memory.clip(clip).unwrap().length(),
+            TimeDuration::from_samples(one_beat.samples() * 3)
+        );
+        assert_eq!(session.history.undo_len(), steps + 1);
+        assert!(session::undo(&mut session).unwrap());
+        assert_eq!(notes(&session).len(), 1);
+        assert_eq!(session.memory.clip(clip).unwrap().length(), one_beat);
+        assert!(session::redo(&mut session).unwrap());
+
+        // A drag: several changes to the same note are one undo step.
+        let mut moved = late;
+        for beat in [2.5, 3.0, 3.5] {
+            let next = MidiNote { beat, ..moved };
+            change_note(&mut session, clip, moved, next).unwrap();
+            moved = next;
+        }
+        assert_eq!(session.history.undo_len(), steps + 2);
+        assert!(notes(&session).contains(&moved));
+        // Another note changed within the window joins the step; one undo
+        // takes the whole drag and it back together.
+        let first = note(0.0, 1.0);
+        let louder = MidiNote {
+            velocity: 120,
+            ..first
+        };
+        change_note(&mut session, clip, first, louder).unwrap();
+        assert_eq!(session.history.undo_len(), steps + 2);
+        assert!(session::undo(&mut session).unwrap());
+        assert!(notes(&session).contains(&first));
+        assert!(
+            notes(&session).contains(&late),
+            "the whole drag undone at once"
+        );
+
+        remove_note(&mut session, clip, late).unwrap();
+        assert_eq!(notes(&session).len(), 1);
+        assert!(session::undo(&mut session).unwrap());
+        assert_eq!(notes(&session).len(), 2);
+
+        // Rules: a MIDI clip only, a real note, a note that exists.
+        let audio = {
+            let mut tone = PlanarBuffer::new(1, 4_800);
+            tone.fill(0.1);
+            session.audio.insert("tone.wav", tone);
+            add(&mut session, vox, "tone.wav", TimePosition::ZERO).unwrap()
+        };
+        assert!(add_note(&mut session, audio, note(0.0, 1.0)).is_err());
+        assert!(add_note(&mut session, clip, note(-1.0, 1.0)).is_err());
+        assert!(add_note(&mut session, clip, note(0.0, 0.0)).is_err());
+        assert!(add_note(
+            &mut session,
+            clip,
+            MidiNote {
+                velocity: 0,
+                ..note(0.0, 1.0)
+            }
+        )
+        .is_err());
+        assert!(remove_note(&mut session, clip, note(7.0, 1.0)).is_err());
+        assert!(change_note(&mut session, clip, note(7.0, 1.0), note(8.0, 1.0)).is_err());
+
+        // The schedule follows: the new note sounds when played.
+        transport::seek(&mut session, TimePosition::ZERO).unwrap();
+        transport::start(&mut session).unwrap();
+        let heard = session::steps::render_blocks(&mut session, 4).unwrap();
+        assert!(heard.frames() > 0);
     }
 }
