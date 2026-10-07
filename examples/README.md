@@ -36,6 +36,7 @@ One per flow module, in the order you would use them to make a session.
 | `decode_bounce` | `io::files` | bounce → decode → resample → export | `cargo run --example decode_bounce --features files` |
 | `session_undo` | `session`, `undo` | undoable edits to a `Memory`, JSON save and load | `cargo run --example session_undo` |
 | `clap_host_scan` | `plugins::clap` | scan and instantiate a CLAP plugin, render offline | `cargo run --example clap_host_scan -- [dir ...] [--id …]` |
+| `measure_loudness` | `analysis` | peak, RMS and true peak; LUFS momentary, short-term, integrated; normalising to -16 LUFS; lining two recordings up; finding silence | `cargo run --example measure_loudness` |
 
 The `buffers` and `undo` modules have no example of their own: every
 example above uses `PlanarBuffer`, and `session_undo` and `new_session` are

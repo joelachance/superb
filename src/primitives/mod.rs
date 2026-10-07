@@ -38,6 +38,7 @@ pub use ids::{
 pub use rate::SampleRate;
 pub use time::{BeatDuration, BeatPosition, TimeDuration, TimePosition, TimeSignature};
 
+pub mod analysis;
 pub mod automation;
 pub mod buffers;
 pub mod graph;

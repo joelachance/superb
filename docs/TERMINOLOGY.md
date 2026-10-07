@@ -19,6 +19,7 @@ a musician would use.
 | Memory (what the session remembers and saves; a musician just says the session) | `primitives::session` | Tracks and their state, clips (archived ones included), markers, tempo, routing |
 | Undo history | `primitives::undo` | Undo / redo stack |
 | Automation | `primitives::automation` | Envelopes that move knobs over time |
+| Meters, loudness | `primitives::analysis` | Peak, true peak, RMS, LUFS; normalising; lining two takes up; finding silence |
 | Plugin host | `primitives::plugins` | Loading third-party effects and instruments (CLAP first) |
 
 ## Flows
@@ -81,6 +82,9 @@ column is what not to say in code, docs or UI text.
 - **Punch in / punch out** — Dropping into record at one timeline position and out at another while the transport rolls. `record::punch_in` and `record::punch_out` set the points; `record::start` honours them.
 - **Recording** — A recording in progress. Every armed audio track's audio streams into its own file in the session folder from the first block (`audio/vox 1.wav`, with a `.recording` tag beside it until it is finished); when it stops, each gets a clip named after its file (`vox 1`), and every armed MIDI track gets a clip of the notes that arrived.
 - **Sealed** — Frames of a recording's files that are on disk for good: written, synced and covered by a header a reader accepts (`Recording::sealed_frames`). Everything before them survives a crash and never changes; an uploader may ship their bytes while the recording runs.
+- **True peak** — The highest point the waveform reaches between the samples as well as on them (`analysis::meter::true_peak`), in dBTP; what a converter or an encoder will see. Sample peak can under-read it by up to 3 dB.
+- **LUFS** — Loudness units relative to full scale (`analysis::meter::Loudness`): what the ear hears over time rather than what the meter's needle touches. Momentary (400 ms), short-term (3 s), integrated (the whole programme, gated so silence does not count). Podcasts deliver at −16, broadcast at −23.
+- **Offset** — How many samples one recording lags another (`analysis::offset::estimate`), found from the audio itself, with a confidence; what lines a second microphone or a remote guest up.
 - **Recover** — Placing the recordings a crash left unfinished: their files are still there with their tags; `record::unfinished` lists them and `record::recover` finishes the headers and places the clips. Nothing is deleted.
 - **Insert** — An effect or instrument sitting in a track's signal path, in order. A primitive today (the memory stores it); the flow for it comes back with plugins.
 - **State vs. edit** — A track's mute, solo, arm, monitor and input, a clip's mute, a send's on/off, whether playback loops, the click and its count-in, and where the playhead is are state: heard at the next block, never in the undo history, never in `memory.json`, and saved only where the application says with `session::state_file` (a `state.json` beside the memory, say). Everything else you change is an edit: undoable, and saved with `session::save`.

@@ -51,6 +51,7 @@ They know nothing about flows or the `Session`.
 | `primitives::graph` | signal path | the `Node` trait, the processing graph, silence propagation, latency compensation, live swapping | [graph.md](docs/primitives/graph.md) |
 | `primitives::mixer` | mixer | tracks, buses, sends, insert chains, pan laws, mute/solo, peak meters | [mixer.md](docs/primitives/mixer.md) |
 | `primitives::automation` | automation | envelopes, read/touch/latch/write modes, sample-accurate apply | [automation.md](docs/primitives/automation.md) |
+| `primitives::analysis` | meters, loudness | sample and true peak, RMS, LUFS (momentary, short-term, gated integrated), loudness normalisation, lining two recordings up, silence | [analysis.md](docs/primitives/analysis.md) |
 | `primitives::undo` | undo history | coalescing undo/redo stack with groups and clean-state tracking | [undo.md](docs/primitives/undo.md) |
 | `primitives::session` | the memory | `Memory`: tracks and their state, clips, markers, routing, inserts, tempo map, JSON save/load, the state file, undoable commands | [session.md](docs/primitives/session.md) |
 | `primitives::plugins` | plugin host | plugin instance model, `PluginNode`, CLAP host (VST3 is a stub) | [plugins.md](docs/primitives/plugins.md) |
@@ -189,7 +190,9 @@ recovered), with live counters, punch in and out and a metronome with
 count-in; hearing the
 input and a live instrument on a track's strip; MIDI messages, a MIDI
 channel per track, and hardware input. In the primitives only, for now:
-insert chains and CLAP plugin hosting, automation envelopes and modes.
+insert chains and CLAP plugin hosting, automation envelopes and modes,
+and analysis (true peak, LUFS, loudness normalisation, lining two
+recordings up by their audio, silence).
 
 Not yet: a plugins flow, telling MIDI ports apart per track, loop
 recording, tempo ramps (a tempo that glides rather than steps), duplex

@@ -94,6 +94,8 @@ mute, solo and send-enable move every block.
   scheduled); `primitives::automation` is a separate module.
 * **Metering is peak-hold on the first two channels only**
   (`params::METER_CHANNELS = 2`); higher channel counts on a strip aren't
-  metered beyond L/R, and there's no RMS/LUFS option yet.
+  metered beyond L/R, and there's no RMS/LUFS option on the strip yet;
+  `primitives::analysis::meter` measures RMS, true peak and LUFS off the
+  audio thread.
 * **No VCA/groups** — gain and mute/solo apply per strip; there is no
   linked-fader group concept.

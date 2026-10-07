@@ -90,6 +90,10 @@ name = "realtime_queue"
 path = "examples/primitives/realtime_queue.rs"
 
 [[example]]
+name = "measure_loudness"
+path = "examples/primitives/measure_loudness.rs"
+
+[[example]]
 name = "new_session"
 path = "examples/flows/new_session.rs"
 
