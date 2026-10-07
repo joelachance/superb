@@ -196,6 +196,7 @@ fn audio_file_helpers() {
     let file = AudioFile {
         buffer: ramp_fixture(2, 4_800),
         sample_rate: SampleRate::HZ_48K,
+        bits_per_sample: Some(32),
     };
     let same = file.resampled_to(SampleRate::HZ_48K).unwrap();
     assert_eq!(same.buffer.channel(0), file.buffer.channel(0));
