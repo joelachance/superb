@@ -335,17 +335,21 @@ def render_types(types):
         out += [f"### `{name}`" + (f" *(feature `{cfg}`)*" if cfg else ""), ""]
         if doc: out += [textwrap.fill(plain(doc), 76), ""]
         if fields:
-            out.append("| " + ("field" if kind == "struct" else "variant") + " | type | meaning |")
-            out.append("|---|---|---|")
+            out.append("**Fields**" if kind == "struct" else "**Variants**")
             for f, t, d in fields:
                 d = plain(d)
-                out.append(f"| `{f}` | `{t}` | {d} |" if t else f"| `{f}` | | {d} |")
+                if kind == "struct":
+                    item = f"`{f}: {t}`"
+                else:
+                    item = f"`{f}{t}`" if t.startswith("(") else (f"`{f} {t}`" if t else f"`{f}`")
+                out.append(f"- {item} — {d}" if d else f"- {item}")
             out.append("")
         if methods:
-            out.append("| method | meaning |")
-            out.append("|---|---|")
+            out.append("**Methods**")
             for sig, d in methods:
-                out.append(f"| `{sig.replace('pub ', '', 1)}` | {plain(d)} |")
+                item = f"`{sig.replace('pub ', '', 1)}`"
+                d = plain(d)
+                out.append(f"- {item} — {d}" if d else f"- {item}")
             out.append("")
     return "\n".join(out)
 

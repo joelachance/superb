@@ -379,26 +379,24 @@ record, public fields, constructors only. Every flow function takes `&mut
 Session`; reach into any field and call a primitive directly when a flow
 does not do exactly what you want.
 
-| field | type | meaning |
-|---|---|---|
-| `memory` | `Memory` | The memory: tracks, clips, markers, routing, tempo. |
-| `history` | `UndoStack<Memory>` | Undo history for `memory`. Every flow edit pushes through this stack, so every edit is reversible. Consecutive edits of the same control (a fader, a knob, a clip being dragged) merge into one step while they arrive within `Session::COALESCE_WINDOW` of each other; a pause starts a new step. Call `history.seal()` to end a step sooner (on mouse up, say). |
-| `audio` | `AudioCache` | Audio held in memory, keyed by the path clips refer to, relative to the session folder (`audio/vox 1.wav`). |
-| `folder` | `PathBuf` | The folder the session lives in: `memory.json` and the `audio/` folder of recordings are inside. Set when the session is created or opened; recordings are written there as they stop. |
-| `engine` | `EngineHandle` | Control handle to the engine: commands, graph swaps, position. |
-| `audio_thread` | `Option<AudioThread>` | The engine's audio side. Present until a device takes it (`devices::output`, feature `devices`); while present, `steps::render_blocks` ticks it by hand. |
-| `mixer` | `MixerHandles` | The live controls of the mixer built by the last `steps::rebuild`: one per strip and send, keyed by the memory's ids. |
-| `recording` | `Option<crate::record::Recording>` | A take being recorded, if any. |
-| `channels` | `usize` | Channels per strip and at the output: 2, stereo. Change it before the first rebuild if you need another width. |
-| `output` | `Option<crate::primitives::io::LiveOutput>` | The device output, once `devices::output` started one: the audio thread lives inside it until `devices::close_output`. |
-| `input` | `Option<crate::devices::AudioInput>` | The audio input, once `devices::input` opened it: what monitoring audio tracks hear and device recordings capture. |
-| `midi_inputs` | `Vec<crate::primitives::midi::input::MidiInputBridge>` | Hardware MIDI inputs connected so far. Dropping one disconnects it. |
-| `state_file` | `Option<PathBuf>` | Where state is kept, once `state_file` named a file; `None` means state is not saved. |
+**Fields**
+- `memory: Memory` — The memory: tracks, clips, markers, routing, tempo.
+- `history: UndoStack<Memory>` — Undo history for `memory`. Every flow edit pushes through this stack, so every edit is reversible. Consecutive edits of the same control (a fader, a knob, a clip being dragged) merge into one step while they arrive within `Session::COALESCE_WINDOW` of each other; a pause starts a new step. Call `history.seal()` to end a step sooner (on mouse up, say).
+- `audio: AudioCache` — Audio held in memory, keyed by the path clips refer to, relative to the session folder (`audio/vox 1.wav`).
+- `folder: PathBuf` — The folder the session lives in: `memory.json` and the `audio/` folder of recordings are inside. Set when the session is created or opened; recordings are written there as they stop.
+- `engine: EngineHandle` — Control handle to the engine: commands, graph swaps, position.
+- `audio_thread: Option<AudioThread>` — The engine's audio side. Present until a device takes it (`devices::output`, feature `devices`); while present, `steps::render_blocks` ticks it by hand.
+- `mixer: MixerHandles` — The live controls of the mixer built by the last `steps::rebuild`: one per strip and send, keyed by the memory's ids.
+- `recording: Option<crate::record::Recording>` — A take being recorded, if any.
+- `channels: usize` — Channels per strip and at the output: 2, stereo. Change it before the first rebuild if you need another width.
+- `output: Option<crate::primitives::io::LiveOutput>` — The device output, once `devices::output` started one: the audio thread lives inside it until `devices::close_output`.
+- `input: Option<crate::devices::AudioInput>` — The audio input, once `devices::input` opened it: what monitoring audio tracks hear and device recordings capture.
+- `midi_inputs: Vec<crate::primitives::midi::input::MidiInputBridge>` — Hardware MIDI inputs connected so far. Dropping one disconnects it.
+- `state_file: Option<PathBuf>` — Where state is kept, once `state_file` named a file; `None` means state is not saved.
 
-| method | meaning |
-|---|---|
-| `const COALESCE_WINDOW: core::time::Duration` | How long a pause between two edits of the same control turns them into separate undo steps. |
-| `fn new(memory: Memory, folder: impl Into<PathBuf>, block_size: usize) -> Result<Session>` | A stereo session around `memory` living in `folder`, with an engine that renders blocks of at most `block_size` frames at the memory's sample rate. Records the folder and touches nothing on disk; `create` and `open` do. |
+**Methods**
+- `const COALESCE_WINDOW: core::time::Duration` — How long a pause between two edits of the same control turns them into separate undo steps.
+- `fn new(memory: Memory, folder: impl Into<PathBuf>, block_size: usize) -> Result<Session>` — A stereo session around `memory` living in `folder`, with an engine that renders blocks of at most `block_size` frames at the memory's sample rate. Records the folder and touches nothing on disk; `create` and `open` do.
 
 ### `MixerHandles`
 
@@ -409,16 +407,14 @@ these handles, whose atomics the audio thread reads every block, so a change
 made through them is heard at the next block. Handles from before a rebuild
 are stale: look them up again.
 
-| field | type | meaning |
-|---|---|---|
-| `strips` | `Vec<(TrackId, Arc<StripParams>)>` | A track or bus in the memory → its strip: volume, pan, mute, solo, pan law and the peak meter. |
-| `sends` | `Vec<(SendId, Arc<SendParams>)>` | A send in the memory → its level and on/off. |
-| `click` | `Arc<ClickParams>` | The metronome's click on the master: on/off, level, count-in. |
+**Fields**
+- `strips: Vec<(TrackId, Arc<StripParams>)>` — A track or bus in the memory → its strip: volume, pan, mute, solo, pan law and the peak meter.
+- `sends: Vec<(SendId, Arc<SendParams>)>` — A send in the memory → its level and on/off.
+- `click: Arc<ClickParams>` — The metronome's click on the master: on/off, level, count-in.
 
-| method | meaning |
-|---|---|
-| `fn strip(&self, track: TrackId) -> Option<&Arc<StripParams>>` | The live strip of a track or bus. |
-| `fn send(&self, send: SendId) -> Option<&Arc<SendParams>>` | The live controls of a send. |
+**Methods**
+- `fn strip(&self, track: TrackId) -> Option<&Arc<StripParams>>` — The live strip of a track or bus.
+- `fn send(&self, send: SendId) -> Option<&Arc<SendParams>>` — The live controls of a send.
 
 ### `Imported`
 
@@ -427,15 +423,14 @@ what the file was, so an application can say "44.1 kHz, 24-bit, stereo,
 resampled". Whatever the file was, the session stores it as 32-bit float at
 its own rate.
 
-| field | type | meaning |
-|---|---|---|
-| `key` | `PathBuf` | `audio/<name>.wav`: the key a clip refers to the audio by. |
-| `source_rate` | `SampleRate` | The file's own sample rate. |
-| `source_bits` | `Option<u32>` | The file's own bits per sample when it has a fixed depth (16, 24, 32); `None` for lossy codecs such as MP3 and AAC, which have none. |
-| `channels` | `usize` | Channels. |
-| `frames` | `usize` | Frames as stored, at the session's rate. |
-| `stored_rate` | `SampleRate` | The session's rate, which the stored audio is at. |
-| `resampled` | `bool` | Whether the audio was resampled from `source_rate` to `stored_rate`. |
+**Fields**
+- `key: PathBuf` — `audio/<name>.wav`: the key a clip refers to the audio by.
+- `source_rate: SampleRate` — The file's own sample rate.
+- `source_bits: Option<u32>` — The file's own bits per sample when it has a fixed depth (16, 24, 32); `None` for lossy codecs such as MP3 and AAC, which have none.
+- `channels: usize` — Channels.
+- `frames: usize` — Frames as stored, at the session's rate.
+- `stored_rate: SampleRate` — The session's rate, which the stored audio is at.
+- `resampled: bool` — Whether the audio was resampled from `source_rate` to `stored_rate`.
 
 ## Usage
 

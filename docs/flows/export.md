@@ -64,12 +64,11 @@ let range = export::bounce(&mut session, "verse.wav", export::Bounce { start: Ti
 What to bounce and how. `Bounce::default()` is the whole session, from zero
 to the end of the last clip, at the session's sample rate as 16-bit PCM.
 
-| field | type | meaning |
-|---|---|---|
-| `start` | `TimePosition` | Where to start. Zero by default. |
-| `length` | `Option<TimeDuration>` | How much to render. `None` (the default) runs to the end of the last clip. |
-| `sample_rate` | `Option<SampleRate>` | Convert to this sample rate before writing. `None` (the default) keeps the session's rate. Converting needs the `files` feature; without it any other rate is an error. |
-| `format` | `WavFormat` | 16-bit PCM by default. |
+**Fields**
+- `start: TimePosition` — Where to start. Zero by default.
+- `length: Option<TimeDuration>` — How much to render. `None` (the default) runs to the end of the last clip.
+- `sample_rate: Option<SampleRate>` — Convert to this sample rate before writing. `None` (the default) keeps the session's rate. Converting needs the `files` feature; without it any other rate is an error.
+- `format: WavFormat` — 16-bit PCM by default.
 
 ## Usage
 

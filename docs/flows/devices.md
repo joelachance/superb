@@ -233,10 +233,9 @@ The session's audio input, once `input` opened it: the running stream and
 what it feeds. Monitoring audio tracks hear it through the engine's live
 input; a device recording drains its own queue of the same blocks.
 
-| method | meaning |
-|---|---|
-| `fn channels(&self) -> usize` | Channels in every captured block. |
-| `fn device_name(&self) -> &str` | Name of the device in use. |
+**Methods**
+- `fn channels(&self) -> usize` — Channels in every captured block.
+- `fn device_name(&self) -> &str` — Name of the device in use.
 
 ## Usage
 

@@ -212,26 +212,24 @@ let clips = record::stop(&mut session)?;
 
 Where a recording's audio comes from.
 
-| variant | type | meaning |
-|---|---|---|
-| `Device` | `(Option<String>)` | The session's audio input (`devices::input`). If it is not open yet, this opens it on the named device (`None` for the default). Every channel the input carries is captured, and a thread gathers the audio until `stop`; each track keeps the channel(s) its `track::input` names. |
-| `Queue` | `{ blocks: CaptureConsumer, channels: usize }` | A capture queue you fill yourself (a file, a generator, a test) with blocks of `channels` channels. Blocks wait on the queue until `collect` runs; `session::steps::render_blocks` does that after every block, so an offline program never calls it. |
+**Variants**
+- `Device(Option<String>)` — The session's audio input (`devices::input`). If it is not open yet, this opens it on the named device (`None` for the default). Every channel the input carries is captured, and a thread gathers the audio until `stop`; each track keeps the channel(s) its `track::input` names.
+- `Queue { blocks: CaptureConsumer, channels: usize }` — A capture queue you fill yourself (a file, a generator, a test) with blocks of `channels` channels. Blocks wait on the queue until `collect` runs; `session::steps::render_blocks` does that after every block, so an offline program never calls it.
 
 ### `Recording`
 
 A recording in progress: what `Session::recording` holds between `start` and
 `stop`.
 
-| method | meaning |
-|---|---|
-| `fn frames(&self) -> usize` | Frames gathered so far. |
-| `fn dropped(&self) -> u64` | Blocks the input side could not queue because the queue was full. Anything above zero means a gap in the recording. |
-| `fn started_at(&self) -> TimePosition` | Where the transport started rolling: at or before the punch-in. |
-| `fn punch_in(&self) -> TimePosition` | Where the recording begins and the clips will start. |
-| `fn punch_out(&self) -> Option<TimePosition>` | Where the recording ends on its own, if a punch-out point was set. |
-| `fn tracks(&self) -> &[TrackId]` | The tracks that were armed when it started; each gets a clip. |
-| `fn channels(&self) -> usize` | Audio channels being captured; zero when no audio track is armed. |
-| `fn midi_messages(&self) -> usize` | Incoming MIDI messages gathered so far. |
+**Methods**
+- `fn frames(&self) -> usize` — Frames gathered so far.
+- `fn dropped(&self) -> u64` — Blocks the input side could not queue because the queue was full. Anything above zero means a gap in the recording.
+- `fn started_at(&self) -> TimePosition` — Where the transport started rolling: at or before the punch-in.
+- `fn punch_in(&self) -> TimePosition` — Where the recording begins and the clips will start.
+- `fn punch_out(&self) -> Option<TimePosition>` — Where the recording ends on its own, if a punch-out point was set.
+- `fn tracks(&self) -> &[TrackId]` — The tracks that were armed when it started; each gets a clip.
+- `fn channels(&self) -> usize` — Audio channels being captured; zero when no audio track is armed.
+- `fn midi_messages(&self) -> usize` — Incoming MIDI messages gathered so far.
 
 ## Usage
 
