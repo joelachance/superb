@@ -95,6 +95,8 @@ pub struct Session {
     /// Where state is kept, once [`state_file`] named a file; `None` means
     /// state is not saved.
     pub state_file: Option<PathBuf>,
+    /// Whether the log has been told that state is not being saved.
+    pub(crate) state_warned: bool,
 }
 
 impl Session {
@@ -137,6 +139,7 @@ impl Session {
             #[cfg(feature = "midi-io")]
             midi_inputs: Vec::new(),
             state_file: None,
+            state_warned: false,
         })
     }
 }
@@ -215,6 +218,10 @@ pub fn create(
         .map_err(|e| SuperbError::Message(format!("cannot create {}: {e}", folder.display())))?;
     let session = Session::new(Memory::new(name, sample_rate), folder, block_size)?;
     session.memory.save(folder.join(folder::MEMORY_FILE))?;
+    log::info!(
+        "{}: created; state (mute, solo, arm, monitor, input, MIDI channel, clip mute, send on/off, looping, click, count-in, playhead) is not saved until session::state_file names a file",
+        folder.display()
+    );
     Ok(session)
 }
 
@@ -229,6 +236,10 @@ pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session> {
     let memory = Memory::load(folder.join(folder::MEMORY_FILE))?;
     let mut session = Session::new(memory, folder, block_size)?;
     folder::load_audio(&mut session, folder);
+    log::info!(
+        "{}: opened; state (mute, solo, arm, monitor, input, MIDI channel, clip mute, send on/off, looping, click, count-in, playhead) is not saved until session::state_file names a file",
+        folder.display()
+    );
     Ok(session)
 }
 
@@ -246,6 +257,12 @@ pub fn save(session: &mut Session) -> Result<()> {
     folder::write_missing_audio(session, &folder)?;
     session.memory.save(folder.join(folder::MEMORY_FILE))?;
     session.history.mark_clean();
+    if session.state_file.is_none() {
+        log::info!(
+            "{}: memory.json saved; state not saved, no state file named (session::state_file)",
+            folder.display()
+        );
+    }
     write_state(session)
 }
 
@@ -456,6 +473,13 @@ pub(crate) fn set_state(
     flip: impl FnOnce(&mut Memory) -> Result<()>,
 ) -> Result<()> {
     flip(&mut session.memory)?;
+    if session.state_file.is_none() && !session.state_warned {
+        session.state_warned = true;
+        log::warn!(
+            "{}: state changed with no state file named; it will not survive reopening the session (session::state_file)",
+            session.folder.display()
+        );
+    }
     write_state(session)
 }
 

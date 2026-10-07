@@ -106,3 +106,8 @@ The crate-private helpers `edit`, `structural`, `changed_structure` and
 * Beats are quarter notes whatever the meter, as in Logic and Cubase: a
   6/8 bar is three beats long and the click ticks eighths. Tempo ramps
   (`SetTempo::ramped`) have no verb yet; push the command yourself.
+* The SDK speaks through the `log` facade for things that are not
+  errors but you would want to know: a session opened without a state
+  file, the first state change that will not be saved, a save that left
+  state out. Applications pick the logger (`env_logger`, say); without
+  one the lines go nowhere.

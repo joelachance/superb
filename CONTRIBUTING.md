@@ -71,6 +71,9 @@ replacing at least three primitive calls or by hiding an ordering hazard
   application named one (`session::state_file`); it never enters the undo
   history or `memory.json`.
 * No behaviour on the `Session` itself beyond constructors; it is a record.
+* What is not an error but worth knowing goes to the `log` facade
+  (`log::info!`, `log::warn!`), once, with the folder and the verb that
+  fixes it; the application picks the logger. Errors stay `Result`s.
 
 ## Naming
 
