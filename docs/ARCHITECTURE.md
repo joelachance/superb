@@ -184,7 +184,8 @@ sample rate and block size or it is rejected, never re-prepared on the
 audio thread. The swap queue holds two graphs; `session::steps::rebuild` reclaims
 retired graphs before building and, while the audio thread is still owned
 by the `Session`, applies the swap itself so repeated rebuilds never back
-up. When a device drives it, the audio thread publishes where and when
+up. While a device drives it, a burst of edits in one go waits for the
+queue to empty, one graph per block, instead of failing. When a device drives it, the audio thread publishes where and when
 the transport began rolling on the device clock (`RollStart`, at the
 block's playback instant); captured blocks carry their capture instant, so
 a recording that lines its first frame up with the roll start has taken

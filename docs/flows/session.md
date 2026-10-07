@@ -89,7 +89,8 @@ in `primitives::session::commands` pushed through `UndoStack::push`;
 `meter_change` go through `session::structural` (`SetTempo`,
 `RemoveTempo`, `SetMeter`); `set_loop` additionally sends
 `EngineCommand::SetLoop`. `rebuild`: `EngineHandle::reclaim` →
-`build_mixer` → `publish`, then `LiveGraph::apply_pending` while the audio
+`build_mixer` → `publish` (which waits for room in the swap queue while a
+device drives the engine), then `LiveGraph::apply_pending` while the audio
 thread is still in the session. `render_blocks`: `AudioThread::tick` per
 block, plus `record::collect` while a recording runs.
 

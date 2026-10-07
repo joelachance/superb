@@ -10,6 +10,7 @@
 //! [`build_mixer`] and [`publish`].
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::primitives::buffers::gain::db_to_linear;
 use crate::primitives::buffers::PlanarBuffer;
@@ -142,10 +143,30 @@ pub fn build_mixer(
 /// next block. The mixer's bookkeeping is consumed; keep the handles
 /// from [`build_mixer`] first.
 ///
-/// Made of: `Mixer::into_graph` → `EngineHandle::publish`.
+/// The swap queue holds two graphs and the audio thread takes one per
+/// block, so a burst of edits in one go (three tracks added at once, a
+/// template loaded) waits for room, a few blocks at most, instead of
+/// failing. After [`SWAP_WAIT`] with no room nothing is applying swaps and
+/// the error comes back.
+///
+/// Made of: `Mixer::into_graph` → `GraphEditor::replace_draft` →
+/// `GraphEditor::publish`, retried while the queue is full.
 pub fn publish(engine: &mut EngineHandle, mixer: Mixer) -> Result<()> {
-    engine.publish(mixer.into_graph())
+    let _ = engine.editor().replace_draft(mixer.into_graph());
+    let started = Instant::now();
+    loop {
+        match engine.editor().publish() {
+            Err(SuperbError::CapacityExceeded { .. }) if started.elapsed() < SWAP_WAIT => {
+                std::thread::sleep(Duration::from_micros(500));
+            }
+            result => return result,
+        }
+    }
 }
+
+/// How long [`publish`] waits for the audio thread to make room in the
+/// swap queue before giving up.
+pub const SWAP_WAIT: Duration = Duration::from_millis(250);
 
 /// Each track in the memory → the strip or bus the mixer got for it, in order.
 type Strips = Vec<(TrackId, StripId)>;
@@ -780,5 +801,42 @@ mod tests {
             assert!(mic.push(&block, i));
         }
         assert!(render_blocks(&mut session, 2).unwrap().is_silent());
+    }
+
+    #[test]
+    fn a_burst_of_rebuilds_waits_for_the_swap_queue_while_a_device_drives() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::Arc;
+        let mut session = session::create(session::scratch("burst"), R, 64).unwrap();
+        // "A device": the audio thread leaves the session and ticks on its own.
+        let mut audio = session.audio_thread.take().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&stop);
+        let ticker = std::thread::spawn(move || {
+            let mut out = crate::primitives::buffers::PlanarBuffer::new(2, 64);
+            while !flag.load(Ordering::Acquire) {
+                audio.tick(&mut out).unwrap();
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            audio
+        });
+        // Six rebuilds in a row: the queue holds two, the rest wait a block.
+        for i in 0..6 {
+            track::add(&mut session, &format!("t{i}"), TrackKind::Audio).unwrap();
+            rebuild(&mut session).unwrap_or_else(|e| panic!("rebuild {i}: {e}"));
+        }
+        assert_eq!(session.mixer.strips.len(), 6);
+        stop.store(true, Ordering::Release);
+        let audio = ticker.join().unwrap();
+        drop(audio);
+        // With nothing applying swaps the wait gives up with the error.
+        let mut failed = false;
+        for _ in 0..4 {
+            if rebuild(&mut session).is_err() {
+                failed = true;
+                break;
+            }
+        }
+        assert!(failed, "no audio thread: the queue stays full");
     }
 }
