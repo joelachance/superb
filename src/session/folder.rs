@@ -37,6 +37,24 @@ pub(crate) fn write_audio(
 }
 
 /// Writes every buffer a clip refers to that is not yet a file in `folder`.
+/// `audio/<stem>.wav`, or `audio/<stem> 2.wav` and on, that nothing uses
+/// yet in memory or on disk.
+pub(crate) fn free_key(session: &Session, stem: &str) -> PathBuf {
+    let mut n = 1;
+    loop {
+        let name = if n == 1 {
+            format!("{AUDIO_DIR}/{stem}.wav")
+        } else {
+            format!("{AUDIO_DIR}/{stem} {n}.wav")
+        };
+        let key = PathBuf::from(name);
+        if session.audio.get(&key).is_none() && !session.folder.join(&key).exists() {
+            return key;
+        }
+        n += 1;
+    }
+}
+
 pub(crate) fn write_missing_audio(session: &Session, folder: &Path) -> Result<()> {
     let rate = session.memory.sample_rate();
     for track in session.memory.tracks() {

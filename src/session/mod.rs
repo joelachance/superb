@@ -248,6 +248,51 @@ pub fn save(session: &mut Session) -> Result<()> {
     write_state(session)
 }
 
+/// Brings an audio file into the session: read (and, with the `files`
+/// feature, decoded from any format and resampled to the session's rate;
+/// without it, a WAV at the session's rate), written into the folder as
+/// `audio/<name>.wav` (`<name> 2.wav` when that is taken) and kept in
+/// memory. Returns the key a clip refers to it by; `clip::add` places it.
+/// Not an edit: the file joins the folder and stays, placing it is the
+/// undo step.
+///
+/// Made of: `io::files::decode_at_rate` or `io::wav::read` →
+/// `folder::free_key` → `folder::write_audio` → `AudioCache::insert`.
+pub fn import_audio(session: &mut Session, file: impl AsRef<Path>) -> Result<PathBuf> {
+    let file = file.as_ref();
+    let rate = session.memory.sample_rate();
+    let audio = read_audio(file, rate)?;
+    let stem = file
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "audio".into());
+    let key = folder::free_key(session, &stem);
+    folder::write_audio(&session.folder, &key, &audio, rate)?;
+    session.audio.insert(key.clone(), audio);
+    Ok(key)
+}
+
+/// The audio of a file at the session's rate: any format, resampled.
+#[cfg(feature = "files")]
+fn read_audio(file: &Path, rate: SampleRate) -> Result<crate::primitives::buffers::PlanarBuffer> {
+    Ok(crate::primitives::io::files::decode_at_rate(file, rate)?.buffer)
+}
+
+/// The audio of a WAV file already at the session's rate.
+#[cfg(not(feature = "files"))]
+fn read_audio(file: &Path, rate: SampleRate) -> Result<crate::primitives::buffers::PlanarBuffer> {
+    let (audio, file_rate) = crate::primitives::io::wav::read(file)?;
+    if file_rate != rate {
+        return Err(SuperbError::Message(format!(
+            "{} is at {} Hz and the session at {} Hz; the `files` feature resamples and reads other formats",
+            file.display(),
+            file_rate.hz(),
+            rate.hz()
+        )));
+    }
+    Ok(audio)
+}
+
 /// Says where state is kept, or that it is not. State (a track's mute,
 /// solo, arm, monitor and input, a clip's mute, a send's on/off, looping,
 /// the click and its count-in, the playhead) is never written into
@@ -746,5 +791,61 @@ mod tests {
         assert!(std::fs::read_to_string(&state)
             .unwrap()
             .contains("\"mute\": true"));
+    }
+
+    #[test]
+    fn a_file_is_imported_into_the_folder_under_a_free_name() {
+        let folder = scratch("import");
+        let mut session = create(&folder, R, 64).unwrap();
+        let vox = track::add(&mut session, "vox", TrackKind::Audio).unwrap();
+        let mut tone = PlanarBuffer::new(1, 4_800);
+        tone.fill(0.25);
+        let file = scratch("import-src").join("tone.wav");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        crate::primitives::io::wav::write(
+            &file,
+            &tone,
+            R,
+            crate::primitives::io::wav::WavFormat::Float32,
+        )
+        .unwrap();
+        let steps = session.history.undo_len();
+        let key = import_audio(&mut session, &file).unwrap();
+        assert_eq!(key, PathBuf::from("audio/tone.wav"));
+        assert!(
+            folder.join(&key).is_file(),
+            "copied into the session folder"
+        );
+        assert_eq!(session.audio.get(&key).unwrap().frames(), 4_800);
+        assert_eq!(session.history.undo_len(), steps, "not an edit");
+        let clip = clip::add(&mut session, vox, key.clone(), TimePosition::ZERO).unwrap();
+        assert_eq!(session.history.undo_len(), steps + 1, "placing it is");
+        assert_eq!(
+            session.memory.clip(clip).unwrap().length(),
+            TimeDuration::from_samples(4_800)
+        );
+        let again = import_audio(&mut session, &file).unwrap();
+        assert_eq!(again, PathBuf::from("audio/tone 2.wav"), "a free name");
+        assert!(import_audio(&mut session, folder.join("missing.wav")).is_err());
+
+        // A file at another rate: resampled with `files`, refused without.
+        let other = file.with_file_name("slow.wav");
+        crate::primitives::io::wav::write(
+            &other,
+            &tone,
+            SampleRate::CD,
+            crate::primitives::io::wav::WavFormat::Float32,
+        )
+        .unwrap();
+        let slow = import_audio(&mut session, &other);
+        if cfg!(feature = "files") {
+            let frames = session.audio.get(&slow.unwrap()).unwrap().frames();
+            assert!(
+                (frames as i64 - 4_800 * 48_000 / 44_100).abs() <= 2,
+                "{frames}"
+            );
+        } else {
+            assert!(slow.is_err());
+        }
     }
 }

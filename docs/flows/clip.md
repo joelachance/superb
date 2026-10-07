@@ -66,6 +66,9 @@ through `session::structural`. `move_to`: `MoveClip::to_track`; `trim`:
 
 ## Notes
 
+* Audio has to be in the session before a clip can play it:
+  `session::import_audio` brings a file in and returns the key `add`
+  takes; a recording's audio arrives the same way as it stops.
 * `ClipSource` is the primitive behind `content`: `&str`, `String`, a path
   and `Vec<MidiNote>` convert into it. Pass a `ClipSource::Audio` with an
   `offset` yourself to start partway into the audio.
