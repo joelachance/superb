@@ -98,10 +98,10 @@ A few conventions hold on every page, so they are stated here once:
   start.
 
 `cargo doc --no-deps --open` builds the same text as rustdoc, with every
-signature linked. The same pages make up the documentation site under
-[website/](website/README.md), which `cd website && pnpm install && pnpm dev`
-serves; it also publishes every page as plain text for language models
-(`/llms.txt`, `/llms-full.txt`).
+signature linked. The same pages make up the documentation site that
+lives beside them in [docs/](docs/README.md): `cd docs && pnpm install &&
+pnpm dev` serves it, and it publishes every page as plain text for
+language models too (`/llms.txt`, `/llms-full.txt`).
 
 ## Quick start
 

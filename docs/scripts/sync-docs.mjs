@@ -1,9 +1,9 @@
 // Writes content/docs/ from the Markdown in the repository: README.md,
-// docs/, examples/README.md and CONTRIBUTING.md. The Markdown stays the
-// source of truth; this makes it MDX (frontmatter from the first heading,
-// `<` and `{` escaped outside code, links resolved to site routes) and
-// lays out the sidebar. `pnpm dev` and `pnpm build` run it first, and
-// content/docs/ is not committed.
+// the Markdown beside this site in docs/, examples/README.md and
+// CONTRIBUTING.md. The Markdown stays the source of truth; this makes it
+// MDX (frontmatter from the first heading, `<` and `{` escaped outside
+// code, links resolved to site routes) and lays out the sidebar. `pnpm dev`
+// and `pnpm build` run it first, and content/docs/ is not committed.
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, posix, relative, resolve } from 'node:path';
 
