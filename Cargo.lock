@@ -952,6 +952,7 @@ dependencies = [
  "cpal",
  "dasp_sample",
  "libloading",
+ "log",
  "midir",
  "rubato",
  "serde",

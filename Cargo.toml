@@ -28,6 +28,9 @@ clap = ["dep:clap-sys", "dep:libloading"]
 # crate (symphonia) is opt-in and imported from exactly one source file.
 [dependencies]
 dasp_sample = "0.11"
+# Notes the SDK leaves for the application (state not saved, a device
+# falling back); the application picks the logger. MIT OR Apache-2.0.
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 cpal = { version = "0.18", optional = true }
