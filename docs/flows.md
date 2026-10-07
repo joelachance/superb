@@ -14,6 +14,7 @@ This page covers what they share; each flow has its own note in
 | `send` — a copy of a track into a bus: add, remove, level, on/off | [send.md](flows/send.md) |
 | `midi` — send notes, connect a keyboard | [midi.md](flows/midi.md) |
 | `record` — start a recording, stop it, get clips; punch points | [record.md](flows/record.md) |
+| `marker` — named places on the timeline: add, move, rename, remove | [marker.md](flows/marker.md) |
 | `metronome` — a click while the transport rolls; its level; bars of count-in before a recording | [metronome.md](flows/metronome.md) |
 | `export` — bounce the session, or a range of it, to WAV | [export.md](flows/export.md) |
 | `devices` — audio and MIDI hardware; play through an output | [devices.md](flows/devices.md) |

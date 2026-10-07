@@ -71,6 +71,7 @@
 pub mod clip;
 pub mod devices;
 pub mod export;
+pub mod marker;
 pub mod metronome;
 pub mod midi;
 pub mod primitives;

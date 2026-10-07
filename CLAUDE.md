@@ -10,7 +10,7 @@ for the engine, `docs/flows.md` for the flow tier, and
 ## Layout
 
 - `src/primitives/` is the engine; modules never import a flow or the `Session`.
-- Flows (`session`, `track`, `clip`, `transport`, `send`, `midi`,
+- Flows (`session`, `track`, `clip`, `marker`, `transport`, `send`, `midi`,
   `record`, `metronome`, `export`, `devices`) are free functions over the `Session`
   struct in `src/session/mod.rs`; `session::steps` is its engine side.
   Verbs take `&mut Session`; steps take primitives; every verb doc ends

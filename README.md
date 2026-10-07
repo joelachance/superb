@@ -17,7 +17,7 @@ The crate is organised so you always know what a call will do.
 **Flows** are top-level modules named after the things you work with and
 the tasks you do. Each one is a set of free functions that take a
 `Session` and do the whole job: `session`, `track`, `clip`, `transport`,
-`send`, `midi`, `record`, `metronome`, `export`, `devices`. Every flow function
+`marker`, `send`, `midi`, `record`, `metronome`, `export`, `devices`. Every flow function
 documents the primitive calls it is *made of*, so when one does not do
 exactly what you want, you call those primitives yourself. Nothing is
 hidden behind an object; the `Session` is a plain struct with public
@@ -50,6 +50,7 @@ They know nothing about flows or the `Session`.
 | `send` | a copy of a track into a bus: add, remove, level, on/off | [send.md](docs/flows/send.md) |
 | `midi` | send notes, connect a keyboard | [midi.md](docs/flows/midi.md) |
 | `record` | start a recording, stop it, get a clip on every armed track; punch points | [record.md](docs/flows/record.md) |
+| `marker` | named places on the timeline: add, move, rename, remove | [marker.md](docs/flows/marker.md) |
 | `metronome` | a click while the transport rolls, its level, bars of count-in before a recording | [metronome.md](docs/flows/metronome.md) |
 | `export` | bounce the session, or a range of it, to WAV, optionally resampled | [export.md](docs/flows/export.md) |
 | `devices` | list audio and MIDI hardware; play through an output; configurations that match the session | [devices.md](docs/flows/devices.md) |

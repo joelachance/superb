@@ -14,7 +14,9 @@
 //! Made of `superb::primitives::session` (the memory's tracks and their
 //! commands) and `superb::primitives::mixer` (`StripParams`, the live side).
 
-use crate::primitives::session::commands::{self, AddTrack, ArchiveTrack, SetTrackOutput};
+use crate::primitives::session::commands::{
+    self, AddTrack, ArchiveTrack, MoveTrack, SetTrackOutput,
+};
 use crate::primitives::session::{Input, Track, TrackKind};
 use crate::primitives::{Result, SuperbError, TrackId};
 use crate::session::Session;
@@ -47,6 +49,23 @@ pub fn archive(session: &mut Session, track: TrackId) -> Result<()> {
 pub fn restore(session: &mut Session, track: TrackId) -> Result<()> {
     not_master(session, track, "the master is not archived")?;
     crate::session::structural(session, ArchiveTrack::new(track, false))
+}
+
+/// Moves a track to `index` among the tracks (0 first). One undo step; the
+/// mixer does not care about order, so nothing rebuilds.
+///
+/// Made of: `MoveTrack` through `session::edit`.
+pub fn move_to(session: &mut Session, track: TrackId, index: usize) -> Result<()> {
+    not_master(session, track, "the master is not among the tracks")?;
+    crate::session::edit(session, MoveTrack::new(track, index))
+}
+
+/// Sets a track's display colour as `0xRRGGBB`, or clears it. One undo
+/// step; quick changes to one track merge.
+///
+/// Made of: `set_track_color` through `session::edit`.
+pub fn color(session: &mut Session, track: TrackId, color: Option<u32>) -> Result<()> {
+    crate::session::edit(session, commands::set_track_color(track, color))
 }
 
 /// The master is a track for volume, pan, mute and metering, and nothing
@@ -350,5 +369,35 @@ mod tests {
         // Routing a track "to the master" is the default and stays `None`.
         route(&mut session, vox, Some(master)).unwrap();
         assert_eq!(session.memory.track(vox).unwrap().output(), None);
+    }
+
+    #[test]
+    fn tracks_move_in_the_order_and_take_a_colour() {
+        let mut session =
+            session::create(session::scratch("order"), SampleRate::HZ_48K, 64).unwrap();
+        let a = add(&mut session, "a", TrackKind::Audio).unwrap();
+        let b = add(&mut session, "b", TrackKind::Audio).unwrap();
+        let c = add(&mut session, "c", TrackKind::Midi).unwrap();
+        let order = |s: &Session| s.memory.tracks().iter().map(|t| t.id()).collect::<Vec<_>>();
+        let steps = session.history.undo_len();
+        move_to(&mut session, c, 0).unwrap();
+        assert_eq!(order(&session), [c, a, b]);
+        assert_eq!(session.history.undo_len(), steps + 1);
+        assert!(session::undo(&mut session).unwrap());
+        assert_eq!(order(&session), [a, b, c]);
+        assert!(move_to(&mut session, a, 7).is_err(), "past the end");
+        let master = session.memory.master().id();
+        assert!(move_to(&mut session, master, 0).is_err());
+
+        color(&mut session, a, Some(0xff8800)).unwrap();
+        assert_eq!(session.memory.track(a).unwrap().color, Some(0xff8800));
+        color(&mut session, a, None).unwrap();
+        assert_eq!(session.memory.track(a).unwrap().color, None);
+        assert!(session::undo(&mut session).unwrap());
+        assert_eq!(
+            session.memory.track(a).unwrap().color,
+            None,
+            "quick colour changes merged into one step"
+        );
     }
 }

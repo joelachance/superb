@@ -30,6 +30,8 @@ archived, and comes back whole.
 | `monitor(session, track, on)` | state; a MIDI track carries a live instrument, an audio track plays the session's audio input (`devices::input`) on the channel(s) its input names; not for buses; rebuilds | — |
 | `input(session, track, Option<Input>)` | state; audio tracks only; which input channel(s) feed the track when it records: `Input::Mono(0)`, `Input::Stereo(0, 1)`, or `None` for everything captured | — |
 | `route(session, track, Some(bus) or None)` | output into a bus or the master; loops refused | one |
+| `move_to(session, track, index)` | to another place in the order (0 first); nothing rebuilds | one |
+| `color(session, track, Option<u32>)` | display colour as `0xRRGGBB`, or none | quick changes merge |
 | `peak(session, track) -> Option<[f32; 2]>` | the strip's peak meter, read and reset; `None` before the first rebuild | |
 
 ## Usage

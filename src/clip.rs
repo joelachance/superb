@@ -182,6 +182,13 @@ pub fn restore(session: &mut Session, clip: ClipId) -> Result<()> {
     crate::session::structural(session, ArchiveClip::new(clip, false))
 }
 
+/// Renames a clip. Quick successive renames of one clip are one undo step.
+///
+/// Made of: `set_clip_name` through `session::edit`.
+pub fn rename(session: &mut Session, clip: ClipId, name: &str) -> Result<()> {
+    crate::session::edit(session, commands::set_clip_name(clip, name))
+}
+
 /// Adds a note to a MIDI clip. `note.beat` and `note.length` are beats
 /// from the clip start; a note that ends past the clip end extends the
 /// clip. Notes are their content: two identical notes are one note twice,
@@ -632,5 +639,20 @@ mod tests {
         transport::start(&mut session).unwrap();
         let heard = session::steps::render_blocks(&mut session, 4).unwrap();
         assert!(heard.frames() > 0);
+    }
+
+    #[test]
+    fn a_clip_takes_a_new_name() {
+        let mut session = session::create(session::scratch("rename"), R, 64).unwrap();
+        let keys = track::add(&mut session, "keys", TrackKind::Midi).unwrap();
+        let clip = add(&mut session, keys, vec![note(0.0, 1.0)], TimePosition::ZERO).unwrap();
+        assert_eq!(session.memory.clip(clip).unwrap().name, "keys");
+        let steps = session.history.undo_len();
+        rename(&mut session, clip, "intro").unwrap();
+        rename(&mut session, clip, "intro riff").unwrap();
+        assert_eq!(session.memory.clip(clip).unwrap().name, "intro riff");
+        assert_eq!(session.history.undo_len(), steps + 1, "quick renames merge");
+        assert!(session::undo(&mut session).unwrap());
+        assert_eq!(session.memory.clip(clip).unwrap().name, "keys");
     }
 }

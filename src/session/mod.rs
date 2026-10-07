@@ -25,15 +25,11 @@ pub mod steps;
 use std::path::{Path, PathBuf};
 
 use crate::primitives::io::EngineCommand;
-use crate::primitives::session::commands::{
-    AddMarker, RemoveTempo, SetLoopRange, SetMeter, SetTempo,
-};
-use crate::primitives::session::{Marker, Memory};
+use crate::primitives::session::commands::{RemoveTempo, SetLoopRange, SetMeter, SetTempo};
+use crate::primitives::session::Memory;
 use crate::primitives::transport::LoopRange;
 use crate::primitives::undo::Command;
-use crate::primitives::{
-    BeatPosition, MarkerId, Result, SampleRate, SuperbError, TimePosition, TimeSignature, TrackId,
-};
+use crate::primitives::{BeatPosition, Result, SampleRate, SuperbError, TimeSignature, TrackId};
 
 use std::sync::Arc;
 
@@ -104,6 +100,12 @@ impl Session {
     /// How long a pause between two edits of the same control turns them
     /// into separate undo steps.
     pub const COALESCE_WINDOW: core::time::Duration = core::time::Duration::from_millis(500);
+
+    /// Whether the next start rebuilds; for tests of what rebuilds.
+    #[cfg(test)]
+    pub(crate) fn needs_rebuild_for_test(&self) -> bool {
+        self.needs_rebuild
+    }
 
     /// A stereo session around `memory` living in `folder`, with an engine
     /// that renders blocks of at most `block_size` frames at the memory's
@@ -304,15 +306,6 @@ pub(crate) fn scratch(tag: &str) -> PathBuf {
     ))
 }
 
-/// Drops a named marker on the timeline.
-///
-/// Made of: `Memory::allocate_marker_id` → `Marker::with_id` → push `AddMarker`.
-pub fn add_marker(session: &mut Session, name: &str, at: TimePosition) -> Result<MarkerId> {
-    let id = session.memory.allocate_marker_id();
-    edit(session, AddMarker::new(Marker::with_id(id, name, at)))?;
-    Ok(id)
-}
-
 /// Sets the memory's tempo at the start. Consecutive changes are one undo
 /// step. MIDI clips are scheduled through the tempo map, so the mixer
 /// rebuilds, and the rebuild hands the engine the new map.
@@ -426,7 +419,7 @@ mod tests {
     use crate::primitives::buffers::PlanarBuffer;
     use crate::primitives::session::commands;
     use crate::primitives::session::{ClipSource, MidiNote, TrackKind};
-    use crate::primitives::TimeDuration;
+    use crate::primitives::{TimeDuration, TimePosition};
     use crate::{clip, track};
     use core::time::Duration;
 
@@ -461,7 +454,7 @@ mod tests {
         clip::move_to(&mut session, clip, vox, TimePosition::from_samples(200)).unwrap();
         clip::move_to(&mut session, clip, vox, TimePosition::from_samples(300)).unwrap();
         session.history.seal(); // "mouse up"; a pause would do the same
-        let marker = add_marker(&mut session, "verse", TimePosition::ZERO).unwrap();
+        let marker = crate::marker::add(&mut session, "verse", TimePosition::ZERO).unwrap();
         set_tempo(&mut session, 90.0).unwrap();
         assert_eq!(
             session.history.undo_len(),
@@ -582,7 +575,7 @@ mod tests {
         tone.fill(0.5);
         session.audio.insert("audio/tone.wav", tone);
         let clip = clip::add(&mut session, t, "audio/tone.wav", TimePosition::ZERO).unwrap();
-        add_marker(&mut session, "m", TimePosition::from_samples(7)).unwrap();
+        crate::marker::add(&mut session, "m", TimePosition::from_samples(7)).unwrap();
         assert!(!session.history.is_clean());
         assert_eq!(session.folder, dir);
 

@@ -16,7 +16,7 @@
 
 use superb::prelude::*;
 use superb::primitives::session::MidiNote;
-use superb::{clip, session, track};
+use superb::{clip, marker, session, track};
 
 fn main() -> Result<()> {
     // A session is a folder: memory.json plus an audio/ folder, created at
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
 
     // Memory-level settings.
     session::set_tempo(&mut session, 100.0)?;
-    session::add_marker(&mut session, "verse", TimePosition::from_seconds(0.5, rate))?;
+    marker::add(&mut session, "verse", TimePosition::from_seconds(0.5, rate))?;
     println!(
         "{}: {} tracks, {} clips, {} bpm",
         session.memory.name(),

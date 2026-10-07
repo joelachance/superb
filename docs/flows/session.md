@@ -18,7 +18,6 @@ moment it is created: `memory.json` beside an `audio/` folder of WAV files.
 | `create(folder, sample_rate, block_size) -> Session` | a new session in `folder`, created now with its `audio/` folder and `memory.json`, named after the folder | — |
 | `open(folder, block_size)` / `save(session)` | the folder in and out: `memory.json` plus the WAV files clips refer to; `save` also writes any audio a clip refers to that is not on disk yet and remembers where the playhead is, so `open` starts there; `session.history.is_clean()` says whether anything changed since (state changes count) | — |
 | `state_file(session, Option<PathBuf>)` | where state is kept: read now if the file exists, rewritten after every state change and every `save`, playhead included; `None` stops writing. Until set, state is not saved | — |
-| `add_marker(session, name, at)` | | one |
 | `set_tempo(session, bpm)` | initial tempo of the tempo map; rebuilds, which hands the engine the map | one |
 | `tempo_change(session, beat, Option<bpm>)` | add or remove a tempo change at a beat; rebuilds | one per beat (coalesces) |
 | `meter_change(session, bar, Option<TimeSignature>)` | set or remove the time signature from a bar on; bar 1 always has one; rebuilds | one |
@@ -48,12 +47,12 @@ example builds a mixer this way without a `Session`.
 
 ```rust
 use superb::prelude::*;
-use superb::{session, track};
+use superb::{marker, session, track};
 
 let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;   // a folder
 let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 session::set_tempo(&mut session, 100.0)?;
-session::add_marker(&mut session, "verse", TimePosition::from_samples(48_000))?;
+marker::add(&mut session, "verse", TimePosition::from_samples(48_000))?;
 session::undo(&mut session)?;   // the marker is gone
 session::save(&mut session)?;
 let again = session::open("demo.superb", 256)?;

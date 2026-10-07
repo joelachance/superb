@@ -27,6 +27,7 @@ rebuilds the mixer.
 | `fade_in(session, clip, length)` / `fade_out(session, clip, length)` | fades from the start and to the end | drag (coalesces) |
 | `archive(session, clip)` | kept with its place and audio, silent, not counted toward the session's end | one |
 | `restore(session, clip)` | back on the timeline | one |
+| `rename(session, clip, name)` | | quick renames merge |
 | `add_note(session, clip, MidiNote)` | a note into a MIDI clip, beats from the clip start; a note past the end extends the clip | one |
 | `remove_note(session, clip, MidiNote)` | the first note equal to it | one |
 | `change_note(session, clip, from, to)` | replace a note with another: moved, longer, louder, whatever differs | drag (note changes in one clip coalesce) |
