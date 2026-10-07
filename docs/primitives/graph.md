@@ -41,6 +41,9 @@ on this layer and the block loop in `primitives::io` drives it.
 * `nodes` module — fixtures: `SineNode`, `GainNode` (click-free ramped gain),
   `PassThroughNode`, `ConstantNode`, `SilenceNode`, `MonoSynthNode`,
   `DelayNode` (fixed delay that reports itself as latency).
+* `dynamics` module — compressor, true-peak limiter with lookahead, gate
+  and expander, de-esser, leveler, as nodes driven by shared `Params`;
+  see [dynamics.md](dynamics.md).
 
 ## Usage
 

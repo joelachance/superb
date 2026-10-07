@@ -20,6 +20,7 @@ a musician would use.
 | Undo history | `primitives::undo` | Undo / redo stack |
 | Automation | `primitives::automation` | Envelopes that move knobs over time |
 | Meters, loudness | `primitives::analysis` | Peak, true peak, RMS, LUFS; normalising; lining two takes up; finding silence |
+| Dynamics | `primitives::graph::dynamics` | Compressor, limiter, gate, de-esser, leveler: a level turned into a gain |
 | Plugin host | `primitives::plugins` | Loading third-party effects and instruments (CLAP first) |
 
 ## Flows

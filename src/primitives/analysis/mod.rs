@@ -18,6 +18,7 @@
 //!   that is not.
 
 mod fft;
+pub(crate) mod filter;
 pub mod meter;
 pub mod offset;
 pub mod silence;

@@ -55,6 +55,7 @@
 mod audio_graph;
 mod context;
 mod delay;
+pub mod dynamics;
 pub mod live;
 mod node;
 pub mod nodes;

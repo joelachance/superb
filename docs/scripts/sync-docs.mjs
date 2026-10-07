@@ -11,7 +11,7 @@ const ROOT = resolve(import.meta.dirname, '../..');
 const OUT = resolve(import.meta.dirname, '../content/docs');
 
 const FLOWS = ['session', 'track', 'clip', 'marker', 'transport', 'send', 'midi', 'record', 'metronome', 'export', 'devices'];
-const PRIMITIVES = ['buffers', 'realtime', 'transport', 'midi', 'graph', 'mixer', 'automation', 'analysis', 'undo', 'session', 'plugins', 'io'];
+const PRIMITIVES = ['buffers', 'realtime', 'transport', 'midi', 'graph', 'dynamics', 'mixer', 'automation', 'analysis', 'undo', 'session', 'plugins', 'io'];
 
 /** [source relative to the repository root, page path under /docs, title override] */
 const PAGES = [

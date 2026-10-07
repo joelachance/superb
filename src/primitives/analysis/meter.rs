@@ -11,6 +11,7 @@
 //! programme. Every channel counts with weight one, right for mono and
 //! stereo; surround weights are not applied.
 
+use super::filter::Biquad;
 use crate::primitives::buffers::gain::{db_to_linear, linear_to_db};
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::{Result, SampleRate, SuperbError};
@@ -102,23 +103,32 @@ impl TruePeakMeter {
         }
     }
 
+    /// How many samples the meter answers behind the one it hears: the
+    /// points between two samples need the samples after them too.
+    pub const fn lag() -> usize {
+        HALF
+    }
+
+    /// Hears one sample; returns the true peak around the sample heard
+    /// [`lag`](Self::lag) samples ago, the latest the meter can answer for.
+    #[inline]
+    pub fn hear(&mut self, sample: f32) -> f32 {
+        self.history.copy_within(1.., 0);
+        self.history[TAPS - 1] = sample;
+        // The sample at HALF-1 is complete, and so are the points after it.
+        let mut here = self.history[HALF - 1].abs();
+        for taps in &self.kernel {
+            let value: f32 = taps.iter().zip(&self.history).map(|(w, h)| w * h).sum();
+            here = here.max(value.abs());
+        }
+        self.max = self.max.max(here);
+        here
+    }
+
     /// Hears a block; returns the true peak within it (the points it
     /// completes, a few samples behind its end).
     pub fn push(&mut self, samples: &[f32]) -> f32 {
-        let mut block_max = 0.0f32;
-        for &s in samples {
-            self.history.copy_within(1.., 0);
-            self.history[TAPS - 1] = s;
-            // The sample at HALF-1 is complete, and so are the points after it.
-            let mut here = self.history[HALF - 1].abs();
-            for taps in &self.kernel {
-                let value: f32 = taps.iter().zip(&self.history).map(|(w, h)| w * h).sum();
-                here = here.max(value.abs());
-            }
-            block_max = block_max.max(here);
-        }
-        self.max = self.max.max(block_max);
-        block_max
+        samples.iter().fold(0.0f32, |m, &s| m.max(self.hear(s)))
     }
 
     /// The true peak heard so far.
@@ -131,39 +141,6 @@ impl TruePeakMeter {
     pub fn finish(&mut self) -> f32 {
         self.push(&[0.0; HALF]);
         self.max
-    }
-}
-
-/// One second-order section, transposed direct form II.
-#[derive(Clone, Copy, Debug)]
-struct Biquad {
-    b0: f64,
-    b1: f64,
-    b2: f64,
-    a1: f64,
-    a2: f64,
-    z1: f64,
-    z2: f64,
-}
-
-impl Biquad {
-    fn new(b: [f64; 3], a: [f64; 3]) -> Self {
-        Biquad {
-            b0: b[0] / a[0],
-            b1: b[1] / a[0],
-            b2: b[2] / a[0],
-            a1: a[1] / a[0],
-            a2: a[2] / a[0],
-            z1: 0.0,
-            z2: 0.0,
-        }
-    }
-
-    fn process(&mut self, x: f64) -> f64 {
-        let y = self.b0 * x + self.z1;
-        self.z1 = self.b1 * x - self.a1 * y + self.z2;
-        self.z2 = self.b2 * x - self.a2 * y;
-        y
     }
 }
 
@@ -194,32 +171,6 @@ fn k_weighting(rate: f64) -> [Biquad; 2] {
         Biquad::moved(K_SHELF_48K, K_SHELF_HZ, 48_000.0, rate),
         Biquad::moved(K_HIGH_PASS_48K, K_HIGH_PASS_HZ, 48_000.0, rate),
     ]
-}
-
-impl Biquad {
-    /// A filter given at `from` Hz, as it is at `to` Hz. `s = c (1 - z⁻¹) /
-    /// (1 + z⁻¹)` with `c = 2π f₀ / tan(π f₀ / rate)` turns the digital filter
-    /// into the analog one and back; the response at `anchor_hz` is kept
-    /// exactly, the rest follows the analog curve.
-    fn moved(digital: [f64; 5], anchor_hz: f64, from: f64, to: f64) -> Self {
-        let [b0, b1, b2, a1, a2] = digital;
-        let warp = |rate: f64| {
-            2.0 * core::f64::consts::PI * anchor_hz
-                / (core::f64::consts::PI * anchor_hz / rate).tan()
-        };
-        let (c, d) = (warp(from), warp(to));
-        // Analog numerator and denominator: polynomials in s.
-        let n = [b0 - b1 + b2, 2.0 * c * (b0 - b2), c * c * (b0 + b1 + b2)];
-        let m = [1.0 - a1 + a2, 2.0 * c * (1.0 - a2), c * c * (1.0 + a1 + a2)];
-        let digitise = |[p2, p1, p0]: [f64; 3]| {
-            [
-                p2 * d * d + p1 * d + p0,
-                -2.0 * p2 * d * d + 2.0 * p0,
-                p2 * d * d - p1 * d + p0,
-            ]
-        };
-        Biquad::new(digitise(n), digitise(m))
-    }
 }
 
 /// Loudness in LUFS from a K-weighted mean square summed over channels.

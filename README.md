@@ -49,6 +49,7 @@ They know nothing about flows or the `Session`.
 | `primitives::transport` | transport bar | play/stop/record state, playhead, tempo and meter map, loop range | [transport.md](docs/primitives/transport.md) |
 | `primitives::midi` | MIDI | messages, per-block event buffer, hardware input bridge (feature `midi-io`) | [midi.md](docs/primitives/midi.md) |
 | `primitives::graph` | signal path | the `Node` trait, the processing graph, silence propagation, latency compensation, live swapping | [graph.md](docs/primitives/graph.md) |
+| `primitives::graph::dynamics` | dynamics | compressor, true-peak limiter with lookahead, gate and expander, de-esser, leveler, as nodes | [dynamics.md](docs/primitives/dynamics.md) |
 | `primitives::mixer` | mixer | tracks, buses, sends, insert chains, pan laws, mute/solo, peak meters | [mixer.md](docs/primitives/mixer.md) |
 | `primitives::automation` | automation | envelopes, read/touch/latch/write modes, sample-accurate apply | [automation.md](docs/primitives/automation.md) |
 | `primitives::analysis` | meters, loudness | sample and true peak, RMS, LUFS (momentary, short-term, gated integrated), loudness normalisation, lining two recordings up, silence | [analysis.md](docs/primitives/analysis.md) |
@@ -191,8 +192,9 @@ count-in; hearing the
 input and a live instrument on a track's strip; MIDI messages, a MIDI
 channel per track, and hardware input. In the primitives only, for now:
 insert chains and CLAP plugin hosting, automation envelopes and modes,
-and analysis (true peak, LUFS, loudness normalisation, lining two
-recordings up by their audio, silence).
+analysis (true peak, LUFS, loudness normalisation, lining two recordings
+up by their audio, silence) and dynamics (compressor, limiter, gate,
+de-esser, leveler).
 
 Not yet: a plugins flow, telling MIDI ports apart per track, loop
 recording, tempo ramps (a tempo that glides rather than steps), duplex
