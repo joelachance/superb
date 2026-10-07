@@ -121,9 +121,10 @@ rebuild.
   What the clock cannot know (converter and USB latency the driver does
   not report) is not taken back; on a good interface that is a few
   samples.
-* MIDI is recorded omni: every armed MIDI track gets the same notes, from
-  every port and from `midi::play_note`. A note still down when the
-  recording stops ends there. Routing a port to one track comes later.
+* Every armed MIDI track gets the notes of the MIDI channel it listens to
+  (`track::midi_channel`), or all of them by default, from every port and
+  from `midi::play_note`. A note still down when the recording stops ends
+  there. Telling ports apart comes later.
 * Incoming MIDI waits on a queue of `MIDI_CAPTURE_CAPACITY` messages until
   `collect` or `stop` drains it; `render_blocks` collects after every
   block, and with a device driving the engine `collect` from a timer keeps

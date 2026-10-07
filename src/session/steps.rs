@@ -327,9 +327,9 @@ fn add_monitors(memory: &Memory, mixer: &mut Mixer, strips: &Strips) -> Result<(
         };
         match track.kind {
             TrackKind::Midi => {
-                let synth = mixer
-                    .graph_mut()
-                    .add_node(Box::new(MonoSynthNode::new(channels)));
+                let synth = mixer.graph_mut().add_node(Box::new(
+                    MonoSynthNode::new(channels).midi_channel(track.state.midi_channel),
+                ));
                 mixer.connect_source(synth, strip)?;
                 mixer.graph_mut().connect_midi(MidiPort::External, synth)?;
             }

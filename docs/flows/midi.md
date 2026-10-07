@@ -5,7 +5,8 @@ Sending notes, connecting a keyboard.
 ## Purpose
 
 MIDI that reaches the engine sounds on every MIDI track that is
-monitoring (`track::monitor`). Notes can come from the program
+monitoring (`track::monitor`), on the MIDI channel the track listens to
+(`track::midi_channel`, all by default). Notes can come from the program
 (`play_note`, `send`) or, with the `midi-io` feature, from a hardware port
 (`connect_input`). While a recording runs, the same MIDI lands as notes on
 every armed MIDI track (`record`).

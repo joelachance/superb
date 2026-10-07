@@ -35,6 +35,9 @@ pub struct TrackStateSnapshot {
     /// Which input channels feed it when it records.
     #[serde(default)]
     pub input: Option<Input>,
+    /// Which MIDI channel feeds it; `None` for all.
+    #[serde(default)]
+    pub midi_channel: Option<u8>,
 }
 
 /// A clip's switches.
@@ -103,6 +106,7 @@ impl Memory {
                 arm: t.state.arm,
                 monitor: t.state.monitor,
                 input: t.state.input,
+                midi_channel: t.state.midi_channel,
             });
             for c in t.clips() {
                 clips.push(ClipStateSnapshot {
@@ -144,6 +148,7 @@ impl Memory {
                 track.state.arm = t.arm;
                 track.state.monitor = t.monitor;
                 track.state.input = t.input;
+                track.state.midi_channel = t.midi_channel;
             }
         }
         for c in &state.clips {
@@ -262,6 +267,7 @@ mod tests {
             arm: false,
             monitor: false,
             input: None,
+            midi_channel: None,
         });
         fresh.apply_state(&stale).unwrap();
         stale.format_version = STATE_FORMAT_VERSION + 1;

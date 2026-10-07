@@ -812,12 +812,13 @@ pub(crate) mod steps {
     /// starting at `from` would hold them: beats from `from`, a note-on
     /// closed by its note-off, a retrigger closing the one before, and
     /// whatever is still down closed at `until`. Other messages are left
-    /// out.
+    /// out, and so are other channels when `only` names one.
     pub(crate) fn notes_from(
         midi: &[CapturedMidi],
         from: TimePosition,
         until: TimePosition,
         tempo: &TempoMap,
+        only: Option<u8>,
     ) -> Vec<MidiNote> {
         let start_beat = tempo.samples_to_beat(from).beats();
         let beat_at = |at: TimePosition| tempo.samples_to_beat(at).beats() - start_beat;
@@ -836,9 +837,17 @@ pub(crate) mod steps {
                 });
             }
         };
+        let wanted = |m: &&CapturedMidi| match (m.message, only) {
+            (
+                MidiMessage::NoteOn { channel, .. } | MidiMessage::NoteOff { channel, .. },
+                Some(only),
+            ) => channel.index() == only,
+            _ => true,
+        };
         let mut sorted: Vec<&CapturedMidi> = midi
             .iter()
             .filter(|m| m.position >= from && m.position < until)
+            .filter(wanted)
             .collect();
         sorted.sort_by_key(|m| m.position);
         for m in sorted {
@@ -882,7 +891,12 @@ pub(crate) mod steps {
         from: TimePosition,
         until: TimePosition,
     ) -> Option<Clip> {
-        let notes = notes_from(midi, from, until, session.memory.tempo_map());
+        let only = session
+            .memory
+            .track(track)
+            .ok()
+            .and_then(|t| t.state.midi_channel);
+        let notes = notes_from(midi, from, until, session.memory.tempo_map(), only);
         let length = TimeDuration::from_samples(until.samples() - from.samples());
         if notes.is_empty() || length.samples() <= 0 {
             return None;
@@ -1608,5 +1622,43 @@ mod tests {
         assert_eq!(session.history.undo_label(), Some("Record"));
         assert!(session::undo(&mut session).unwrap());
         assert!(session.memory.clip(clips[0]).is_err());
+    }
+
+    #[test]
+    fn each_midi_track_keeps_the_channel_it_listens_to() {
+        let mut session = session::create(session::scratch("midi-ch"), R, 64).unwrap();
+        let left = track::add(&mut session, "left", TrackKind::Midi).unwrap();
+        let right = track::add(&mut session, "right", TrackKind::Midi).unwrap();
+        let all = track::add(&mut session, "all", TrackKind::Midi).unwrap();
+        track::midi_channel(&mut session, left, Some(0)).unwrap();
+        track::midi_channel(&mut session, right, Some(1)).unwrap();
+        for t in [left, right, all] {
+            track::arm(&mut session, t, true).unwrap();
+        }
+        transport::start(&mut session).unwrap();
+        let (_mic, blocks) = capture_queue(1, 64, 4).unwrap();
+        start(
+            &mut session,
+            Source::Queue {
+                blocks,
+                channels: 1,
+            },
+        )
+        .unwrap();
+        crate::midi::play_note(&mut session, 0, 60, 100).unwrap();
+        crate::midi::play_note(&mut session, 1, 64, 100).unwrap();
+        session::steps::render_blocks(&mut session, 10).unwrap();
+        crate::midi::release_note(&mut session, 0, 60).unwrap();
+        crate::midi::release_note(&mut session, 1, 64).unwrap();
+        session::steps::render_blocks(&mut session, 5).unwrap();
+        let clips = stop(&mut session).unwrap();
+        assert_eq!(clips.len(), 3);
+        let pitches = |id: ClipId| match &session.memory.clip(id).unwrap().source {
+            ClipSource::Midi { notes } => notes.iter().map(|n| n.note).collect::<Vec<_>>(),
+            _ => unreachable!(),
+        };
+        assert_eq!(pitches(clips[0]), [60], "left: channel 0 only");
+        assert_eq!(pitches(clips[1]), [64], "right: channel 1 only");
+        assert_eq!(pitches(clips[2]), [60, 64], "all: both");
     }
 }

@@ -238,6 +238,9 @@ pub struct TrackState {
     /// Which channel(s) of the audio input feed this track when it records.
     /// `None` takes everything the recording captures.
     pub input: Option<Input>,
+    /// Which MIDI channel (`0..=15`) feeds a MIDI track, monitoring and
+    /// recording; `None` takes every channel.
+    pub midi_channel: Option<u8>,
     /// Archived tracks stay in the session with their clips but have no
     /// strip: nothing on them plays, they neither record nor monitor, and
     /// they do not count toward the session's end.
@@ -275,6 +278,7 @@ impl Default for TrackState {
             arm: false,
             monitor: false,
             input: None,
+            midi_channel: None,
             archived: false,
         }
     }

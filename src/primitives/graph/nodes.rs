@@ -642,6 +642,8 @@ impl Node for LiveInputNode {
 /// exercise sample-accurate MIDI delivery end to end, not to sound good.
 pub struct MonoSynthNode {
     channels: usize,
+    /// Only this MIDI channel is heard, when set.
+    only: Option<u8>,
     sample_rate: f64,
     phase: f64,
     note: Option<u8>,
@@ -654,12 +656,19 @@ impl MonoSynthNode {
     pub fn new(channels: usize) -> Self {
         Self {
             channels,
+            only: None,
             sample_rate: SampleRate::default().as_f64(),
             phase: 0.0,
             note: None,
             amplitude: 0.0,
             increment: 0.0,
         }
+    }
+
+    /// Listens to one MIDI channel (`0..=15`) only, or to all with `None`.
+    pub fn midi_channel(mut self, channel: Option<u8>) -> Self {
+        self.only = channel;
+        self
     }
 
     /// The note currently sounding, if any.
@@ -673,6 +682,17 @@ impl MonoSynthNode {
     }
 
     fn apply(&mut self, msg: &MidiMessage) {
+        let channel = match *msg {
+            MidiMessage::NoteOn { channel, .. } | MidiMessage::NoteOff { channel, .. } => {
+                Some(channel.index())
+            }
+            _ => None,
+        };
+        if let (Some(only), Some(channel)) = (self.only, channel) {
+            if channel != only {
+                return;
+            }
+        }
         match *msg {
             MidiMessage::NoteOn { note, velocity, .. } => {
                 self.note = Some(note);

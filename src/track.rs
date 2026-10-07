@@ -51,6 +51,32 @@ pub fn restore(session: &mut Session, track: TrackId) -> Result<()> {
     crate::session::structural(session, ArchiveTrack::new(track, false))
 }
 
+/// Says which MIDI channel feeds a MIDI track: `Some(0..=15)` for one
+/// channel, `None` for all of them. Monitoring plays only that channel's
+/// notes and a recording keeps only them; every connected port still
+/// counts. State, like `input`; rebuilds, since the monitor instrument is
+/// built to listen.
+///
+/// Made of: `TrackState::midi_channel` through `session::set_state`, then
+/// `session::changed_structure`.
+pub fn midi_channel(session: &mut Session, track: TrackId, channel: Option<u8>) -> Result<()> {
+    if session.memory.track(track)?.kind != TrackKind::Midi {
+        return Err(SuperbError::InvalidArgument {
+            what: "only MIDI tracks take a MIDI channel",
+        });
+    }
+    if channel.is_some_and(|c| c > 15) {
+        return Err(SuperbError::InvalidArgument {
+            what: "MIDI channels are 0..=15",
+        });
+    }
+    crate::session::set_state(session, |d| {
+        d.track_mut(track)?.state.midi_channel = channel;
+        Ok(())
+    })?;
+    crate::session::changed_structure(session)
+}
+
 /// Moves a track to `index` among the tracks (0 first). One undo step; the
 /// mixer does not care about order, so nothing rebuilds.
 ///
@@ -399,5 +425,35 @@ mod tests {
             None,
             "quick colour changes merged into one step"
         );
+    }
+
+    #[test]
+    fn a_midi_track_listens_to_one_channel_when_told() {
+        let mut session =
+            session::create(session::scratch("midich"), SampleRate::HZ_48K, 64).unwrap();
+        let keys = add(&mut session, "keys", TrackKind::Midi).unwrap();
+        let vox = add(&mut session, "vox", TrackKind::Audio).unwrap();
+        assert!(midi_channel(&mut session, vox, Some(0)).is_err());
+        assert!(midi_channel(&mut session, keys, Some(16)).is_err());
+        monitor(&mut session, keys, true).unwrap();
+        midi_channel(&mut session, keys, Some(1)).unwrap();
+        assert_eq!(
+            session.memory.track(keys).unwrap().state.midi_channel,
+            Some(1)
+        );
+        transport::start(&mut session).unwrap();
+        // A note on channel 0 is not for this track; one on channel 1 is.
+        crate::midi::play_note(&mut session, 0, 60, 100).unwrap();
+        let other = session::steps::render_blocks(&mut session, 2).unwrap();
+        assert!(other.is_silent(), "channel 0 ignored");
+        crate::midi::play_note(&mut session, 1, 60, 100).unwrap();
+        let mine = session::steps::render_blocks(&mut session, 2).unwrap();
+        assert!(mine.peak() > 0.1, "channel 1 heard");
+        crate::midi::release_note(&mut session, 1, 60).unwrap();
+        midi_channel(&mut session, keys, None).unwrap();
+        transport::start(&mut session).unwrap();
+        crate::midi::play_note(&mut session, 5, 64, 100).unwrap();
+        let any = session::steps::render_blocks(&mut session, 2).unwrap();
+        assert!(any.peak() > 0.1, "all channels again");
     }
 }
