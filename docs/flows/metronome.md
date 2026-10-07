@@ -59,8 +59,8 @@ metronome::enable(&mut session, true)?;
 pub fn level(session: &mut Session, db: f32) -> Result<()>
 ```
 
-Sets the click level in dB. Moves within [`Session::COALESCE_WINDOW`] are
-one undo step; heard at once.
+Sets the click level in dB. Moves within `Session::COALESCE_WINDOW` are one
+undo step; heard at once.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably

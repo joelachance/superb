@@ -45,7 +45,7 @@ next block on every monitoring track. `channel` is `0..=15`, `note` and
 
 **Undo** none: not an edit.
 
-**Made of** `MidiMessage::note_on` → [`send`].
+**Made of** `MidiMessage::note_on` → `send`.
 
 **Example**
 
@@ -59,7 +59,7 @@ midi::play_note(&mut session, 0, 60, 100)?;   // middle C on channel 1
 pub fn release_note(session: &mut Session, channel: u8, note: u8) -> Result<()>
 ```
 
-Releases a note started with [`play_note`].
+Releases a note started with `play_note`.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -72,7 +72,7 @@ Releases a note started with [`play_note`].
 
 **Undo** none: not an edit.
 
-**Made of** `MidiMessage::note_off` → [`send`].
+**Made of** `MidiMessage::note_off` → `send`.
 
 **Example**
 
@@ -114,10 +114,9 @@ pub fn connect_input(session: &mut Session, port_index: usize) -> Result<()>
 
 *Feature `midi-io`.*
 
-Connects a hardware MIDI input (an index from
-[`devices::midi_inputs`](crate::devices::midi_inputs)) to the engine. Its
-notes land at the start of the block they arrive in and play on every
-monitoring track. The connection lives in [`Session::midi_inputs`] and
+Connects a hardware MIDI input (an index from `devices::midi_inputs`) to the
+engine. Its notes land at the start of the block they arrive in and play on
+every monitoring track. The connection lives in `Session::midi_inputs` and
 closes when removed from there.
 
 **Takes**

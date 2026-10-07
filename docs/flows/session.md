@@ -83,8 +83,8 @@ let mut session = session::create("~/songs/demo", SampleRate::HZ_48K, 256)?;
 pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session>
 ```
 
-Opens a session folder written by [`save`]: reads `memory.json` and loads
-every WAV file the clips refer to into [`Session::audio`]. A file that is
+Opens a session folder written by `save`: reads `memory.json` and loads
+every WAV file the clips refer to into `Session::audio`. A file that is
 missing or at another sample rate is left out, and its clip plays as
 silence. The undo history starts empty and clean.
 
@@ -182,7 +182,7 @@ and its count-in, the playhead) is never written into `memory.json`: until
 an application names a file here, a session opens with all of it off. With a
 path, the file is read now if it exists (its state lands on the memory, the
 mixer and the engine) and rewritten after every state change and every
-[`save`], with the playhead. `None` stops writing; the file stays.
+`save`, with the playhead. `None` stops writing; the file stays.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -194,7 +194,7 @@ mixer and the engine) and rewritten after every state change and every
 
 **Undo** none: not an edit.
 
-**Made of** `Memory::load_state` → `Memory::apply_state` → `EngineHandle::send(SetLoopEnabled, Seek)` → `session::changed_structure`; then `Memory::save_state` from `session::set_state` and [`save`].
+**Made of** `Memory::load_state` → `Memory::apply_state` → `EngineHandle::send(SetLoopEnabled, Seek)` → `session::changed_structure`; then `Memory::save_state` from `session::set_state` and `save`.
 
 **Example**
 
@@ -238,7 +238,7 @@ pub fn tempo_change(session: &mut Session, beat: BeatPosition, bpm: Option<f64>)
 ```
 
 Adds a tempo change at `beat` (`Some(bpm)`), or removes the one there
-(`None`); the tempo at beat zero is set with [`set_tempo`] and cannot be
+(`None`); the tempo at beat zero is set with `set_tempo` and cannot be
 removed. Changes to the same beat coalesce. Rebuilds the mixer, which hands
 the engine the new map.
 
@@ -299,7 +299,7 @@ pub fn set_loop(session: &mut Session, range: Option<LoopRange>) -> Result<()>
 ```
 
 Sets or clears the loop range in the memory and on the running engine. Turn
-looping on with [`transport::looping`](crate::transport::looping).
+looping on with `transport::looping`.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -362,7 +362,7 @@ Re-applies the last undone edit.
 
 **Undo** this is the redo.
 
-**Made of** `UndoStack::redo`, then the same rebuild marking as [`undo`].
+**Made of** `UndoStack::redo`, then the same rebuild marking as `undo`.
 
 **Example**
 
@@ -382,28 +382,28 @@ does not do exactly what you want.
 | field | type | meaning |
 |---|---|---|
 | `memory` | `Memory` | The memory: tracks, clips, markers, routing, tempo. |
-| `history` | `UndoStack<Memory>` | Undo history for `memory`. Every flow edit pushes through this stack, so every edit is reversible. Consecutive edits of the same control (a fader, a knob, a clip being dragged) merge into one step while they arrive within [`Session::COALESCE_WINDOW`] of each other; a pause starts a new step. Call `history.seal()` to end a step sooner (on mouse up, say). |
+| `history` | `UndoStack<Memory>` | Undo history for `memory`. Every flow edit pushes through this stack, so every edit is reversible. Consecutive edits of the same control (a fader, a knob, a clip being dragged) merge into one step while they arrive within `Session::COALESCE_WINDOW` of each other; a pause starts a new step. Call `history.seal()` to end a step sooner (on mouse up, say). |
 | `audio` | `AudioCache` | Audio held in memory, keyed by the path clips refer to, relative to the session folder (`audio/vox 1.wav`). |
 | `folder` | `PathBuf` | The folder the session lives in: `memory.json` and the `audio/` folder of recordings are inside. Set when the session is created or opened; recordings are written there as they stop. |
 | `engine` | `EngineHandle` | Control handle to the engine: commands, graph swaps, position. |
-| `audio_thread` | `Option<AudioThread>` | The engine's audio side. Present until a device takes it (`devices::output`, feature `devices`); while present, [`steps::render_blocks`] ticks it by hand. |
-| `mixer` | `MixerHandles` | The live controls of the mixer built by the last [`steps::rebuild`]: one per strip and send, keyed by the memory's ids. |
+| `audio_thread` | `Option<AudioThread>` | The engine's audio side. Present until a device takes it (`devices::output`, feature `devices`); while present, `steps::render_blocks` ticks it by hand. |
+| `mixer` | `MixerHandles` | The live controls of the mixer built by the last `steps::rebuild`: one per strip and send, keyed by the memory's ids. |
 | `recording` | `Option<crate::record::Recording>` | A take being recorded, if any. |
 | `channels` | `usize` | Channels per strip and at the output: 2, stereo. Change it before the first rebuild if you need another width. |
 | `output` | `Option<crate::primitives::io::LiveOutput>` | The device output, once `devices::output` started one: the audio thread lives inside it until `devices::close_output`. |
 | `input` | `Option<crate::devices::AudioInput>` | The audio input, once `devices::input` opened it: what monitoring audio tracks hear and device recordings capture. |
 | `midi_inputs` | `Vec<crate::primitives::midi::input::MidiInputBridge>` | Hardware MIDI inputs connected so far. Dropping one disconnects it. |
-| `state_file` | `Option<PathBuf>` | Where state is kept, once [`state_file`] named a file; `None` means state is not saved. |
+| `state_file` | `Option<PathBuf>` | Where state is kept, once `state_file` named a file; `None` means state is not saved. |
 
 | method | meaning |
 |---|---|
 | `const COALESCE_WINDOW: core::time::Duration` | How long a pause between two edits of the same control turns them into separate undo steps. |
-| `fn new(memory: Memory, folder: impl Into<PathBuf>, block_size: usize) -> Result<Session>` | A stereo session around `memory` living in `folder`, with an engine that renders blocks of at most `block_size` frames at the memory's sample rate. Records the folder and touches nothing on disk; [`create`] and [`open`] do. |
+| `fn new(memory: Memory, folder: impl Into<PathBuf>, block_size: usize) -> Result<Session>` | A stereo session around `memory` living in `folder`, with an engine that renders blocks of at most `block_size` frames at the memory's sample rate. Records the folder and touches nothing on disk; `create` and `open` do. |
 
 ### `MixerHandles`
 
 The live controls of the mixer the engine is running, keyed by the track or
-send each was built for.  Filled by every [`steps::rebuild`]. The `Mixer`
+send each was built for.  Filled by every `steps::rebuild`. The `Mixer`
 itself becomes the graph the engine runs; what the control side keeps are
 these handles, whose atomics the audio thread reads every block, so a change
 made through them is heard at the next block. Handles from before a rebuild
@@ -422,7 +422,7 @@ are stale: look them up again.
 
 ### `Imported`
 
-What [`import_audio`] brought in: the key a clip refers to the audio by, and
+What `import_audio` brought in: the key a clip refers to the audio by, and
 what the file was, so an application can say "44.1 kHz, 24-bit, stereo,
 resampled". Whatever the file was, the session stores it as 32-bit float at
 its own rate.

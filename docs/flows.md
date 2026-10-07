@@ -139,4 +139,4 @@ hiding an ordering hazard. Put the shared parts in `steps`, end every verb
 doc with **Made of:**, go through `session::structural` for edits that
 change the mixer's shape and `session::set_state` for state, add tests
 that run without hardware and an example under `examples/flows/`. See
-[CONTRIBUTING.md](../CONTRIBUTING.md).
+[CONTRIBUTING.md](contributing.md).

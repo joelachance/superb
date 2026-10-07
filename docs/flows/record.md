@@ -61,10 +61,10 @@ pub fn start(session: &mut Session, source: Source) -> Result<()>
 
 Starts recording from `source` onto every armed track. Recording begins at
 the playhead, or at the punch-in point when one is set ahead of it
-([`punch_in`]): the transport rolls from where it is and drops into record
-there. With a punch-out point ([`punch_out`]) it drops out of record there
-and keeps playing; [`stop`] finishes either way. A recording that starts at
-the playhead gets the metronome's count-in (`metronome::count_in`): the
+(`punch_in`): the transport rolls from where it is and drops into record
+there. With a punch-out point (`punch_out`) it drops out of record there and
+keeps playing; `stop` finishes either way. A recording that starts at the
+playhead gets the metronome's count-in (`metronome::count_in`): the
 transport rolls that many bars early with the click sounding.
 
 **Takes**
@@ -77,7 +77,7 @@ transport rolls that many bars early with the click sounding.
 
 **Undo** none: not an edit until `stop`.
 
-**Made of** [`track::arm`](crate::track::arm)ed tracks → for a device, `devices::input` if needed, its recording queue and a collector thread → [`session::steps::rebuild`] when needed → `EngineHandle::send(SetPunch)` → `EngineHandle::send(Record)`, or `Play` when the punch-in is ahead → [`transport::playhead`] for where it all started.
+**Made of** `track::arm`ed tracks → for a device, `devices::input` if needed, its recording queue and a collector thread → `session::steps::rebuild` when needed → `EngineHandle::send(SetPunch)` → `EngineHandle::send(Record)`, or `Play` when the punch-in is ahead → `transport::playhead` for where it all started.
 
 **Example**
 
@@ -150,12 +150,12 @@ pub fn collect(session: &mut Session) -> usize
 ```
 
 Moves waiting audio blocks into the recording when the source is a queue
-([`Source::Queue`]), and the MIDI that arrived since the last call either
-way; a device recording's audio has its own thread. Returns the frames
-gathered in total, or zero when nothing is recording.
-[`session::steps::render_blocks`] calls this after every block; with a
-device driving the engine, call it from a timer during long takes, so the
-MIDI queue (`MIDI_CAPTURE_CAPACITY` messages) never fills.
+(`Source::Queue`), and the MIDI that arrived since the last call either way;
+a device recording's audio has its own thread. Returns the frames gathered
+in total, or zero when nothing is recording. `session::steps::render_blocks`
+calls this after every block; with a device driving the engine, call it from
+a timer during long takes, so the MIDI queue (`MIDI_CAPTURE_CAPACITY`
+messages) never fills.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -181,10 +181,10 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>>
 Stops the recording and the transport and places one clip per armed track
 starting at the punch-in point. Audio captured before the punch-in (while
 rolling towards it) and after the punch-out is left out. Each clip holds the
-channels its track's [`Input`] selects (tracks without one share the whole
+channels its track's `Input` selects (tracks without one share the whole
 capture) and refers to `audio/<track> <n>.wav` (`audio/vox 1.wav`), so it is
-named `vox 1`; the file is written into [`Session::folder`] before the clip
-is placed. Returns the new clips (none if nothing was captured). The whole
+named `vox 1`; the file is written into `Session::folder` before the clip is
+placed. Returns the new clips (none if nothing was captured). The whole
 placement is one undo step called "Record": undoing it removes the clips and
 deletes the files it wrote, redo writes them again; the audio stays in
 memory either way.
@@ -198,7 +198,7 @@ memory either way.
 
 **Undo** one step labelled "Record": undo removes the clips and deletes the files they wrote; rebuilds the mixer (at once while a device plays, otherwise at the next start).
 
-**Made of** `EngineHandle::send(Stop)` → drain the queue or `Collector::finish` (and hand the audio input its queue back) → frame 0 lined up with the `RollStart` when the device clock gives one → trimmed to the punch points → the planes become one buffer → per track, a file name nothing uses yet and the channels its `Input` selects → `wav::write` into the session folder → `AudioCache::insert_shared` → [`clip::add`](crate::clip::add), inside one undo group; rebuilds the mixer so the clips play back on their strips.
+**Made of** `EngineHandle::send(Stop)` → drain the queue or `Collector::finish` (and hand the audio input its queue back) → frame 0 lined up with the `RollStart` when the device clock gives one → trimmed to the punch points → the planes become one buffer → per track, a file name nothing uses yet and the channels its `Input` selects → `wav::write` into the session folder → `AudioCache::insert_shared` → `clip::add`, inside one undo group; rebuilds the mixer so the clips play back on their strips.
 
 **Example**
 
@@ -214,13 +214,13 @@ Where a recording's audio comes from.
 
 | variant | type | meaning |
 |---|---|---|
-| `Device` | `(Option<String>)` | The session's audio input (`devices::input`). If it is not open yet, this opens it on the named device (`None` for the default). Every channel the input carries is captured, and a thread gathers the audio until [`stop`]; each track keeps the channel(s) its [`track::input`](crate::track::input) names. |
-| `Queue` | `{ blocks: CaptureConsumer, channels: usize }` | A capture queue you fill yourself (a file, a generator, a test) with blocks of `channels` channels. Blocks wait on the queue until [`collect`] runs; [`session::steps::render_blocks`] does that after every block, so an offline program never calls it. |
+| `Device` | `(Option<String>)` | The session's audio input (`devices::input`). If it is not open yet, this opens it on the named device (`None` for the default). Every channel the input carries is captured, and a thread gathers the audio until `stop`; each track keeps the channel(s) its `track::input` names. |
+| `Queue` | `{ blocks: CaptureConsumer, channels: usize }` | A capture queue you fill yourself (a file, a generator, a test) with blocks of `channels` channels. Blocks wait on the queue until `collect` runs; `session::steps::render_blocks` does that after every block, so an offline program never calls it. |
 
 ### `Recording`
 
-A recording in progress: what [`Session::recording`] holds between [`start`]
-and [`stop`].
+A recording in progress: what `Session::recording` holds between `start` and
+`stop`.
 
 | method | meaning |
 |---|---|

@@ -86,7 +86,7 @@ send::remove(&mut session, s)?;
 pub fn level(session: &mut Session, send: SendId, db: f32) -> Result<()>
 ```
 
-Sets a send's level in dB. Moves within [`Session::COALESCE_WINDOW`] of each
+Sets a send's level in dB. Moves within `Session::COALESCE_WINDOW` of each
 other are one undo step.
 
 **Takes**

@@ -1,0 +1,21 @@
+[book]
+title = "Superb"
+description = "An open-source Rust toolkit for building a digital audio workstation"
+language = "en"
+src = "docs"
+
+[build]
+build-dir = "target/book"
+
+[rust]
+edition = "2021"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+no-section-label = true
+
+# The snippets use the crate, which the playground does not have.
+[output.html.playground]
+runnable = false
+copyable = true

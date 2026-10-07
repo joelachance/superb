@@ -279,6 +279,11 @@ note("devices::input", returns="nothing; `session.input` holds the stream", erro
 note("devices::close_input", returns="nothing", errors="no input open; a device recording running", undo="none", example="devices::close_input(&mut session)?;")
 note("devices::midi_inputs", returns="every MIDI input port: index and name", errors="the MIDI backend cannot be reached", undo="none", example="for p in devices::midi_inputs()? { println!(\"{}: {}\", p.index, p.name); }")
 
+def plain(text):
+    """Rustdoc links as plain code: [`x`](crate::a::x) and [`x`] -> `x`."""
+    text = re.sub(r"\[`([^`]+)`\]\([^)]*\)", r"`\1`", text)
+    return re.sub(r"\[`([^`]+)`\](?!\()", r"`\1`", text)
+
 def param_list(sig):
     start = sig.index("(")
     depth, end = 0, start
@@ -306,7 +311,7 @@ def render_verb(flow, name, sig, doc, made, cfg):
     n = N.get(key, dict(takes={}, returns="", errors="", undo="", example=""))
     out = [f"### `{name}`", "", "```rust", sig, "```", ""]
     if cfg: out += [f"*Feature `{cfg}`.*", ""]
-    if doc: out += [textwrap.fill(doc, 76), ""]
+    if doc: out += [textwrap.fill(plain(doc), 76), ""]
     params = param_list(sig)
     if params:
         out.append("**Takes**")
@@ -319,7 +324,7 @@ def render_verb(flow, name, sig, doc, made, cfg):
     out += [f"**Returns** `{rt}`" + (f" — {n['returns']}" if n["returns"] else ""), ""]
     if n["errors"]: out += [f"**Errors** {n['errors']}.", ""]
     if n["undo"]: out += [f"**Undo** {n['undo']}.", ""]
-    if made: out += [f"**Made of** {made}", ""]
+    if made: out += [f"**Made of** {plain(made)}", ""]
     if n["example"]: out += ["**Example**", "", "```rust", n["example"], "```", ""]
     return "\n".join(out)
 
@@ -328,18 +333,19 @@ def render_types(types):
     out = ["## Types", ""]
     for name, kind, doc, fields, cfg, methods in types:
         out += [f"### `{name}`" + (f" *(feature `{cfg}`)*" if cfg else ""), ""]
-        if doc: out += [textwrap.fill(doc, 76), ""]
+        if doc: out += [textwrap.fill(plain(doc), 76), ""]
         if fields:
             out.append("| " + ("field" if kind == "struct" else "variant") + " | type | meaning |")
             out.append("|---|---|---|")
             for f, t, d in fields:
+                d = plain(d)
                 out.append(f"| `{f}` | `{t}` | {d} |" if t else f"| `{f}` | | {d} |")
             out.append("")
         if methods:
             out.append("| method | meaning |")
             out.append("|---|---|")
             for sig, d in methods:
-                out.append(f"| `{sig.replace('pub ', '', 1)}` | {d} |")
+                out.append(f"| `{sig.replace('pub ', '', 1)}` | {plain(d)} |")
             out.append("")
     return "\n".join(out)
 

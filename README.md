@@ -3,12 +3,14 @@
 An open-source Rust toolkit for building a digital audio workstation (DAW).
 One crate, `superb`, dual-licensed Apache-2.0 OR MIT.
 
+<!-- ANCHOR: intro -->
 Superb is the engine side of a DAW: sample-accurate time, audio buffers, a
 real-time-safe processing graph, a mixer with tracks, buses, sends and
 insert chains, MIDI, automation, the session's memory (tracks, clips,
 markers, routing, tempo) with undo, CLAP plugin hosting, recording, offline
 export, audio import, and audio device and file I/O. It has no user
 interface; you bring your own.
+<!-- ANCHOR_END: intro -->
 
 ## Two tiers
 
@@ -64,6 +66,7 @@ rules every module follows. If the DAW words are new to you, start with
 
 ## Reading the documentation
 
+<!-- ANCHOR: reading -->
 Each flow has one page under `docs/flows/`, and every page has the same
 shape, so once you have read one you can find your way around all of them:
 
@@ -99,9 +102,11 @@ A few conventions hold on every page, so they are stated here once:
 
 `cargo doc --no-deps --open` builds the same text as rustdoc, with every
 signature linked.
+<!-- ANCHOR_END: reading -->
 
 ## Quick start
 
+<!-- ANCHOR: quickstart -->
 ```rust
 use superb::prelude::*;
 use superb::{clip, session, track, transport};
@@ -136,11 +141,14 @@ cargo run --example export_session             # export: bounce to WAV, whole or
 cargo run --example list_devices --features devices
 ```
 
+<!-- ANCHOR_END: quickstart -->
+
 See [examples/README.md](examples/README.md) for the full list, including
 one example per primitive.
 
 ## Cargo features
 
+<!-- ANCHOR: features -->
 Everything that touches hardware or a copyleft dependency is opt-in, so the
 default build and test run need nothing but Rust.
 
@@ -156,9 +164,11 @@ Without `files`, `session::import_audio` reads WAV only, and only at the
 session's sample rate; anything else is an error that names the feature.
 
 On Debian or Ubuntu the hardware features need `pkg-config libasound2-dev`.
+<!-- ANCHOR_END: features -->
 
 ## Real-time discipline
 
+<!-- ANCHOR: realtime -->
 Everything on the audio path is allocated in `prepare` and never afterwards.
 `primitives::realtime` ships a counting global allocator, and the
 integration tests under `tests/` prove that `process` performs zero heap
@@ -166,9 +176,11 @@ operations, including while parameters move and while a new graph is
 swapped in under a running engine. Mixer changes made through the flows
 are published as whole prepared graphs and swapped in between two blocks.
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) spells out the rules.
+<!-- ANCHOR_END: realtime -->
 
 ## Status
 
+<!-- ANCHOR: status -->
 Working today, through the flows: the session's memory with tracks and
 their state, a master track that is always there, clips, markers and
 routing (tracks and clips are archived, never deleted), JSON files and
@@ -191,6 +203,7 @@ recording, tempo ramps (a tempo that glides rather than steps), duplex
 device streams, aligning hardware MIDI timestamps with the audio clock,
 updating a running mixer incrementally (a rebuild replaces it), VST3
 hosting, SysEx and Standard MIDI Files, and encoders other than WAV.
+<!-- ANCHOR_END: status -->
 
 ## Licence
 

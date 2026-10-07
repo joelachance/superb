@@ -77,7 +77,7 @@ pub fn archive(session: &mut Session, track: TrackId) -> Result<()>
 Takes a track off the mixer without deleting it: it keeps its clips and
 their files but gets no strip, so nothing on it plays, nothing routes into
 it, it neither records nor monitors, and it no longer counts toward the
-session's end. [`restore`] brings it back. Nothing is ever removed: this is
+session's end. `restore` brings it back. Nothing is ever removed: this is
 the one way a track leaves.
 
 **Takes**
@@ -245,8 +245,8 @@ pub fn volume(session: &mut Session, track: TrackId, db: f32) -> Result<()>
 ```
 
 Sets a track's or bus's volume: the fader, in dB. Moves within
-[`Session::COALESCE_WINDOW`] of each other are one undo step, so a fader
-ride undoes in one go.
+`Session::COALESCE_WINDOW` of each other are one undo step, so a fader ride
+undoes in one go.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -388,7 +388,7 @@ pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()>
 Turns monitoring on or off. A monitoring MIDI track carries a live
 instrument that plays whatever MIDI reaches the engine. A monitoring audio
 track plays the session's audio input (`devices::input`, feature `devices`)
-through its strip, on the channel(s) its [`input`] names (the first two when
+through its strip, on the channel(s) its `input` names (the first two when
 none is set), so you hear yourself while recording. State, saved with the
 session; it changes the mixer's shape, so it rebuilds. Buses do not monitor.
 

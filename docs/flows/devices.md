@@ -81,12 +81,10 @@ pub fn output(session: &mut Session, device: Option<&str>) -> Result<()>
 *Feature `devices`.*
 
 Plays the session through an output device (`None` for the default, or a
-name from [`outputs`]): moves the audio thread into a real output stream at
+name from `outputs`): moves the audio thread into a real output stream at
 the session's sample rate, block size and channel count, and starts it. From
 then on the device drives the engine, structural edits rebuild the mixer at
-once, and
-[`session::steps::render_blocks`](crate::session::steps::render_blocks) is
-unavailable.
+once, and `session::steps::render_blocks` is unavailable.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -98,7 +96,7 @@ unavailable.
 
 **Undo** none.
 
-**Made of** an `OutputConfig` matching the session → [`session::steps::rebuild`](crate::session::steps::rebuild) when needed → `AudioThread::run_on_device`; the result is kept in [`Session::output`] until [`close_output`].
+**Made of** an `OutputConfig` matching the session → `session::steps::rebuild` when needed → `AudioThread::run_on_device`; the result is kept in `Session::output` until `close_output`.
 
 **Example**
 
@@ -117,10 +115,8 @@ pub fn close_output(session: &mut Session) -> Result<()>
 
 Stops playing through the device and takes the audio thread back into the
 session: the engine, the transport's position, the live input and the MIDI
-ports stay as they were,
-[`session::steps::render_blocks`](crate::session::steps::render_blocks)
-works again, and [`output`] can start another device. Refused while a
-recording runs.
+ports stay as they were, `session::steps::render_blocks` works again, and
+`output` can start another device. Refused while a recording runs.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -131,7 +127,7 @@ recording runs.
 
 **Undo** none.
 
-**Made of** `LiveOutput::stop` → [`Session::audio_thread`].
+**Made of** `LiveOutput::stop` → `Session::audio_thread`.
 
 **Example**
 
@@ -149,12 +145,12 @@ pub fn input(session: &mut Session, device: Option<&str>) -> Result<()>
 *Feature `devices`.*
 
 Opens the session's audio input (`None` for the default device, or a name
-from [`inputs`]): a stream at the session's sample rate and block size with
+from `inputs`): a stream at the session's sample rate and block size with
 every channel the device has, so any of them can feed a track (the tracks'
 inputs' width, at least two, when the device does not say). From then on a
-monitoring audio track ([`track::monitor`](crate::track::monitor)) hears it
-through its strip, and `record::start` with `Source::Device` records from
-it. One input per session, until [`close_input`].
+monitoring audio track (`track::monitor`) hears it through its strip, and
+`record::start` with `Source::Device` records from it. One input per
+session, until `close_input`.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -166,7 +162,7 @@ it. One input per session, until [`close_input`].
 
 **Undo** none.
 
-**Made of** an `InputConfig` matching the session → two capture queues (one the engine reads as its live input, one a recording drains) → `InputStream::open_timed` pushing every block to both → `EngineHandle::send(LiveInput)`; the stream is kept in [`Session::input`].
+**Made of** an `InputConfig` matching the session → two capture queues (one the engine reads as its live input, one a recording drains) → `InputStream::open_timed` pushing every block to both → `EngineHandle::send(LiveInput)`; the stream is kept in `Session::input`.
 
 **Example**
 
@@ -233,7 +229,7 @@ for p in devices::midi_inputs()? { println!("{}: {}", p.index, p.name); }
 
 ### `AudioInput` *(feature `devices`)*
 
-The session's audio input, once [`input`] opened it: the running stream and
+The session's audio input, once `input` opened it: the running stream and
 what it feeds. Monitoring audio tracks hear it through the engine's live
 input; a device recording drains its own queue of the same blocks.
 

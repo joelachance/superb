@@ -56,8 +56,8 @@ let verse = marker::add(&mut session, "verse", TimePosition::from_seconds(8.0, r
 pub fn move_to(session: &mut Session, marker: MarkerId, at: TimePosition) -> Result<()>
 ```
 
-Moves a marker to `at`. Moves within [`Session::COALESCE_WINDOW`] are one
-undo step, so a drag undoes in one.
+Moves a marker to `at`. Moves within `Session::COALESCE_WINDOW` are one undo
+step, so a drag undoes in one.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably

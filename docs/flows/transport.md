@@ -43,7 +43,7 @@ memory changed since it was built.
 
 **Undo** none: not an edit.
 
-**Made of** [`session::steps::rebuild`](crate::session::steps::rebuild) when needed → `EngineHandle::send(Play)`.
+**Made of** `session::steps::rebuild` when needed → `EngineHandle::send(Play)`.
 
 **Example**
 
@@ -119,7 +119,7 @@ Moves the playhead to the start of the session.
 
 **Undo** none: not an edit.
 
-**Made of** [`seek`] to zero.
+**Made of** `seek` to zero.
 
 **Example**
 
@@ -134,8 +134,8 @@ pub fn looping(session: &mut Session, on: bool) -> Result<()>
 ```
 
 Turns looping over the session's loop range on or off (set the range with
-[`session::set_loop`](crate::session::set_loop)). State, like mute: saved
-with the session, applied at the engine's next block, not an undo step.
+`session::set_loop`). State, like mute: saved with the session, applied at
+the engine's next block, not an undo step.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably

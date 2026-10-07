@@ -43,7 +43,7 @@ pub fn add( session: &mut Session, track: TrackId, content: impl Into<ClipSource
 ```
 
 Places a clip on `track` starting at `at`. `content` is the name audio was
-stored under in [`Session::audio`] (`&str`, `String` or a path) or the notes
+stored under in `Session::audio` (`&str`, `String` or a path) or the notes
 of a MIDI clip (`Vec<MidiNote>`, beats relative to `at`). An audio clip is
 as long as its audio and named after the key's file stem; a MIDI clip ends
 with its last note and is named after the track.  Fails when the audio is
@@ -78,8 +78,8 @@ pub fn move_to( session: &mut Session, clip: ClipId, track: TrackId, at: TimePos
 ```
 
 Moves a clip to `track`, starting at `at`. Pass the clip's own track to move
-it in time only. Moves of the same clip within [`Session::COALESCE_WINDOW`]
-of each other are one undo step, so a drag undoes in one go. Buses take no
+it in time only. Moves of the same clip within `Session::COALESCE_WINDOW` of
+each other are one undo step, so a drag undoes in one go. Buses take no
 clips.
 
 **Takes**
@@ -142,8 +142,8 @@ pub fn trim( session: &mut Session, clip: ClipId, start: TimePosition, end: Time
 Moves the clip's edges to `start` and `end` on the timeline. What is
 underneath stays where it was: trimming the head shows later audio and MIDI
 notes keep their place. Edge moves of the same clip within
-[`Session::COALESCE_WINDOW`] are one undo step. Fails when `end` is not
-after `start`.
+`Session::COALESCE_WINDOW` are one undo step. Fails when `end` is not after
+`start`.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -172,8 +172,8 @@ pub fn gain(session: &mut Session, clip: ClipId, db: f32) -> Result<()>
 ```
 
 Sets the clip's own gain in dB, before the track's fader. Moves within
-[`Session::COALESCE_WINDOW`] are one undo step; heard at the next rebuild
-(at once while a device plays).
+`Session::COALESCE_WINDOW` are one undo step; heard at the next rebuild (at
+once while a device plays).
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -285,7 +285,7 @@ pub fn archive(session: &mut Session, clip: ClipId) -> Result<()>
 
 Takes a clip off the timeline without deleting it: it stops playing and no
 longer counts toward the session's end, but keeps its place and its audio.
-[`restore`] brings it back.
+`restore` brings it back.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -366,9 +366,9 @@ pub fn add_note(session: &mut Session, clip: ClipId, note: MidiNote) -> Result<(
 
 Adds a note to a MIDI clip. `note.beat` and `note.length` are beats from the
 clip start; a note that ends past the clip end extends the clip. Notes are
-their content: two identical notes are one note twice, and [`remove_note`]
-or [`change_note`] takes the first. One undo step; how notes are picked,
-drawn or quantised is the caller's business.
+their content: two identical notes are one note twice, and `remove_note` or
+`change_note` takes the first. One undo step; how notes are picked, drawn or
+quantised is the caller's business.
 
 **Takes**
 - `session: &mut Session` — the open session, borrowed mutably
@@ -424,7 +424,7 @@ pub fn change_note( session: &mut Session, clip: ClipId, from: MidiNote, to: Mid
 
 Replaces a note of a MIDI clip with another: moved, lengthened, louder, on
 another channel, whatever differs. Changes to the same note within
-[`Session::COALESCE_WINDOW`] are one undo step, so a drag that calls this as
+`Session::COALESCE_WINDOW` are one undo step, so a drag that calls this as
 it goes undoes in one. A note that ends past the clip end extends the clip.
 
 **Takes**

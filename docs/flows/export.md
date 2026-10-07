@@ -48,7 +48,7 @@ clips after `start` and no `length` given.
 
 **Undo** none: not an edit.
 
-**Made of** `Memory::end_position` for the length when none is given → [`session::steps::build_mixer`] → a `Transport` on the session's tempo map, sought to `start` and playing → `Engine::new` → `offline::render` → `files::resample` when a rate is given → `wav::write`.
+**Made of** `Memory::end_position` for the length when none is given → `session::steps::build_mixer` → a `Transport` on the session's tempo map, sought to `start` and playing → `Engine::new` → `offline::render` → `files::resample` when a rate is given → `wav::write`.
 
 **Example**
 
@@ -61,9 +61,8 @@ let range = export::bounce(&mut session, "verse.wav", export::Bounce { start: Ti
 
 ### `Bounce`
 
-What to bounce and how. [`Bounce::default()`] is the whole session, from
-zero to the end of the last clip, at the session's sample rate as 16-bit
-PCM.
+What to bounce and how. `Bounce::default()` is the whole session, from zero
+to the end of the last clip, at the session's sample rate as 16-bit PCM.
 
 | field | type | meaning |
 |---|---|---|
