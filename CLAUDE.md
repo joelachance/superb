@@ -51,5 +51,8 @@ cargo doc --no-deps
   they return, enums over bool parameters, no duplicate homes, no silent
   obligations, sugar only for controls a musician knows, plumbing
   `pub(crate)`.
+- Files go where `session::Layout` says (`memory.json`, `state.json`,
+  `audio/`, `bounces/`, `stems/<name>/`); sessions live under a
+  `session::Root`, `~/aura` by default. No other code builds those paths.
 - Every public item is documented; update the doc note and the example
   when an API changes.

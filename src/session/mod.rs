@@ -22,6 +22,8 @@
 pub(crate) mod folder;
 pub mod steps;
 
+pub use folder::{Layout, Root};
+
 use std::path::{Path, PathBuf};
 
 use crate::primitives::io::EngineCommand;
@@ -199,11 +201,14 @@ impl MixerHandles {
 }
 
 /// Starts a new, empty session at 120 bpm in 4/4 in `folder`, which is
-/// created (with its `audio/` folder) and given its `memory.json` at once,
-/// so it can be opened from here on. The session is named after the folder.
+/// created with the folders of its [`Layout`] (`audio/`, `bounces/`,
+/// `stems/`) and given its `memory.json` at once, so it can be opened from
+/// here on. The session is named after the folder. Under the default
+/// [`Root`] that is `session::create(Root::default().folder("My Show"),
+/// ..)`, which makes `~/aura/My Show/`.
 ///
-/// Made of: `create_dir_all` → `Memory::new` → `Session::new` →
-/// `Memory::save`.
+/// Made of: `create_dir_all` per folder of the [`Layout`] → `Memory::new` →
+/// `Session::new` → `Memory::save`.
 pub fn create(
     folder: impl AsRef<Path>,
     sample_rate: SampleRate,
@@ -214,8 +219,11 @@ pub fn create(
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "session".into());
-    std::fs::create_dir_all(folder.join(folder::AUDIO_DIR))
-        .map_err(|e| AuraError::Message(format!("cannot create {}: {e}", folder.display())))?;
+    let layout = Layout::new(folder);
+    for dir in [layout.audio(), layout.bounces(), layout.stems()] {
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| AuraError::Message(format!("cannot create {}: {e}", dir.display())))?;
+    }
     let session = Session::new(Memory::new(name, sample_rate), folder, block_size)?;
     session.memory.save(folder.join(folder::MEMORY_FILE))?;
     log::info!(
@@ -257,6 +265,14 @@ pub fn open(folder: impl AsRef<Path>, block_size: usize) -> Result<Session> {
         );
     }
     Ok(session)
+}
+
+/// Where each part of the session lives inside its folder: `memory.json`,
+/// `state.json`, `audio/`, `bounces/`, `stems/<name>/`.
+///
+/// Made of: [`Layout::new`] on [`Session::folder`].
+pub fn layout(session: &Session) -> Layout {
+    Layout::new(&session.folder)
 }
 
 /// Saves the session into its folder: the memory as `memory.json`, after

@@ -18,6 +18,7 @@ One per flow module, in the order you would use them to make a session.
 | `metronome_count_in` | `metronome` | the click while playing, a one-bar count-in before a recording, the clip starting at the punch-in | `cargo run --example metronome_count_in` |
 | `record_take` | `record` | arm, punch in, a recording from a synthetic microphone, clips, undo; a real input with `devices` | `cargo run --example record_take` |
 | `export_session` | `export` | bounce the session and a range; resample with `files` | `cargo run --example export_session` |
+| `bounce_stems` | `export`, `session` | where files go (`Root`, `Layout`), a bounce into `bounces/`, a stem set with its manifest | `cargo run --example bounce_stems` |
 | `session_steps` | `session::steps` | build the mixer from a `Memory` by hand (strips, a bus, a send, the live controls) and render it through an offline engine | `cargo run --example session_steps` |
 | `list_devices` | `devices` | audio devices with the default marked; MIDI ports with `midi-io` | `cargo run --example list_devices --features devices` |
 

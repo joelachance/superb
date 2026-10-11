@@ -122,6 +122,10 @@ name = "export_session"
 path = "examples/flows/export_session.rs"
 
 [[example]]
+name = "bounce_stems"
+path = "examples/flows/bounce_stems.rs"
+
+[[example]]
 name = "session_steps"
 path = "examples/flows/session_steps.rs"
 

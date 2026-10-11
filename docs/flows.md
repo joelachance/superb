@@ -18,7 +18,7 @@ returns, refuses, and how it undoes) generated from the source by
 | `record` — start a recording, stop it, get clips, audio and MIDI; punch points | [record.md](flows/record.md) |
 | `marker` — named places on the timeline: add, move, rename, remove | [marker.md](flows/marker.md) |
 | `metronome` — a click while the transport rolls; its level; bars of count-in before a recording | [metronome.md](flows/metronome.md) |
-| `export` — bounce the session, or a range of it, to WAV | [export.md](flows/export.md) |
+| `export` — bounce the session, or a range of it, to WAV; every strip to its own file, a stem set | [export.md](flows/export.md) |
 | `devices` — audio and MIDI hardware; play through an output, switch outputs, open an input | [devices.md](flows/devices.md) |
 
 ## Why free functions
@@ -45,7 +45,7 @@ pub struct Session {
     pub memory: Memory,              // tracks, clips, routing, tempo: what gets saved
     pub history: UndoStack<Memory>,  // every edit goes through here
     pub audio: AudioCache,           // the audio clips play, keyed by path
-    pub folder: PathBuf,             // memory.json and audio/ live here
+    pub folder: PathBuf,             // the session folder; session::layout names its parts
     pub engine: EngineHandle,        // control side of the running engine
     pub audio_thread: Option<AudioThread>, // the audio side, until a device takes it
     pub mixer: MixerHandles,         // live strip and send controls from the last rebuild

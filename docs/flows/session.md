@@ -15,7 +15,8 @@ moment it is created: `memory.json` beside an `audio/` folder of WAV files.
 
 | verb | does | undo step |
 |---|---|---|
-| `create(folder, sample_rate, block_size) -> Session` | a new session in `folder`, created now with its `audio/` folder and `memory.json`, named after the folder | — |
+| `create(folder, sample_rate, block_size) -> Session` | a new session in `folder` (usually `Root::default().folder(name)`, so `~/aura/<name>/`), created now with the folders of its layout and `memory.json`, named after the folder | — |
+| `layout(session) -> Layout` | where each part of the session lives inside its folder: `memory()`, `state()`, `audio()`, `bounces()`, `bounce(name)`, `stems()`, `stem_set(name)` | — |
 | `open(folder, block_size)` / `save(session)` | the folder in and out: `memory.json` plus the WAV files clips refer to; `save` also writes any audio a clip refers to that is not on disk yet and remembers where the playhead is, so `open` starts there; `session.history.is_clean()` says whether anything changed since (state changes count) | — |
 | `import_audio(session, file) -> Imported` | a file into the session: with `files`, WAV, AIFF, FLAC, ALAC, MP3, AAC (MP4/M4A), Ogg Vorbis, CAF and Matroska, resampled to the session's rate when they differ (a WAV at the session's rate without `files`); written as 32-bit float `audio/<name>.wav` (`<name> 2.wav` if taken) and kept in memory; `Imported` says the key, the file's rate and bit depth, channels, frames and whether it was resampled; `clip::add` places it | — (the placing is the edit) |
 | `state_file(session, Option<PathBuf>)` | where state is kept: read now if the file exists, rewritten after every state change and every `save`, playhead included; `None` stops writing. Until set, state is not saved | — |
@@ -27,6 +28,27 @@ moment it is created: `memory.json` beside an `audio/` folder of WAV files.
 
 Tracks are added and set up in [`track`](track.md); clips are placed in
 [`clip`](clip.md).
+
+## Where files go
+
+Every session is a folder with the same shape, and sessions live side by
+side under a root:
+
+```text
+~/aura/                 Root::default(); Root::new(path) for anywhere else
+  My Show/              Root::folder("My Show"), what create and open take
+    memory.json         Layout::memory: the session's edits
+    state.json          Layout::state: its state, once state_file names it
+    audio/              Layout::audio: what clips play, recordings and imports
+    bounces/            Layout::bounces: mixes, Layout::bounce(name) for one
+    stems/<name>/       Layout::stem_set: export::stems, with manifest.json
+```
+
+`Root` is only a path: `sessions()` lists the folders under it that hold
+a `memory.json`, and nothing is made until a session is created. `Layout`
+works paths out from a session folder and touches nothing on disk.
+Characters a file name cannot hold become `-` in every name either one
+turns into a folder or file.
 
 ## Steps (`session::steps`)
 
@@ -55,11 +77,14 @@ pub fn create( folder: impl AsRef<Path>, sample_rate: SampleRate, block_size: us
 ```
 
 Starts a new, empty session at 120 bpm in 4/4 in `folder`, which is created
-(with its `audio/` folder) and given its `memory.json` at once, so it can be
-opened from here on. The session is named after the folder.
+with the folders of its `Layout` (`audio/`, `bounces/`, `stems/`) and given
+its `memory.json` at once, so it can be opened from here on. The session is
+named after the folder. Under the default `Root` that is
+`session::create(Root::default().folder("My Show"), ..)`, which makes
+`~/aura/My Show/`.
 
 **Takes**
-- `folder: impl AsRef<Path>` — where the session lives; created now, with an `audio/` folder inside; the session is named after it
+- `folder: impl AsRef<Path>` — where the session lives, usually `Root::folder(name)`; created now with `audio/`, `bounces/` and `stems/` inside; the session is named after it
 - `sample_rate: SampleRate` — the one sample rate everything in the session runs at
 - `block_size: usize` — frames per engine block, the largest block any node sees
 
@@ -69,12 +94,12 @@ opened from here on. The session is named after the folder.
 
 **Undo** none: not an edit.
 
-**Made of** `create_dir_all` → `Memory::new` → `Session::new` → `Memory::save`.
+**Made of** `create_dir_all` per folder of the `Layout` → `Memory::new` → `Session::new` → `Memory::save`.
 
 **Example**
 
 ```rust
-let mut session = session::create("~/songs/demo", SampleRate::HZ_48K, 256)?;
+let mut session = session::create(Root::default().folder("My Show"), SampleRate::HZ_48K, 256)?;   // ~/aura/My Show/
 ```
 
 ### `open`
@@ -106,6 +131,34 @@ unfinished are noted in the log, not placed: `record::recover` does that.
 ```rust
 let mut session = session::open("~/songs/demo", 256)?;
 session::state_file(&mut session, Some(session.folder.join("state.json")))?;
+```
+
+### `layout`
+
+```rust
+pub fn layout(session: &Session) -> Layout
+```
+
+Where each part of the session lives inside its folder: `memory.json`,
+`state.json`, `audio/`, `bounces/`, `stems/<name>/`.
+
+**Takes**
+- `session: &Session` — the open session, borrowed
+
+**Returns** `Layout` — the session folder's `Layout`: `memory()`, `state()`, `audio()`, `bounces()`, `bounce(name)`, `stems()`, `stem_set(name)`
+
+**Errors** never; a query.
+
+**Undo** none.
+
+**Made of** `Layout::new` on `Session::folder`.
+
+**Example**
+
+```rust
+let layout = session::layout(&session);
+export::bounce(&mut session, layout.bounce("rough mix"), Bounce::default())?;   // bounces/rough mix.wav
+session::state_file(&mut session, Some(layout.state()))?;
 ```
 
 ### `save`
@@ -432,6 +485,36 @@ its own rate.
 - `frames: usize` — Frames as stored, at the session's rate.
 - `stored_rate: SampleRate` — The session's rate, which the stored audio is at.
 - `resampled: bool` — Whether the audio was resampled from `source_rate` to `stored_rate`.
+
+### `Root`
+
+Where sessions live: one folder per session, side by side. `~/aura` by
+default (`Root::default`); an application that keeps sessions elsewhere
+(another disk, a folder the user picked) names its own with `Root::new`. A
+root is only a path: nothing is made until a session is created in it.
+
+**Methods**
+- `fn new(path: impl Into<PathBuf>) -> Self` — A root at `path`.
+- `fn path(&self) -> &Path` — The folder sessions live in.
+- `fn folder(&self, name: &str) -> PathBuf` — The folder a session called `name` has under this root, to hand to `session::create` or `session::open`. Characters a file name cannot hold (`/ \ : * ? " < > |`) become `-`.
+- `fn sessions(&self) -> Result<Vec<PathBuf>>` — The sessions under this root: every folder directly inside it that holds a `memory.json`, in name order. Empty when the root does not exist yet.  # Errors The root exists but cannot be read.
+
+### `Layout`
+
+Where each part of a session lives inside its folder. Every path is worked
+out from the folder; nothing here touches the disk. `session::layout` gives
+the one for an open session.
+
+**Methods**
+- `fn new(folder: impl Into<PathBuf>) -> Self` — The layout of the session folder `folder`.
+- `fn folder(&self) -> &Path` — The session folder.
+- `fn memory(&self) -> PathBuf` — `memory.json`: the session's edits.
+- `fn state(&self) -> PathBuf` — `state.json`: where the session's state goes once `session::state_file` names this file. Nothing writes it before.
+- `fn audio(&self) -> PathBuf` — `audio/`: what clips play, recordings and imports.
+- `fn bounces(&self) -> PathBuf` — `bounces/`: mixes.
+- `fn bounce(&self, name: &str) -> PathBuf` — `bounces/<name>.wav`: a bounce called `name`, for `export::bounce`.
+- `fn stems(&self) -> PathBuf` — `stems/`: stem sets, one folder each.
+- `fn stem_set(&self, name: &str) -> PathBuf` — `stems/<name>/`: the stem set called `name`, as `export::stems` writes it.
 
 ## Usage
 

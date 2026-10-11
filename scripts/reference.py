@@ -13,7 +13,7 @@ import pathlib, re, textwrap
 
 ROOT = pathlib.Path(".")
 FLOWS = [
-    ("session", "src/session/mod.rs"), ("track", "src/track.rs"), ("clip", "src/clip.rs"),
+    ("session", ["src/session/mod.rs", "src/session/folder.rs"]), ("track", "src/track.rs"), ("clip", "src/clip.rs"),
     ("marker", "src/marker.rs"), ("transport", "src/transport.rs"), ("send", "src/send.rs"),
     ("midi", "src/midi.rs"), ("record", "src/record.rs"), ("metronome", "src/metronome.rs"),
     ("export", "src/export.rs"), ("devices", "src/devices.rs"),
@@ -137,8 +137,8 @@ REB = "; rebuilds the mixer (at once while a device plays, otherwise at the next
 # ---- session ----
 note("session::create", returns="the new `Session`, running an offline engine; nothing plays until `devices::output` or `session::steps::render_blocks`",
      errors="the folder cannot be created or `memory.json` cannot be written; a block size of zero",
-     undo=NONE, example='let mut session = session::create("~/songs/demo", SampleRate::HZ_48K, 256)?;',
-     folder="where the session lives; created now, with an `audio/` folder inside; the session is named after it",
+     undo=NONE, example='let mut session = session::create(Root::default().folder("My Show"), SampleRate::HZ_48K, 256)?;   // ~/aura/My Show/',
+     folder="where the session lives, usually `Root::folder(name)`; created now with `audio/`, `bounces/` and `stems/` inside; the session is named after it",
      sample_rate="the one sample rate everything in the session runs at", block_size="frames per engine block, the largest block any node sees")
 note("session::open", returns="the `Session` as saved: memory, routing, tempo, and the audio its clips refer to, read from `audio/`; state comes back only once `state_file` is named",
      errors="no `memory.json` in the folder, a file written by a newer version, or malformed JSON; a missing audio file leaves its clip silent rather than failing",
@@ -146,6 +146,8 @@ note("session::open", returns="the `Session` as saved: memory, routing, tempo, a
      folder="a session folder, one `create` made", block_size="frames per engine block")
 note("session::save", returns="nothing; `session.history.is_clean()` is `true` afterwards", errors="the folder or `memory.json` cannot be written; audio a clip refers to cannot be written",
      undo=NONE, example="session::save(&mut session)?;")
+note("session::layout", returns="the session folder's `Layout`: `memory()`, `state()`, `audio()`, `bounces()`, `bounce(name)`, `stems()`, `stem_set(name)`", errors="never; a query", undo="none",
+     example='let layout = session::layout(&session);\nexport::bounce(&mut session, layout.bounce("rough mix"), Bounce::default())?;   // bounces/rough mix.wav\nsession::state_file(&mut session, Some(layout.state()))?;')
 note("session::import_audio", returns="an `Imported`: the key (`audio/<name>.wav`) a clip refers to the audio by, the file's own sample rate and bit depth, channels, frames, and whether it was resampled",
      errors="the file cannot be read or decoded; without the `files` feature, anything but a WAV at the session's rate",
      undo=NONE + "; placing the clip with `clip::add` is the undo step", example='let take = session::import_audio(&mut session, "/music/take.flac")?;\nprintln!("{take}");   // audio/take.wav: 44100 Hz, 24-bit, 2 channel(s), resampled to 48000 Hz, stored as 32-bit float\nclip::add(&mut session, vox, take.key, TimePosition::ZERO)?;',
@@ -273,6 +275,9 @@ note("export::bounce", returns="the rendered audio, also written to `path`", err
      path="the WAV file to write", what="a `Bounce`: where to start, how long (or to the end), which sample rate (or the session's), 16-bit PCM or 32-bit float")
 
 # ---- devices ----
+note("export::stems", returns="the `StemSet`: name, rate, bit depth, start, frames, and per file its source, output, peak, true peak and loudness; the same as `manifest.json` beside the files", errors="nothing to bounce (no clips after `start` and no length given); the name is already used; a file cannot be written",
+     undo=NONE, example='let set = export::stems(&mut session, "final", Stems::default())?;   // stems/final/: one file per strip, mix.wav, manifest.json\nfor stem in &set.stems { println!("{} {:?} LUFS", stem.file, stem.loudness_lufs); }',
+     name="the set's name and folder under `stems/`; characters a file name cannot hold become `-`", what="a `Stems`: where to start, how long (or to the end of the last clip), 24-bit PCM by default")
 note("devices::outputs", returns="every audio output device: name, whether it is the default, channels when known", errors="the audio host cannot be reached", undo="none", example="for d in devices::outputs()? { println!(\"{}{}\", d.name, if d.is_default { \" (default)\" } else { \"\" }); }")
 note("devices::inputs", returns="every audio input device, the same way", errors="the audio host cannot be reached", undo="none", example="let inputs = devices::inputs()?;")
 note("devices::output", returns="nothing; `session.output` holds the stream and the audio thread inside it", errors="the audio thread is already on a device (`close_output` first); the device refuses the session's rate, block size or channel count; the mixer cannot be built",
@@ -357,8 +362,12 @@ def render_types(types):
             out.append("")
     return "\n".join(out)
 
-for flow, path in FLOWS:
-    verbs, types = parse(path)
+for flow, paths in FLOWS:
+    verbs, types = [], []
+    for path in (paths if isinstance(paths, list) else [paths]):
+        v, t = parse(path)
+        verbs += v
+        types += t
     doc_path = ROOT / "docs" / "flows" / f"{flow}.md"
     text = doc_path.read_text()
     ref = ["## Reference", "", f"Every function of the `{flow}` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.", ""]

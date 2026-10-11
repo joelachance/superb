@@ -48,7 +48,9 @@ column is what not to say in code, docs or UI text.
 |---|---|
 | session (the thing you open) | song, project, rig, workspace |
 | memory (what the session remembers and saves: tracks, clips, routing, tempo) | document, model, session file |
-| session folder (`memory.json` beside `audio/`, made by `create`) | project file, bundle, package |
+| session folder (`memory.json` beside `audio/`, `bounces/` and `stems/`, made by `create`; `session::Layout` names its parts) | project file, bundle, package |
+| root (where sessions live, `~/aura` by default: `session::Root`) | library, workspace, projects folder |
+| stem (a strip's own output, bounced) and stem set (every stem of one bounce, with its manifest) | track export, multitrack, split |
 | mixer (what the engine runs, built for you) | console |
 | rebuild (the mixer) | sync, refresh, update |
 | render_blocks (run the engine with no sound card) | drive, advance, tick, sample |
@@ -82,6 +84,7 @@ column is what not to say in code, docs or UI text.
 - **Metronome, click, count-in** — The click on every beat while the transport rolls (`metronome::enable`), and the bars it plays before a recording begins (`metronome::count_in`), during which the transport rolls early and the click sounds even when the metronome is off.
 - **Punch in / punch out** — Dropping into record at one timeline position and out at another while the transport rolls. `record::punch_in` and `record::punch_out` set the points; `record::start` honours them.
 - **Recording** — A recording in progress. Every armed audio track's audio streams into its own file in the session folder from the first block (`audio/vox 1.wav`, with a `.recording` tag beside it until it is finished); when it stops, each gets a clip named after its file (`vox 1`), and every armed MIDI track gets a clip of the notes that arrived.
+- **Stem** — One strip's output bounced to its own file: after its inserts, fader and pan, before the master. A stem set (`export::stems`) is every unmuted track's and bus's stem plus the mix, all starting at the same sample and running the same length, in `stems/<name>/` with a `manifest.json`.
 - **Sealed** — Frames of a recording's files that are on disk for good: written, synced and covered by a header a reader accepts (`Recording::sealed_frames`). Everything before them survives a crash and never changes; an uploader may ship their bytes while the recording runs.
 - **True peak** — The highest point the waveform reaches between the samples as well as on them (`analysis::meter::true_peak`), in dBTP; what a converter or an encoder will see. Sample peak can under-read it by up to 3 dB.
 - **LUFS** — Loudness units relative to full scale (`analysis::meter::Loudness`): what the ear hears over time rather than what the meter's needle touches. Momentary (400 ms), short-term (3 s), integrated (the whole programme, gated so silence does not count). Podcasts deliver at −16, broadcast at −23.

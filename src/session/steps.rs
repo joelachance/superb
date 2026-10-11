@@ -122,6 +122,17 @@ pub fn build_mixer(
     cache: &AudioCache,
     channels: usize,
 ) -> Result<(Mixer, MixerHandles)> {
+    build_mixer_with_strips(memory, cache, channels).map(|(mixer, handles, _)| (mixer, handles))
+}
+
+/// [`build_mixer`], also saying which strip of the mixer each track and
+/// bus of the memory got (the master included), for a caller that reads
+/// strip outputs from the graph, such as a stem bounce.
+pub(crate) fn build_mixer_with_strips(
+    memory: &Memory,
+    cache: &AudioCache,
+    channels: usize,
+) -> Result<(Mixer, MixerHandles, Strips)> {
     let mut mixer = Mixer::new(channels);
     let strips = add_strips(memory, &mut mixer)?;
     route(memory, &mut mixer, &strips)?;
@@ -137,7 +148,7 @@ pub fn build_mixer(
     for (track, strip) in &strips {
         handles.strips.push((*track, strip_params(&mixer, *strip)?));
     }
-    Ok((mixer, handles))
+    Ok((mixer, handles, strips))
 }
 
 /// Hands the mixer's graph to the engine, which swaps it in at its
@@ -170,7 +181,7 @@ pub fn publish(engine: &mut EngineHandle, mixer: Mixer) -> Result<()> {
 pub const SWAP_WAIT: Duration = Duration::from_millis(250);
 
 /// Each track in the memory → the strip or bus the mixer got for it, in order.
-type Strips = Vec<(TrackId, StripId)>;
+pub(crate) type Strips = Vec<(TrackId, StripId)>;
 
 fn strip_of(strips: &Strips, track: TrackId) -> Option<StripId> {
     strips.iter().find(|(id, _)| *id == track).map(|(_, s)| *s)

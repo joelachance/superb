@@ -29,7 +29,7 @@ They know nothing about flows or the `Session`.
 
 | flow | what it does | doc |
 |---|---|---|
-| `session` | create, open and save a session; import an audio file; the state file; tempo, meter and loop range; undo and redo; the engine side in `session::steps` | [session.md](docs/flows/session.md) |
+| `session` | create, open and save a session; where files go (`Root`, `Layout`); import an audio file; the state file; tempo, meter and loop range; undo and redo; the engine side in `session::steps` | [session.md](docs/flows/session.md) |
 | `track` | add, archive, restore, rename, reorder, colour; mute, solo, arm, monitor, input, MIDI channel; volume, pan, route; meters; the master | [track.md](docs/flows/track.md) |
 | `clip` | audio or MIDI on a track: add, move, split, trim, gain, fades, mute, rename, archive, restore; notes in a MIDI clip | [clip.md](docs/flows/clip.md) |
 | `marker` | named places on the timeline: add, move, rename, remove | [marker.md](docs/flows/marker.md) |
@@ -38,7 +38,7 @@ They know nothing about flows or the `Session`.
 | `midi` | play and release notes, send any message, connect a keyboard | [midi.md](docs/flows/midi.md) |
 | `record` | start a recording, stop it, get a clip on every armed track, audio and MIDI; punch points | [record.md](docs/flows/record.md) |
 | `metronome` | a click while the transport rolls, its level, bars of count-in before a recording | [metronome.md](docs/flows/metronome.md) |
-| `export` | bounce the session, or a range of it, to WAV, optionally resampled | [export.md](docs/flows/export.md) |
+| `export` | bounce the session, or a range of it, to WAV, optionally resampled; every strip to its own file beside the mix, a stem set with a manifest | [export.md](docs/flows/export.md) |
 | `devices` | list audio and MIDI hardware; play through an output, switch outputs, open an input | [devices.md](docs/flows/devices.md) |
 
 | module | in DAW terms | what it holds | doc |
@@ -138,6 +138,7 @@ cargo run --example midi_keys                  # midi: notes into a monitoring t
 cargo run --example record_take                # record: a recording from a synthetic microphone
 cargo run --example metronome_count_in         # metronome: the click, and a count-in before recording
 cargo run --example export_session             # export: bounce to WAV, whole or a range
+cargo run --example bounce_stems               # export: where files go, a stem set with its manifest
 cargo run --example list_devices --features devices
 ```
 
@@ -183,7 +184,9 @@ buses and sends, swapped glitch-free into a running engine; tempo and
 meter changes the engine and the click follow; audio import in every
 format the decoder reads, resampled once to the session's rate, with a
 report of what came in; clip split, trim, gain and fades; notes added,
-changed and removed in MIDI clips; bouncing to WAV; device output, output
+changed and removed in MIDI clips; an opinionated folder layout under a
+root (`~/aura` by default); bouncing to WAV, and stem sets with a
+manifest; device output, output
 switching, and input on every channel the device has; recording audio and
 MIDI into clips, lined up by the device clock, streamed into the session
 folder as it happens (a crash costs a second, and what it left is

@@ -755,6 +755,16 @@ impl AudioGraph {
         Ok(&self.output_buffers[self.slot_index(id)?])
     }
 
+    /// Whether a node reported silence in the last `process` call. A silent
+    /// node's buffer ([`node_output`](Self::node_output)) need not have been
+    /// cleared, so read this first and take silence for zeros.
+    pub fn node_is_silent(&self, id: NodeId) -> Result<bool> {
+        if self.dirty {
+            return Err(AuraError::NotPrepared);
+        }
+        Ok(self.silent[self.slot_index(id)?])
+    }
+
     /// Statistics from the last `process` call.
     pub fn stats(&self) -> GraphStats {
         self.stats
