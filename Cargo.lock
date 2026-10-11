@@ -71,6 +71,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "aura"
+version = "0.1.0"
+dependencies = [
+ "clap-sys",
+ "cpal",
+ "dasp_sample",
+ "libloading",
+ "log",
+ "midir",
+ "rubato",
+ "serde",
+ "serde_json",
+ "symphonia",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -943,22 +959,6 @@ name = "strength_reduce"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe895eb47f22e2ddd4dabc02bce419d2e643c8e3b585c78158b349195bc24d82"
-
-[[package]]
-name = "superb"
-version = "0.1.0"
-dependencies = [
- "clap-sys",
- "cpal",
- "dasp_sample",
- "libloading",
- "log",
- "midir",
- "rubato",
- "serde",
- "serde_json",
- "symphonia",
-]
 
 [[package]]
 name = "symphonia"

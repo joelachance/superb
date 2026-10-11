@@ -2,7 +2,7 @@
 
 use core::ops::Range;
 
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 use crate::primitives::midi::message::MidiMessage;
 
@@ -40,7 +40,7 @@ pub struct TimestampedMessage {
 ///
 /// The backing storage is allocated exactly once by [`MidiEventBuffer::with_capacity`]
 /// and never grows afterwards: [`MidiEventBuffer::push`] returns
-/// [`SuperbError::CapacityExceeded`] instead of reallocating, which makes the
+/// [`AuraError::CapacityExceeded`] instead of reallocating, which makes the
 /// buffer safe to `push` into from an audio callback.
 #[derive(Clone, Debug)]
 pub struct MidiEventBuffer {
@@ -61,11 +61,11 @@ impl MidiEventBuffer {
     /// Appends `event` to the end of the buffer.
     ///
     /// # Errors
-    /// Returns [`SuperbError::CapacityExceeded`] if the buffer is full; the
+    /// Returns [`AuraError::CapacityExceeded`] if the buffer is full; the
     /// buffer is never grown.
     pub fn push(&mut self, event: MidiEvent) -> Result<()> {
         if self.events.len() >= self.capacity {
-            return Err(SuperbError::CapacityExceeded {
+            return Err(AuraError::CapacityExceeded {
                 what: "midi_event_buffer",
                 capacity: self.capacity,
             });
@@ -80,10 +80,10 @@ impl MidiEventBuffer {
     /// is placed after all previously inserted events with that same frame.
     ///
     /// # Errors
-    /// Returns [`SuperbError::CapacityExceeded`] if the buffer is full.
+    /// Returns [`AuraError::CapacityExceeded`] if the buffer is full.
     pub fn push_sorted(&mut self, event: MidiEvent) -> Result<()> {
         if self.events.len() >= self.capacity {
-            return Err(SuperbError::CapacityExceeded {
+            return Err(AuraError::CapacityExceeded {
                 what: "midi_event_buffer",
                 capacity: self.capacity,
             });
@@ -158,12 +158,12 @@ impl MidiEventBuffer {
     /// Appends every event from `other`, preserving its order.
     ///
     /// # Errors
-    /// Returns [`SuperbError::CapacityExceeded`] and leaves `self` unchanged
+    /// Returns [`AuraError::CapacityExceeded`] and leaves `self` unchanged
     /// if there is not enough room for all of `other`'s events.
     pub fn extend_from(&mut self, other: &MidiEventBuffer) -> Result<()> {
         let needed = self.events.len() + other.events.len();
         if needed > self.capacity {
-            return Err(SuperbError::CapacityExceeded {
+            return Err(AuraError::CapacityExceeded {
                 what: "midi_event_buffer",
                 capacity: self.capacity,
             });
@@ -215,7 +215,7 @@ mod tests {
         let err = buf.push(ev(3)).unwrap_err();
         assert_eq!(
             err,
-            SuperbError::CapacityExceeded {
+            AuraError::CapacityExceeded {
                 what: "midi_event_buffer",
                 capacity: 3
             }
@@ -233,7 +233,7 @@ mod tests {
         let err = buf.push_sorted(ev(3)).unwrap_err();
         assert_eq!(
             err,
-            SuperbError::CapacityExceeded {
+            AuraError::CapacityExceeded {
                 what: "midi_event_buffer",
                 capacity: 2
             }
@@ -372,7 +372,7 @@ mod tests {
         let err = a.extend_from(&b).unwrap_err();
         assert_eq!(
             err,
-            SuperbError::CapacityExceeded {
+            AuraError::CapacityExceeded {
                 what: "midi_event_buffer",
                 capacity: 4
             }

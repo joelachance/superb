@@ -44,8 +44,8 @@ the other way for a meter. `prepare` allocates whatever a node needs;
 
 ```rust
 use std::sync::Arc;
-use superb::primitives::graph::dynamics::*;
-use superb::primitives::graph::AudioGraph;
+use aura::primitives::graph::dynamics::*;
+use aura::primitives::graph::AudioGraph;
 
 let comp = Arc::new(CompressorParams::new(-18.0, 3.0));   // threshold dBFS, ratio
 comp.set_attack_ms(5.0);

@@ -10,7 +10,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::primitives::session::{Input, Memory};
-use crate::primitives::{ClipId, RawId, Result, SendId, SuperbError, TimePosition, TrackId};
+use crate::primitives::{AuraError, ClipId, RawId, Result, SendId, TimePosition, TrackId};
 
 /// Version written into every state file; loading refuses newer ones.
 pub const STATE_FORMAT_VERSION: u32 = 1;
@@ -137,7 +137,7 @@ impl Memory {
     /// are skipped; a file from a newer version is refused.
     pub fn apply_state(&mut self, state: &StateSnapshot) -> Result<()> {
         if state.format_version > STATE_FORMAT_VERSION {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "state file written by a newer version",
             });
         }
@@ -176,21 +176,21 @@ impl Memory {
     pub fn save_state(&self, path: impl AsRef<Path>) -> Result<()> {
         let path = path.as_ref();
         let json = serde_json::to_string_pretty(&self.state_snapshot())
-            .map_err(|e| SuperbError::Message(format!("serialise state: {e}")))?;
+            .map_err(|e| AuraError::Message(format!("serialise state: {e}")))?;
         let tmp = path.with_extension("json.tmp");
         std::fs::write(&tmp, json)
-            .map_err(|e| SuperbError::Message(format!("write {}: {e}", tmp.display())))?;
+            .map_err(|e| AuraError::Message(format!("write {}: {e}", tmp.display())))?;
         std::fs::rename(&tmp, path)
-            .map_err(|e| SuperbError::Message(format!("write {}: {e}", path.display())))
+            .map_err(|e| AuraError::Message(format!("write {}: {e}", path.display())))
     }
 
     /// Reads a state file.
     pub fn load_state(path: impl AsRef<Path>) -> Result<StateSnapshot> {
         let path = path.as_ref();
         let text = std::fs::read_to_string(path)
-            .map_err(|e| SuperbError::Message(format!("read {}: {e}", path.display())))?;
+            .map_err(|e| AuraError::Message(format!("read {}: {e}", path.display())))?;
         serde_json::from_str(&text)
-            .map_err(|e| SuperbError::Message(format!("parse {}: {e}", path.display())))
+            .map_err(|e| AuraError::Message(format!("parse {}: {e}", path.display())))
     }
 }
 

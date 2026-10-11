@@ -5,11 +5,11 @@ Coalescing undo/redo command stack for memory edits.
 ## Purpose
 
 `primitives::undo` sits in front of any memory type `T` (typically
-`superb::primitives::session::Session`) on the UI thread. It knows nothing
+`aura::primitives::session::Session`) on the UI thread. It knows nothing
 about audio: mutations happen through `Command::apply` / `revert`, and nothing
 here is real-time safe.
 
-Depends only on the `primitives` root (for `Result` / `SuperbError`). No third-party
+Depends only on the `primitives` root (for `Result` / `AuraError`). No third-party
 deps.
 
 ## Key types
@@ -31,7 +31,7 @@ deps.
 ## Usage
 
 ```rust
-use superb::primitives::undo::{CoalesceKey, PropertyEdit, UndoStack};
+use aura::primitives::undo::{CoalesceKey, PropertyEdit, UndoStack};
 
 struct Doc { gain_db: f32 }
 
@@ -78,4 +78,4 @@ to know the memory changed; the stack itself stays off-thread.
   are the memory; the stack is ephemeral).
 * The module has no unsafe code: downcasting goes through
   `dyn Any` (trait upcasting, Rust 1.86+).
-* Session-facing commands live in `superb::primitives::session::commands`, not here.
+* Session-facing commands live in `aura::primitives::session::commands`, not here.

@@ -1,8 +1,8 @@
 //! Container probing and packet decoding through symphonia.
 //!
 //! **MPL-2.0 boundary: symphonia is confined to decode.rs.** This is the
-//! only Superb source file that may `use symphonia`; everything it exports
-//! is expressed in Superb types so callers (and the rest of this crate)
+//! only Aura source file that may `use symphonia`; everything it exports
+//! is expressed in Aura types so callers (and the rest of this crate)
 //! never touch an MPL-licensed type. Keep it that way — `lib.rs` has a test
 //! that scans the crate for stray imports.
 
@@ -24,12 +24,12 @@ use symphonia::core::io::{
 use symphonia::core::meta::MetadataOptions;
 
 use crate::primitives::buffers::PlanarBuffer;
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 
 use super::AudioFile;
 
-fn err(context: &str, e: impl std::fmt::Display) -> SuperbError {
-    SuperbError::Message(format!("{context}: {e}"))
+fn err(context: &str, e: impl std::fmt::Display) -> AuraError {
+    AuraError::Message(format!("{context}: {e}"))
 }
 
 pub(super) fn decode_path(path: &Path) -> Result<AudioFile> {
@@ -76,12 +76,12 @@ fn decode_source<'s>(source: Box<dyn MediaSource + 's>, hint: &Hint) -> Result<A
 
     let track = reader
         .default_track(TrackType::Audio)
-        .ok_or_else(|| SuperbError::Message("no audio track in file".into()))?;
+        .ok_or_else(|| AuraError::Message("no audio track in file".into()))?;
     let track_id = track.id;
     let params = match &track.codec_params {
         Some(CodecParameters::Audio(p)) => p.clone(),
         _ => {
-            return Err(SuperbError::Message(
+            return Err(AuraError::Message(
                 "audio track has no usable codec parameters".into(),
             ))
         }
@@ -141,7 +141,7 @@ fn decode_source<'s>(source: Box<dyn MediaSource + 's>, hint: &Hint) -> Result<A
                 .map(|p| Vec::with_capacity(declared_frames.unwrap_or(p.len())))
                 .collect();
         } else if planes.len() != scratch.len() {
-            return Err(SuperbError::Message(format!(
+            return Err(AuraError::Message(format!(
                 "channel count changed mid-stream ({} -> {})",
                 planes.len(),
                 scratch.len()
@@ -153,7 +153,7 @@ fn decode_source<'s>(source: Box<dyn MediaSource + 's>, hint: &Hint) -> Result<A
     }
 
     let hz =
-        rate_hz.ok_or_else(|| SuperbError::Message("audio file declares no sample rate".into()))?;
+        rate_hz.ok_or_else(|| AuraError::Message("audio file declares no sample rate".into()))?;
     let sample_rate = SampleRate::new(hz)?;
     if planes.is_empty() {
         let channels = params

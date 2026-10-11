@@ -14,7 +14,7 @@
 use super::filter::Biquad;
 use crate::primitives::buffers::gain::{db_to_linear, linear_to_db};
 use crate::primitives::buffers::PlanarBuffer;
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 
 /// The loudness podcasts and streaming services ask for, in LUFS.
 pub const PODCAST_LOUDNESS: f32 = -16.0;
@@ -209,7 +209,7 @@ impl Loudness {
     /// Zero channels.
     pub fn new(rate: SampleRate, channels: usize) -> Result<Self> {
         if channels == 0 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "loudness channels",
             });
         }
@@ -228,7 +228,7 @@ impl Loudness {
     /// The wrong number of channels.
     pub fn push(&mut self, planes: &[&[f32]]) -> Result<()> {
         if planes.len() != self.filters.len() {
-            return Err(SuperbError::ChannelMismatch {
+            return Err(AuraError::ChannelMismatch {
                 expected: self.filters.len(),
                 actual: planes.len(),
             });

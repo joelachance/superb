@@ -16,8 +16,8 @@
 //! cargo run --example midi_route
 //! ```
 
-use superb::prelude::*;
-use superb::primitives::graph::MidiPort;
+use aura::prelude::*;
+use aura::primitives::graph::MidiPort;
 
 fn main() -> Result<()> {
     let sample_rate = SampleRate::HZ_48K;
@@ -45,12 +45,12 @@ fn main() -> Result<()> {
     // A non-RT producer (here: main) stamps messages on the engine's stream
     // clock. The first block spans 0..10 000 µs; 5 000 µs is frame 240.
     // spsc::channel is wait-free: safe for RT consumer / non-RT producer.
-    let (mut tx, rx) = superb::primitives::realtime::spsc::channel::<TimestampedMessage>(16);
+    let (mut tx, rx) = aura::primitives::realtime::spsc::channel::<TimestampedMessage>(16);
     engine.set_midi_input(Some(rx));
     // MidiChannel::new validates 0..15; unwrap() is OK for a known-good 0.
     let channel = MidiChannel::new(0).unwrap();
     let note_on_us = engine.stream_clock_us() + 5_000;
-    // map_err converts a full-queue push failure into SuperbError.
+    // map_err converts a full-queue push failure into AuraError.
     tx.push(TimestampedMessage {
         timestamp_us: note_on_us,
         message: MidiMessage::NoteOn {
@@ -59,7 +59,7 @@ fn main() -> Result<()> {
             velocity: 127,
         },
     })
-    .map_err(|_| SuperbError::Message("midi queue full".into()))?;
+    .map_err(|_| AuraError::Message("midi queue full".into()))?;
 
     // PlanarBuffer: separate Vec per channel (not interleaved LRLR...).
     let mut out = PlanarBuffer::new(1, block);
@@ -90,7 +90,7 @@ fn main() -> Result<()> {
             velocity: 0,
         },
     })
-    .map_err(|_| SuperbError::Message("midi queue full".into()))?;
+    .map_err(|_| AuraError::Message("midi queue full".into()))?;
     engine.render(&mut out)?;
     // rposition finds the last non-zero sample index from the end.
     let last_sound = out.channel(0).iter().rposition(|&s| s != 0.0);

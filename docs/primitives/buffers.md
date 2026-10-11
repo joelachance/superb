@@ -1,6 +1,6 @@
 # primitives::buffers
 
-Audio block buffers for the Superb DAW SDK.
+Audio block buffers for the Aura DAW SDK.
 
 ## Purpose
 
@@ -34,7 +34,7 @@ real-time callback needs.
 ## Usage
 
 ```rust
-use superb::primitives::buffers::{PlanarBuffer, InterleavedBuffer, interleave};
+use aura::primitives::buffers::{PlanarBuffer, InterleavedBuffer, interleave};
 
 let mut block = PlanarBuffer::new(2, 4);
 block.channel_mut(0).copy_from_slice(&[1.0, 2.0, 3.0, 4.0]);
@@ -59,7 +59,7 @@ Everything used per block — `set_frames`, `channel`/`channel_mut`, `clear`,
 `fill`, `apply_gain`, `apply_gain_ramp`, `copy_from`, `add_from`,
 `add_channel_from`, `peak`, `rms` — operates on the pre-allocated `Vec<f32>`
 in place and never grows it, so it is real-time safe; `set_frames` only
-*shrinks* the active view and returns `SuperbError::CapacityExceeded` rather
+*shrinks* the active view and returns `AuraError::CapacityExceeded` rather
 than reallocating if asked to grow past `capacity`
 (`src/primitives/buffers/planar.rs`, `shrinking_frames_keeps_capacity_and_plane_stride`).
 This module has no direct no-alloc test of its own; its allocation-free

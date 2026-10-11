@@ -1,6 +1,6 @@
 # Flows
 
-The top tier of the `superb` crate: one module per thing you work with or
+The top tier of the `aura` crate: one module per thing you work with or
 task you do, each a set of free functions over a [`Session`](#the-session).
 This page covers what they share; each flow has its own page in
 `docs/flows/`, with a full reference of every function (what it takes,

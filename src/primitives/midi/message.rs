@@ -1,6 +1,6 @@
 //! MIDI message parsing, encoding and construction.
 
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 use crate::primitives::midi::channel::MidiChannel;
 
@@ -315,7 +315,7 @@ impl MidiMessage {
     /// A `NoteOn` with velocity `0` is normalised to [`MidiMessage::NoteOff`].
     ///
     /// # Errors
-    /// Returns [`SuperbError::InvalidArgument`] if:
+    /// Returns [`AuraError::InvalidArgument`] if:
     /// - `bytes` is empty,
     /// - the first byte is not a status byte (`< 0x80`, i.e. running status),
     /// - any data byte is `>= 0x80`,
@@ -323,18 +323,18 @@ impl MidiMessage {
     /// - the status byte is SysEx (`0xF0`), MTC quarter frame (`0xF1`), a
     ///   standalone end-of-SysEx (`0xF7`), or an undefined system byte.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let status = *bytes.first().ok_or(SuperbError::InvalidArgument {
+        let status = *bytes.first().ok_or(AuraError::InvalidArgument {
             what: "midi_bytes_empty",
         })?;
         if status < 0x80 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "midi_running_status_unsupported",
             });
         }
         let data = &bytes[1..];
         for &b in data {
             if b >= 0x80 {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "midi_data_byte",
                 });
             }
@@ -344,7 +344,7 @@ impl MidiMessage {
             if data.len() == n {
                 Ok(())
             } else {
-                Err(SuperbError::InvalidArgument {
+                Err(AuraError::InvalidArgument {
                     what: "midi_message_length",
                 })
             }
@@ -418,10 +418,10 @@ impl MidiMessage {
                 let value = data[0] as u16 | ((data[1] as u16) << 7);
                 Ok(MidiMessage::PitchBend { channel, value })
             }
-            0xF0 => Err(SuperbError::InvalidArgument {
+            0xF0 => Err(AuraError::InvalidArgument {
                 what: "midi_sysex_unsupported",
             }),
-            0xF1 => Err(SuperbError::InvalidArgument {
+            0xF1 => Err(AuraError::InvalidArgument {
                 what: "midi_mtc_quarter_frame_unsupported",
             }),
             0xF2 => {
@@ -433,14 +433,14 @@ impl MidiMessage {
                 expect(1)?;
                 Ok(MidiMessage::SongSelect(data[0]))
             }
-            0xF4 | 0xF5 | 0xF9 | 0xFD => Err(SuperbError::InvalidArgument {
+            0xF4 | 0xF5 | 0xF9 | 0xFD => Err(AuraError::InvalidArgument {
                 what: "midi_undefined_status",
             }),
             0xF6 => {
                 expect(0)?;
                 Ok(MidiMessage::TuneRequest)
             }
-            0xF7 => Err(SuperbError::InvalidArgument {
+            0xF7 => Err(AuraError::InvalidArgument {
                 what: "midi_standalone_eox_unsupported",
             }),
             0xF8 => {
@@ -474,7 +474,7 @@ impl MidiMessage {
 
 fn check_7bit(what: &'static str, value: u8) -> Result<()> {
     if value as u16 > MAX_7BIT {
-        Err(SuperbError::InvalidArgument { what })
+        Err(AuraError::InvalidArgument { what })
     } else {
         Ok(())
     }
@@ -482,7 +482,7 @@ fn check_7bit(what: &'static str, value: u8) -> Result<()> {
 
 fn check_14bit(what: &'static str, value: u16) -> Result<()> {
     if value > MAX_14BIT {
-        Err(SuperbError::InvalidArgument { what })
+        Err(AuraError::InvalidArgument { what })
     } else {
         Ok(())
     }

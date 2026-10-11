@@ -2,7 +2,7 @@
 
 use crate::primitives::transport::{LoopRange, TempoMap};
 use crate::primitives::{
-    ClipId, InsertId, MarkerId, RawId, Result, SampleRate, SendId, SuperbError, TimeDuration,
+    AuraError, ClipId, InsertId, MarkerId, RawId, Result, SampleRate, SendId, TimeDuration,
     TimePosition, TrackId,
 };
 
@@ -305,24 +305,24 @@ impl Memory {
     /// ID.
     pub fn insert_track(&mut self, index: usize, mut track: Track) -> Result<TrackId> {
         if index > self.tracks.len() {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "track index",
             });
         }
         if track.id.is_valid() && self.tracks.iter().any(|t| t.id == track.id) {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "duplicate track id",
             });
         }
         // Validate everything before touching the ID counter so a rejected
         // insert leaves the memory untouched.
         if track.kind == TrackKind::Bus && !track.clips.is_empty() {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "bus tracks hold no clips",
             });
         }
         if track.kind == TrackKind::Bus && !track.sends.is_empty() {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "bus tracks have no sends",
             });
         }
@@ -334,7 +334,7 @@ impl Memory {
             if id.is_valid()
                 && (self.find_clip(id).is_some() || track.clips[..i].iter().any(|o| o.id == id))
             {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "duplicate clip id",
                 });
             }
@@ -345,7 +345,7 @@ impl Memory {
             if id.is_valid()
                 && (self.find_send(id).is_some() || track.sends[..i].iter().any(|o| o.id == id))
             {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "duplicate send id",
                 });
             }
@@ -355,7 +355,7 @@ impl Memory {
             if id.is_valid()
                 && (self.find_insert(id).is_some() || track.inserts[..i].iter().any(|o| o.id == id))
             {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "duplicate insert id",
                 });
             }
@@ -418,7 +418,7 @@ impl Memory {
     pub fn move_track(&mut self, id: TrackId, index: usize) -> Result<()> {
         let from = self.track_index(id)?;
         if index >= self.tracks.len() {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "track index",
             });
         }
@@ -435,7 +435,7 @@ impl Memory {
         self.tracks
             .iter()
             .position(|t| t.id == id)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "track",
                 id: id.raw(),
             })
@@ -482,7 +482,7 @@ impl Memory {
     /// bump the revision.
     pub fn set_track_output(&mut self, track: TrackId, bus: Option<TrackId>) -> Result<()> {
         if self.is_master(track) {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "the master has no output; everything ends there",
             });
         }
@@ -492,7 +492,7 @@ impl Memory {
         if let Some(bus) = bus {
             self.check_bus(bus)?;
             if bus == track || self.feeds(bus, track) {
-                return Err(SuperbError::Cycle);
+                return Err(AuraError::Cycle);
             }
         }
         if self.tracks[idx].output != bus {
@@ -521,7 +521,7 @@ impl Memory {
 
     fn check_bus(&self, bus: TrackId) -> Result<()> {
         if self.track(bus)?.kind != TrackKind::Bus {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "routing target is not a bus track",
             });
         }
@@ -541,25 +541,25 @@ impl Memory {
     /// ID must not collide. Bus tracks cannot send.
     pub fn add_send(&mut self, track: TrackId, mut send: TrackSend) -> Result<SendId> {
         if self.is_master(track) {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "the master has no sends",
             });
         }
         if self.is_master(send.bus) {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "sends cannot target the master; every track already feeds it",
             });
         }
         let ti = self.track_index(track)?;
         if self.tracks[ti].kind == TrackKind::Bus {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "bus tracks have no sends",
             });
         }
         self.check_bus(send.bus)?;
         if send.id.is_valid() {
             if self.find_send(send.id).is_some() {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "duplicate send id",
                 });
             }
@@ -575,7 +575,7 @@ impl Memory {
 
     /// Removes a send, returning the track it was on and the send.
     pub fn remove_send(&mut self, id: SendId) -> Result<(TrackId, TrackSend)> {
-        let (ti, si) = self.find_send(id).ok_or(SuperbError::NotFound {
+        let (ti, si) = self.find_send(id).ok_or(AuraError::NotFound {
             kind: "send",
             id: id.raw(),
         })?;
@@ -587,7 +587,7 @@ impl Memory {
 
     /// Looks up a send on any track.
     pub fn send(&self, id: SendId) -> Result<&TrackSend> {
-        let (ti, si) = self.find_send(id).ok_or(SuperbError::NotFound {
+        let (ti, si) = self.find_send(id).ok_or(AuraError::NotFound {
             kind: "send",
             id: id.raw(),
         })?;
@@ -597,7 +597,7 @@ impl Memory {
     /// Mutable send access (bumps the revision). The destination is fixed;
     /// remove and re-add to retarget.
     pub fn send_mut(&mut self, id: SendId) -> Result<&mut TrackSend> {
-        let (ti, si) = self.find_send(id).ok_or(SuperbError::NotFound {
+        let (ti, si) = self.find_send(id).ok_or(AuraError::NotFound {
             kind: "send",
             id: id.raw(),
         })?;
@@ -607,7 +607,7 @@ impl Memory {
 
     /// The track a send belongs to.
     pub fn send_track(&self, id: SendId) -> Result<TrackId> {
-        let (ti, _) = self.find_send(id).ok_or(SuperbError::NotFound {
+        let (ti, _) = self.find_send(id).ok_or(AuraError::NotFound {
             kind: "send",
             id: id.raw(),
         })?;
@@ -659,7 +659,7 @@ impl Memory {
     ) -> Result<InsertId> {
         let ti = self.track_index(track)?;
         if index > self.tracks[ti].inserts.len() {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "insert index",
             });
         }
@@ -669,7 +669,7 @@ impl Memory {
     fn place_insert(&mut self, ti: usize, index: usize, mut insert: Insert) -> Result<InsertId> {
         if insert.id.is_valid() {
             if self.find_insert(insert.id).is_some() {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "duplicate insert id",
                 });
             }
@@ -686,7 +686,7 @@ impl Memory {
     /// Removes an insert, returning its track, its position in the chain
     /// and the insert itself.
     pub fn remove_insert(&mut self, id: InsertId) -> Result<(TrackId, usize, Insert)> {
-        let (ti, ii) = self.find_insert(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_insert(id).ok_or(AuraError::NotFound {
             kind: "insert",
             id: id.raw(),
         })?;
@@ -698,13 +698,13 @@ impl Memory {
 
     /// Moves an insert to `index` within its track's chain.
     pub fn move_insert(&mut self, id: InsertId, index: usize) -> Result<()> {
-        let (ti, ii) = self.find_insert(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_insert(id).ok_or(AuraError::NotFound {
             kind: "insert",
             id: id.raw(),
         })?;
         let chain = &mut self.tracks[ti].inserts;
         if index >= chain.len() {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "insert index",
             });
         }
@@ -718,7 +718,7 @@ impl Memory {
 
     /// Looks up an insert on any track.
     pub fn insert(&self, id: InsertId) -> Result<&Insert> {
-        let (ti, ii) = self.find_insert(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_insert(id).ok_or(AuraError::NotFound {
             kind: "insert",
             id: id.raw(),
         })?;
@@ -727,7 +727,7 @@ impl Memory {
 
     /// Mutable insert access (bumps the revision).
     pub fn insert_mut(&mut self, id: InsertId) -> Result<&mut Insert> {
-        let (ti, ii) = self.find_insert(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_insert(id).ok_or(AuraError::NotFound {
             kind: "insert",
             id: id.raw(),
         })?;
@@ -737,7 +737,7 @@ impl Memory {
 
     /// The track whose chain holds `id`.
     pub fn insert_owner(&self, id: InsertId) -> Result<TrackId> {
-        let (ti, _) = self.find_insert(id).ok_or(SuperbError::NotFound {
+        let (ti, _) = self.find_insert(id).ok_or(AuraError::NotFound {
             kind: "insert",
             id: id.raw(),
         })?;
@@ -766,13 +766,13 @@ impl Memory {
     pub fn add_clip(&mut self, track: TrackId, mut clip: Clip) -> Result<ClipId> {
         let ti = self.track_index(track)?;
         if self.tracks[ti].kind == TrackKind::Bus {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "bus tracks hold no clips",
             });
         }
         if clip.id.is_valid() {
             if self.find_clip(clip.id).is_some() {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "duplicate clip id",
                 });
             }
@@ -790,7 +790,7 @@ impl Memory {
 
     /// Removes a clip, returning the track it was on and the clip.
     pub fn remove_clip(&mut self, id: ClipId) -> Result<(TrackId, Clip)> {
-        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_clip(id).ok_or(AuraError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
@@ -802,7 +802,7 @@ impl Memory {
 
     /// Moves a clip to a new start position on its current track.
     pub fn move_clip(&mut self, id: ClipId, start: TimePosition) -> Result<()> {
-        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_clip(id).ok_or(AuraError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
@@ -819,11 +819,11 @@ impl Memory {
     pub fn move_clip_to_track(&mut self, id: ClipId, track: TrackId) -> Result<()> {
         let dest = self.track_index(track)?;
         if self.tracks[dest].kind == TrackKind::Bus {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "bus tracks hold no clips",
             });
         }
-        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_clip(id).ok_or(AuraError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
@@ -845,7 +845,7 @@ impl Memory {
 
     /// Looks up a clip on any track.
     pub fn clip(&self, id: ClipId) -> Result<&Clip> {
-        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_clip(id).ok_or(AuraError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
@@ -855,7 +855,7 @@ impl Memory {
     /// Mutable clip access (bumps the revision). Use
     /// [`move_clip`](Self::move_clip) to change the start so ordering holds.
     pub fn clip_mut(&mut self, id: ClipId) -> Result<&mut Clip> {
-        let (ti, ii) = self.find_clip(id).ok_or(SuperbError::NotFound {
+        let (ti, ii) = self.find_clip(id).ok_or(AuraError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
@@ -865,7 +865,7 @@ impl Memory {
 
     /// The track a clip lives on.
     pub fn clip_track(&self, id: ClipId) -> Result<TrackId> {
-        let (ti, _) = self.find_clip(id).ok_or(SuperbError::NotFound {
+        let (ti, _) = self.find_clip(id).ok_or(AuraError::NotFound {
             kind: "clip",
             id: id.raw(),
         })?;
@@ -894,7 +894,7 @@ impl Memory {
     pub fn insert_marker(&mut self, mut marker: Marker) -> Result<MarkerId> {
         if marker.id.is_valid() {
             if self.markers.iter().any(|m| m.id == marker.id) {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "duplicate marker id",
                 });
             }
@@ -960,7 +960,7 @@ impl Memory {
         self.markers
             .iter()
             .position(|m| m.id == id)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "marker",
                 id: id.raw(),
             })
@@ -1036,7 +1036,7 @@ mod tests {
         assert!(s.track(a).is_err());
         assert!(matches!(
             s.remove_track(a),
-            Err(SuperbError::NotFound { kind: "track", .. })
+            Err(AuraError::NotFound { kind: "track", .. })
         ));
         // Re-inserting under the original id works once, then collides.
         s.insert_track(1, removed.clone()).unwrap();
@@ -1189,15 +1189,15 @@ mod tests {
         assert!(
             matches!(
                 s.set_track_output(a, Some(k)),
-                Err(SuperbError::InvalidArgument { .. })
+                Err(AuraError::InvalidArgument { .. })
             ),
             "target must be a bus"
         );
         assert!(s.set_track_output(a, Some(TrackId::from_raw(999))).is_err());
         assert!(s.set_track_output(TrackId::from_raw(999), None).is_err());
-        assert_eq!(s.set_track_output(sub, Some(sub)), Err(SuperbError::Cycle));
+        assert_eq!(s.set_track_output(sub, Some(sub)), Err(AuraError::Cycle));
         s.set_track_output(sub, Some(fx)).unwrap();
-        assert_eq!(s.set_track_output(fx, Some(sub)), Err(SuperbError::Cycle));
+        assert_eq!(s.set_track_output(fx, Some(sub)), Err(AuraError::Cycle));
         assert_eq!(
             s.track(fx).unwrap().output(),
             None,

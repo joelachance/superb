@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 /// Audio sample rate in Hz.
 ///
@@ -27,10 +27,10 @@ impl SampleRate {
 
     /// Creates a validated sample rate.
     ///
-    /// Returns [`SuperbError::InvalidArgument`] outside `MIN_HZ..=MAX_HZ`.
+    /// Returns [`AuraError::InvalidArgument`] outside `MIN_HZ..=MAX_HZ`.
     pub const fn new(hz: u32) -> Result<Self> {
         if hz < Self::MIN_HZ || hz > Self::MAX_HZ {
-            Err(SuperbError::InvalidArgument {
+            Err(AuraError::InvalidArgument {
                 what: "sample_rate",
             })
         } else {
@@ -88,7 +88,7 @@ impl fmt::Display for SampleRate {
 }
 
 impl TryFrom<u32> for SampleRate {
-    type Error = SuperbError;
+    type Error = AuraError;
     fn try_from(hz: u32) -> Result<Self> {
         Self::new(hz)
     }

@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::BlockProcessor;
 use crate::primitives::realtime::LoadMeter;
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
@@ -23,7 +23,7 @@ pub fn output_devices() -> Result<Vec<DeviceInfo>> {
         .map(|d| d.name().to_owned());
     let devices = host
         .output_devices()
-        .map_err(|e| SuperbError::Message(format!("enumerate devices: {e}")))?;
+        .map_err(|e| AuraError::Message(format!("enumerate devices: {e}")))?;
     Ok(devices
         .filter_map(|d| d.description().ok())
         .map(|desc| DeviceInfo {
@@ -114,16 +114,16 @@ impl OutputStream {
         let device = match &config.device_name {
             Some(name) => host
                 .output_devices()
-                .map_err(|e| SuperbError::Message(format!("enumerate devices: {e}")))?
+                .map_err(|e| AuraError::Message(format!("enumerate devices: {e}")))?
                 .find(|d| {
                     d.description()
                         .map(|desc| desc.name() == name)
                         .unwrap_or(false)
                 })
-                .ok_or_else(|| SuperbError::Message(format!("output device '{name}' not found")))?,
+                .ok_or_else(|| AuraError::Message(format!("output device '{name}' not found")))?,
             None => host
                 .default_output_device()
-                .ok_or_else(|| SuperbError::Message("no default output device".into()))?,
+                .ok_or_else(|| AuraError::Message("no default output device".into()))?,
         };
         let device_name = device
             .description()
@@ -133,7 +133,7 @@ impl OutputStream {
         // Prefer f32, then i16, then whatever the default is.
         let supported = device
             .supported_output_configs()
-            .map_err(|e| SuperbError::Message(format!("query configs: {e}")))?
+            .map_err(|e| AuraError::Message(format!("query configs: {e}")))?
             .filter(|c| c.channels() as usize == config.channels)
             .filter_map(|c| c.try_with_sample_rate(config.sample_rate.hz()))
             .collect::<Vec<_>>();
@@ -142,7 +142,7 @@ impl OutputStream {
             .or_else(|| pick(SampleFormat::I16))
             .or_else(|| supported.first().cloned())
             .ok_or_else(|| {
-                SuperbError::Message(format!(
+                AuraError::Message(format!(
                     "device '{device_name}' does not support {} ch @ {}",
                     config.channels, config.sample_rate
                 ))
@@ -155,7 +155,7 @@ impl OutputStream {
 
         let channels = config.channels;
         let max_block = config.max_block_frames;
-        let err_cb = |e: cpal::Error| eprintln!("superb-io stream error: {e}");
+        let err_cb = |e: cpal::Error| eprintln!("aura-io stream error: {e}");
         let timeout = Some(Duration::from_secs(2));
         let stream = match sample_format {
             SampleFormat::F32 => build::<f32, _>(
@@ -195,14 +195,14 @@ impl OutputStream {
                 timeout,
             )?,
             other => {
-                return Err(SuperbError::Message(format!(
+                return Err(AuraError::Message(format!(
                     "unsupported device sample format {other:?}"
                 )))
             }
         };
         stream
             .play()
-            .map_err(|e| SuperbError::Message(format!("start stream: {e}")))?;
+            .map_err(|e| AuraError::Message(format!("start stream: {e}")))?;
         Ok(Self {
             stream,
             sample_rate: config.sample_rate,
@@ -216,14 +216,14 @@ impl OutputStream {
     pub fn play(&self) -> Result<()> {
         self.stream
             .play()
-            .map_err(|e| SuperbError::Message(format!("play: {e}")))
+            .map_err(|e| AuraError::Message(format!("play: {e}")))
     }
 
     /// Pauses the stream (not supported by every backend).
     pub fn pause(&self) -> Result<()> {
         self.stream
             .pause()
-            .map_err(|e| SuperbError::Message(format!("pause: {e}")))
+            .map_err(|e| AuraError::Message(format!("pause: {e}")))
     }
 
     /// Sample rate the stream runs at.
@@ -298,7 +298,7 @@ where
     };
     device
         .build_output_stream(*config, data_cb, err_cb, timeout)
-        .map_err(|e| SuperbError::Message(format!("build stream: {e}")))
+        .map_err(|e| AuraError::Message(format!("build stream: {e}")))
 }
 
 /// Prepares `engine` for the stream configuration and runs it on the device.

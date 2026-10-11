@@ -1,6 +1,6 @@
 //! # primitives::midi
 //!
-//! MIDI 1.0 messages and real-time-safe event plumbing for the Superb DAW
+//! MIDI 1.0 messages and real-time-safe event plumbing for the Aura DAW
 //! SDK.
 //!
 //! * [`MidiChannel`] — validated 0-based/1-based MIDI channel newtype.
@@ -24,7 +24,7 @@
 //! details.
 //!
 //! ```
-//! use superb::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
+//! use aura::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
 //!
 //! // Decode a Note On from raw bytes.
 //! let channel = MidiChannel::new(0).unwrap();

@@ -21,7 +21,7 @@ the session.
 
 ## Reference
 
-Every function of the `marker` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `marker` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `add`
 
@@ -134,8 +134,8 @@ marker::remove(&mut session, verse)?;
 ## Usage
 
 ```rust
-use superb::prelude::*;
-use superb::{marker, session};
+use aura::prelude::*;
+use aura::{marker, session};
 
 let verse = marker::add(&mut session, "verse", TimePosition::from_seconds(8.0, rate))?;
 marker::move_to(&mut session, verse, TimePosition::from_seconds(8.5, rate))?;

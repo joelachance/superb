@@ -1,6 +1,6 @@
-# Superb
+# Aura
 
-Open-source Rust SDK for building a DAW: one crate, `superb`. Dual-licensed
+Open-source Rust SDK for building a DAW: one crate, `aura`. Dual-licensed
 Apache-2.0 OR MIT.
 
 Read `CONTRIBUTING.md` for the checks and rules, `docs/ARCHITECTURE.md`

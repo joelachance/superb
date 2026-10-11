@@ -8,7 +8,7 @@
 
 use std::path::Path;
 
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 use crate::primitives::plugins::PluginInstance;
 
@@ -16,8 +16,8 @@ use crate::primitives::plugins::PluginInstance;
 pub const AVAILABLE: bool = false;
 
 /// The error every VST3 entry point returns.
-pub fn unsupported() -> SuperbError {
-    SuperbError::Message(
+pub fn unsupported() -> AuraError {
+    AuraError::Message(
         "VST3 hosting is not implemented; only CLAP plugins can be loaded (see docs/primitives/plugins.md)".into(),
     )
 }

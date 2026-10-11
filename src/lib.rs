@@ -1,4 +1,4 @@
-//! # Superb
+//! # Aura
 //!
 //! An open-source, permissively licensed (Apache-2.0 OR MIT) Rust toolkit
 //! for building a digital audio workstation.
@@ -25,10 +25,10 @@
 //! A memory from nothing to sound, without an audio device:
 //!
 //! ```
-//! use superb::prelude::*;
-//! use superb::{clip, session, track, transport};
+//! use aura::prelude::*;
+//! use aura::{clip, session, track, transport};
 //!
-//! let folder = std::env::temp_dir().join("demo.superb");   // a session is a folder
+//! let folder = std::env::temp_dir().join("demo.aura");   // a session is a folder
 //! let mut session = session::create(&folder, SampleRate::HZ_48K, 256)?;
 //! let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
 //!
@@ -43,13 +43,13 @@
 //! let audio = session::steps::render_blocks(&mut session, 4)?;   // renders 4 blocks of 256 frames
 //! assert_eq!(audio.frames(), 1_024);
 //! assert!(audio.peak() > 0.05);
-//! # Ok::<(), SuperbError>(())
+//! # Ok::<(), AuraError>(())
 //! ```
 //!
 //! The same thing from the primitives, bypassing the flows entirely:
 //!
 //! ```
-//! use superb::prelude::*;
+//! use aura::prelude::*;
 //!
 //! let mut mixer = Mixer::new(2);
 //! let track = mixer.add_track("lead");
@@ -59,7 +59,7 @@
 //!
 //! let mut engine = Engine::new(mixer, Transport::new(SampleRate::HZ_48K, 120.0));
 //! engine.transport_mut().play();
-//! let audio = superb::primitives::io::offline::render(&mut engine, SampleRate::HZ_48K, 256, 48_000).unwrap();
+//! let audio = aura::primitives::io::offline::render(&mut engine, SampleRate::HZ_48K, 256, 48_000).unwrap();
 //! assert_eq!(audio.frames(), 48_000);
 //! assert!(audio.peak() > 0.1 && audio.peak() < 0.5);
 //! ```
@@ -83,7 +83,7 @@ pub mod transport;
 
 pub use session::Session;
 
-/// The most commonly used types and functions, for `use superb::prelude::*`.
+/// The most commonly used types and functions, for `use aura::prelude::*`.
 pub mod prelude {
     pub use crate::primitives::automation::{
         AutomationLane, AutomationMode, Envelope, EnvelopePoint,
@@ -114,7 +114,7 @@ pub mod prelude {
     pub use crate::primitives::transport::{LoopRange, TempoMap, Transport, TransportState};
     pub use crate::primitives::undo::{CoalesceKey, Command, PropertyEdit, UndoStack};
     pub use crate::primitives::{
-        BeatPosition, BusId, ClipId, MarkerId, NodeId, Result, SampleRate, SendId, SuperbError,
+        AuraError, BeatPosition, BusId, ClipId, MarkerId, NodeId, Result, SampleRate, SendId,
         TimeDuration, TimePosition, TimeSignature, TrackId,
     };
     pub use crate::session::Session;

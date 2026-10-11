@@ -3,7 +3,7 @@ import Link from 'next/link';
 export default function HomePage() {
   return (
     <div className="flex flex-col justify-center items-center text-center flex-1 gap-6 px-4">
-      <h1 className="text-4xl font-bold">Superb</h1>
+      <h1 className="text-4xl font-bold">Aura</h1>
       <p className="max-w-xl text-fd-muted-foreground">
         An open-source Rust toolkit for building a digital audio workstation.
         One crate, flows over primitives, no user interface: you bring your own.

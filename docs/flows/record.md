@@ -61,7 +61,7 @@ Arming and the input a track records from are track state: `track::arm`,
 
 ## Reference
 
-Every function of the `record` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `record` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `start`
 
@@ -322,8 +322,8 @@ long ago it came.
 Offline, from a queue you fill yourself:
 
 ```rust
-use superb::primitives::io::capture::capture_queue;
-use superb::{record, session, track, transport};
+use aura::primitives::io::capture::capture_queue;
+use aura::{record, session, track, transport};
 
 track::arm(&mut session, vox, true)?;
 transport::start(&mut session)?;

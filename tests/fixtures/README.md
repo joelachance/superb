@@ -11,4 +11,4 @@ ffmpeg -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=0.2" \
        -map "[a]" -sample_fmt s16 -c:a flac -compression_level 8 -bitexact stereo_sine_44k1.flac
 ```
 
-WAV fixtures are written at test time with `superb_io::wav::write`.
+WAV fixtures are written at test time with `aura_io::wav::write`.

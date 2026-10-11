@@ -7,8 +7,8 @@
 //! recording that starts at the playhead gets. During a count-in the click
 //! sounds even when the metronome is off, and stops at the punch-in.
 //!
-//! Made of `superb::primitives::session::MetronomeState` and its command
-//! (the memory side) and `superb::primitives::graph::nodes::ClickParams`
+//! Made of `aura::primitives::session::MetronomeState` and its command
+//! (the memory side) and `aura::primitives::graph::nodes::ClickParams`
 //! (the live side).
 
 use crate::primitives::buffers::gain::db_to_linear;

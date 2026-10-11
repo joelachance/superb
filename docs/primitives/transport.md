@@ -1,6 +1,6 @@
 # primitives::transport
 
-The playhead and musical clock of the Superb DAW SDK.
+The playhead and musical clock of the Aura DAW SDK.
 
 ## Purpose
 
@@ -32,8 +32,8 @@ position and tempo.
 ## Usage
 
 ```rust
-use superb::primitives::{SampleRate, TimePosition};
-use superb::primitives::transport::{LoopRange, Transport};
+use aura::primitives::{SampleRate, TimePosition};
+use aura::primitives::transport::{LoopRange, Transport};
 
 let mut t = Transport::new(SampleRate::HZ_48K, 120.0);
 t.set_loop(Some(LoopRange::new(
@@ -54,9 +54,9 @@ assert_eq!(t.position().samples(), 156);
 ```
 
 ```rust
-use superb::primitives::BeatPosition;
-use superb::primitives::transport::TempoMap;
-use superb::primitives::SampleRate;
+use aura::primitives::BeatPosition;
+use aura::primitives::transport::TempoMap;
+use aura::primitives::SampleRate;
 
 let mut map = TempoMap::new(SampleRate::HZ_48K, 120.0);
 map.add_tempo(BeatPosition::new(4.0), 60.0).unwrap();
@@ -110,6 +110,6 @@ binary-search the existing `Vec`s and are safe to call every block.
 * No tap-tempo or tempo-detection helpers.
 * `TempoMap`/`Transport` are plain single-owner values with no built-in
   cross-thread command queue; a live engine is expected to pair them with
-  `superb::primitives::realtime::spsc` for control messages, per the module doc comment.
+  `aura::primitives::realtime::spsc` for control messages, per the module doc comment.
 * Loop points are sample-accurate but there is no crossfade/click-avoidance
   at the loop boundary — that's a node/mixer concern, not the transport's.

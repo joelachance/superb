@@ -4,7 +4,7 @@
 //! moves nothing. Add one, move it, rename it, remove it; every change is
 //! an undo step, and nothing here rebuilds the mixer.
 //!
-//! Made of `superb::primitives::session::Marker` and its commands.
+//! Made of `aura::primitives::session::Marker` and its commands.
 
 use crate::primitives::session::commands::{self, AddMarker, MoveMarker, RemoveMarker};
 use crate::primitives::session::Marker;

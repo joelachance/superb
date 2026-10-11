@@ -4,9 +4,9 @@ Foundation types shared by every module of the crate. No dependencies, no I/O.
 
 ## Purpose
 
-The root of `superb::primitives` is the bottom of the engine: every other
+The root of `aura::primitives` is the bottom of the engine: every other
 module depends on it, and it depends on nothing else in the crate. Everything
-here is `Copy`-friendly (except the rarely-used `SuperbError::Message(String)`
+here is `Copy`-friendly (except the rarely-used `AuraError::Message(String)`
 variant) and safe to touch on the audio thread — it defines the vocabulary
 (time, sample rates, IDs, errors) that the rest of the SDK builds on, but does
 no scheduling, buffering or I/O itself.
@@ -23,12 +23,12 @@ no scheduling, buffering or I/O itself.
   and `beat_length` helpers.
 * `IdGenerator` / `TrackId`, `BusId`, `SendId`, `NodeId`, `PortId`, `ClipId`,
   `ParamId`, `InsertId` — monotonic `u64` newtype IDs, `0` reserved as "invalid".
-* `SuperbError` / `Result<T>` — the shared error enum used across the SDK.
+* `AuraError` / `Result<T>` — the shared error enum used across the SDK.
 
 ## Usage
 
 ```rust
-use superb::primitives::{SampleRate, TimePosition, BeatPosition};
+use aura::primitives::{SampleRate, TimePosition, BeatPosition};
 
 let rate = SampleRate::new(48_000).unwrap();
 let half_second = TimePosition::from_seconds(0.5, rate);
@@ -42,7 +42,7 @@ assert_eq!(two_bars_of_4_4.beats(), 8.0);
 ```
 
 ```rust
-use superb::primitives::{IdGenerator, NodeId};
+use aura::primitives::{IdGenerator, NodeId};
 
 let gen = IdGenerator::new();
 let a: NodeId = gen.next();
@@ -54,7 +54,7 @@ assert!(b > a);
 ## Real-time notes
 
 Every type here is stack-only (`Vec`/`String`-free except
-`SuperbError::Message`, which is only ever constructed off the audio thread)
+`AuraError::Message`, which is only ever constructed off the audio thread)
 so arithmetic on `TimePosition`, `BeatPosition`, `SampleRate` etc. never
 allocates. `IdGenerator::next_raw` is a single lock-free `AtomicU64::fetch_add`
 (`src/primitives/ids.rs`, proven single-threaded and cross-thread by

@@ -71,7 +71,7 @@ column is what not to say in code, docs or UI text.
 - **Real-time (RT)** — The audio callback must finish filling the next buffer before the interface needs it, or you hear clicks/dropouts. It is **not** a pub/sub event bus. Closer to: hardware demands audio on a schedule; UI *pushes* parameter changes into atomics/queues the callback *pulls*.
 - **Control / UI thread** — Where you click Play, drag a fader, edit clips. That work is allowed to allocate and wait. It must not do heavy DSP inside the audio callback.
 - **Signal path (we also say "graph")** — The wiring of processors. Same idea as inserts, sends, and buses on a mixing desk.
-- **Rebuild** — In Superb, rebuilding the mixer from the memory and swapping it into the running engine. Happens for you: at once while a device is playing, otherwise when you next start.
+- **Rebuild** — In Aura, rebuilding the mixer from the memory and swapping it into the running engine. Happens for you: at once while a device is playing, otherwise when you next start.
 - **Monitor** — Hearing a track's input live through its strip: the audio input for an audio track, played MIDI through an instrument for a MIDI track. `track::monitor`; not the speakers.
 - **Meter, time signature** — Changes start on a bar (`session::meter_change`) and change how bars and beats are counted, where the grid falls and which beats the click accents; they never move audio. A beat stays a quarter note whatever the signature, so a 6/8 bar is three beats long and the click ticks eighths.
 - **Latency** — Monitoring latency is hearing yourself late, the buffers in and out; cured by small buffers or the interface's direct monitoring, never by software. Where a take lands is a separate matter and is lined up for you: a device recording compares the input's capture instants with the output's playback instants, so the buffers never shift it. Nothing to set by hand.
@@ -92,12 +92,12 @@ column is what not to say in code, docs or UI text.
 
 ## Plugin formats (short map)
 
-These are industry names, not Superb terms; use them as-is in docs. All
+These are industry names, not Aura terms; use them as-is in docs. All
 backends live under `primitives::plugins`.
 
 | Say | Notes |
 |---|---|
-| CLAP | Open plugin format; the one Superb hosts today |
+| CLAP | Open plugin format; the one Aura hosts today |
 | VST3 | The most widely used commercial format; not hosted yet |
 | Audio Units (AU) | Apple platforms only |
 | LV2 | Open format, most common on Linux |

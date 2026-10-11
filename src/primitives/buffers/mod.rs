@@ -1,6 +1,6 @@
 //! # primitives::buffers
 //!
-//! Audio block buffers for the Superb DAW SDK.
+//! Audio block buffers for the Aura DAW SDK.
 //!
 //! * [`PlanarBuffer`] — one contiguous `f32` slice per channel. This is the
 //!   native layout of the process graph: DSP code operates on plain slices.
@@ -15,7 +15,7 @@
 //! real-time callback needs.
 //!
 //! ```
-//! use superb::primitives::buffers::{PlanarBuffer, InterleavedBuffer, interleave};
+//! use aura::primitives::buffers::{PlanarBuffer, InterleavedBuffer, interleave};
 //!
 //! let mut block = PlanarBuffer::new(2, 4);
 //! block.channel_mut(0).copy_from_slice(&[1.0, 2.0, 3.0, 4.0]);
@@ -45,7 +45,7 @@ pub use interleaved::InterleavedBuffer;
 pub use layout::ChannelLayout;
 pub use planar::PlanarBuffer;
 
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 /// Copies a planar block into an interleaved one.
 ///
@@ -90,14 +90,14 @@ pub fn interleave_slices(planes: &[&[f32]], dst: &mut [f32]) -> Result<()> {
     let frames = planes[0].len();
     for p in planes {
         if p.len() != frames {
-            return Err(SuperbError::FrameMismatch {
+            return Err(AuraError::FrameMismatch {
                 expected: frames,
                 actual: p.len(),
             });
         }
     }
     if dst.len() != channels * frames {
-        return Err(SuperbError::FrameMismatch {
+        return Err(AuraError::FrameMismatch {
             expected: channels * frames,
             actual: dst.len(),
         });
@@ -115,12 +115,12 @@ pub fn interleave_slices(planes: &[&[f32]], dst: &mut [f32]) -> Result<()> {
 /// `dst` is resized (within its capacity) to `src.len() / channels` frames.
 pub fn deinterleave_slice(src: &[f32], channels: usize, dst: &mut PlanarBuffer) -> Result<()> {
     if channels == 0 || src.len() % channels != 0 {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "interleaved length not divisible by channels",
         });
     }
     if dst.channels() != channels {
-        return Err(SuperbError::ChannelMismatch {
+        return Err(AuraError::ChannelMismatch {
             expected: dst.channels(),
             actual: channels,
         });

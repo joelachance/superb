@@ -13,8 +13,8 @@
 //! cargo run --example list_devices --features hardware   # audio + MIDI
 //! ```
 
-use superb::devices;
-use superb::prelude::*;
+use aura::devices;
+use aura::prelude::*;
 
 /// `max_channels` is 0 when the host does not say.
 fn channels(max: usize) -> String {

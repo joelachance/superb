@@ -25,7 +25,7 @@ while listening.
 
 ## Reference
 
-Every function of the `export` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `export` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `bounce`
 
@@ -73,8 +73,8 @@ to the end of the last clip, at the session's sample rate as 16-bit PCM.
 ## Usage
 
 ```rust
-use superb::export::{self, Bounce};
-use superb::primitives::io::wav::WavFormat;
+use aura::export::{self, Bounce};
+use aura::primitives::io::wav::WavFormat;
 
 let audio = export::bounce(&mut session, "session.wav", Bounce::default())?;
 println!("{} frames, peak {:.2}", audio.frames(), audio.peak());

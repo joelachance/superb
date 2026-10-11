@@ -1,6 +1,6 @@
 # primitives::midi
 
-MIDI 1.0 messages and real-time-safe event plumbing for the Superb DAW SDK.
+MIDI 1.0 messages and real-time-safe event plumbing for the Aura DAW SDK.
 
 ## Purpose
 
@@ -20,7 +20,7 @@ MIDI 1.0 messages and real-time-safe event plumbing for the Superb DAW SDK.
 ## Building a buffer and parsing bytes
 
 ```rust
-use superb::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
+use aura::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
 
 let channel = MidiChannel::new(0).unwrap();
 
@@ -55,21 +55,21 @@ The `midi-io` feature is **not** part of `default-features`, so the crate
 (and CI) builds without linking ALSA/CoreMIDI/WinMM. Enable it explicitly:
 
 ```toml
-superb = { version = "0.1", features = ["midi-io"] }
+aura = { version = "0.1", features = ["midi-io"] }
 ```
 
 Hardware MIDI input runs on midir's own callback thread, which is *not*
 real-time safe (it can allocate, lock, etc.), so it must never touch the
 audio thread's state directly. `MidiInputBridge::connect` sets up the
 standard pattern: the midir callback (non-RT producer) parses bytes into a
-`MidiMessage` and pushes a `TimestampedMessage` into a `superb::primitives::realtime::spsc`
+`MidiMessage` and pushes a `TimestampedMessage` into a `aura::primitives::realtime::spsc`
 queue; the audio thread (RT consumer) drains it with `Consumer::pop` /
 `Consumer::drain`, using `timing::FrameMapper` to turn each
 `timestamp_us` into a block-relative `frame`:
 
 ```rust,ignore
-use superb::primitives::midi::{input, timing::FrameMapper};
-use superb::primitives::SampleRate;
+use aura::primitives::midi::{input, timing::FrameMapper};
+use aura::primitives::SampleRate;
 
 let ports = input::list_input_ports()?;
 let (bridge, mut consumer) = input::MidiInputBridge::connect(0, /* queue_capacity */ 256)?;
@@ -92,7 +92,7 @@ println!("dropped so far: {}", bridge.dropped());
 Messages that fail to parse (SysEx, MTC quarter frames, malformed bytes) are
 silently ignored by the bridge rather than being queued.
 
-`superb::primitives::io::Engine` already contains this loop: attach the consumer with
+`aura::primitives::io::Engine` already contains this loop: attach the consumer with
 `Engine::set_midi_input` and every `render` runs `set_block` on the engine's
 stream clock (or the cpal callback timestamp under `device::run_engine`)
 and `frame_for` on each message (`MidiTiming::Stream`, the default). Note

@@ -1,12 +1,12 @@
 # primitives::io
 
-Where audio leaves and enters the Superb DAW SDK.
+Where audio leaves and enters the Aura DAW SDK.
 
 ## Purpose
 
 `primitives::io` is the last stop in the engine: it depends on every
 other engine module and is generic over any
-`superb::primitives::graph::BlockProcessor` — an `AudioGraph` or a `superb::primitives::mixer::Mixer`
+`aura::primitives::graph::BlockProcessor` — an `AudioGraph` or a `aura::primitives::mixer::Mixer`
 both qualify. It owns the block loop that turns a prepared processor plus a
 `Transport` into rendered audio: driving the transport, splitting each
 block at loop points, delivering queued MIDI, running the processor per
@@ -76,16 +76,16 @@ resampling and bounce/export helpers.
   Matroska;
   `decode`/`decode_from`/`decode_bytes`, `decode_at_rate`, `resample`,
   `resampled_frames`, `bounce`, `bounce_wav`, `export_wav`. See "File I/O"
-  below. `superb::primitives::io::FILES_FEATURE` reports whether the build has it.
+  below. `aura::primitives::io::FILES_FEATURE` reports whether the build has it.
 
 ## Usage
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::graph::nodes::SineNode;
-use superb::primitives::graph::AudioGraph;
-use superb::primitives::io::{offline, Engine};
-use superb::primitives::transport::Transport;
+use aura::primitives::SampleRate;
+use aura::primitives::graph::nodes::SineNode;
+use aura::primitives::graph::AudioGraph;
+use aura::primitives::io::{offline, Engine};
+use aura::primitives::transport::Transport;
 
 let mut graph = AudioGraph::new();
 let sine = graph.add_node(Box::new(SineNode::new(440.0, 0.25, 2)));
@@ -113,7 +113,7 @@ cargo run --example decode_bounce                 # example: bounce → decode �
 ```
 
 `files` is **off by default**, so `cargo test` (no extra features) never compiles the codec
-stack. `examples/decode_bounce` enables `superb/files`, and Cargo feature
+stack. `examples/decode_bounce` enables `aura/files`, and Cargo feature
 unification therefore turns `files` on for
 `cargo run --example decode_bounce --features files`. Plain tests still need
 `--features files`. Pure Rust: no hardware, ALSA or ffmpeg at test time.
@@ -121,13 +121,13 @@ unification therefore turns `files` on for
 ### Licence boundary (MPL-2.0)
 
 The decoder is [symphonia](https://crates.io/crates/symphonia) 0.6, which
-is **MPL-2.0** — a file-level copyleft. Superb keeps it contained:
+is **MPL-2.0** — a file-level copyleft. Aura keeps it contained:
 
 * `src/primitives/io/files/decode.rs` is the **only** source file in the
   crate that imports symphonia. Its header says so, as do the headers
   of `files/mod.rs`, `resample.rs` and `bounce.rs`.
-* Everything `decode.rs` exports is expressed in Superb types
-  (`PlanarBuffer`, `SampleRate`, `SuperbError::Message`), so no other file
+* Everything `decode.rs` exports is expressed in Aura types
+  (`PlanarBuffer`, `SampleRate`, `AuraError::Message`), so no other file
   names an MPL type.
 * The default-feature test `mpl_dependency_is_confined_to_decode_rs`
   scans every `.rs` file under `src/`, `tests/` and `examples/` and fails if
@@ -146,8 +146,8 @@ its `audioadapter` buffers (MIT OR Apache-2.0).
 ### Decoding
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::io::files::{decode, decode_at_rate, decode_bytes};
+use aura::primitives::SampleRate;
+use aura::primitives::io::files::{decode, decode_at_rate, decode_bytes};
 
 let file = decode("take.flac")?;            // container/codec probed from content
 println!("{} ch, {} frames @ {}", file.channels(), file.frames(), file.sample_rate);
@@ -165,7 +165,7 @@ let in_memory = decode_bytes(std::fs::read("take.wav")?, Some("wav"))?;
   file channel order; samples are converted from the codec's native format
   by symphonia (`i16` → `f32` is `/32768`, matching `wav::read`).
 * Robustness rules: bytes that are not a recognised container fail with
-  `SuperbError::Message`; a stream truncated after at least one decoded
+  `AuraError::Message`; a stream truncated after at least one decoded
   packet returns the frames decoded so far; a corrupt packet is skipped; a
   channel-count change mid-stream is an error; none of these panic.
 * Sample rate comes from the codec parameters (fallback: the first decoded
@@ -174,15 +174,15 @@ let in_memory = decode_bytes(std::fs::read("take.wav")?, Some("wav"))?;
 ### Resampling
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::io::files::{resample, resampled_frames};
+use aura::primitives::SampleRate;
+use aura::primitives::io::files::{resample, resampled_frames};
 
 let converted = resample(&file.buffer, file.sample_rate, SampleRate::CD)?;
 assert_eq!(converted.frames(), resampled_frames(file.frames(), file.sample_rate, SampleRate::CD));
 ```
 
 * Band-limited FFT resampler (`rubato::Fft`, fixed 1024-frame input chunks).
-  Superb drives the chunk loop itself: it feeds the whole clip, pads the tail
+  Aura drives the chunk loop itself: it feeds the whole clip, pads the tail
   with silence, and trims the resampler's start-up delay so output sample 0
   aligns with input sample 0 (residual sub-sample phase < 0.1 rad at 1 kHz
   in the tests).
@@ -196,8 +196,8 @@ assert_eq!(converted.frames(), resampled_frames(file.frames(), file.sample_rate,
 ### Bounce / export
 
 ```rust
-use superb::primitives::io::files::{bounce, bounce_wav, export_wav};
-use superb::primitives::io::wav::WavFormat;
+use aura::primitives::io::files::{bounce, bounce_wav, export_wav};
+use aura::primitives::io::wav::WavFormat;
 
 // render 10 s at 48 kHz in 256-frame blocks straight to disk; returns the buffer too
 let rendered = bounce_wav(&mut engine, SampleRate::HZ_48K, 256, 480_000, "mix.wav", WavFormat::Float32)?;
@@ -219,16 +219,16 @@ encoding to FLAC or other formats is not provided.
 `Engine::render` drains the `Consumer<TimestampedMessage>` attached with
 `set_midi_input` into the block's `MidiEventBuffer`. Each message's
 `timestamp_us` becomes a block-relative frame through a
-`superb::primitives::midi::timing::FrameMapper` the engine owns:
+`aura::primitives::midi::timing::FrameMapper` the engine owns:
 
 ```rust
-use superb::primitives::buffers::PlanarBuffer;
-use superb::primitives::SampleRate;
-use superb::primitives::graph::nodes::MonoSynthNode;
-use superb::primitives::graph::AudioGraph;
-use superb::primitives::io::{Engine, MidiTiming};
-use superb::primitives::midi::{MidiChannel, MidiMessage, TimestampedMessage};
-use superb::primitives::transport::Transport;
+use aura::primitives::buffers::PlanarBuffer;
+use aura::primitives::SampleRate;
+use aura::primitives::graph::nodes::MonoSynthNode;
+use aura::primitives::graph::AudioGraph;
+use aura::primitives::io::{Engine, MidiTiming};
+use aura::primitives::midi::{MidiChannel, MidiMessage, TimestampedMessage};
+use aura::primitives::transport::Transport;
 
 let mut graph = AudioGraph::new();
 let synth = graph.add_node(Box::new(MonoSynthNode::new(1)));
@@ -237,7 +237,7 @@ let mut engine = Engine::new(graph, Transport::new(SampleRate::HZ_48K, 120.0));
 engine.prepare(SampleRate::HZ_48K, 480).unwrap(); // 480 frames = 10 ms
 assert_eq!(engine.midi_timing(), MidiTiming::Stream);
 
-let (mut tx, rx) = superb::primitives::realtime::spsc::channel::<TimestampedMessage>(16);
+let (mut tx, rx) = aura::primitives::realtime::spsc::channel::<TimestampedMessage>(16);
 engine.set_midi_input(Some(rx));
 
 // Stamp on the engine's stream clock: block 0 spans 0..10_000 µs.
@@ -287,7 +287,7 @@ chunk's instants are advanced by `chunk_offset * 1e6 / hz`.
 **Clock limitation (intentional).** cpal's `StreamInstant` counts from the
 stream's own epoch; midir's `TimestampedMessage::timestamp_us` counts from
 midir's connection clock. They are **not** the same clock, so feeding
-`superb::primitives::midi::input::MidiInputBridge` straight into an engine driven by
+`aura::primitives::midi::input::MidiInputBridge` straight into an engine driven by
 `run_engine` yields clamped placement (frame 0 or last frame), not
 sample-accurate hardware MIDI. Sample-accurate placement is exact whenever
 producer and engine share a clock — offline/`stream_clock_us()` producers,
@@ -304,7 +304,7 @@ is drained from the SPSC consumer into the pre-allocated `MidiEventBuffer`
 rather than collected into a new container. `Engine::prepare` (which calls
 `processor.prepare`) and `Engine::new` are the off-thread setup path and may
 allocate. On the `devices` feature, output and input cpal data callbacks call
-`superb::primitives::realtime::thread::enter_rt()` once on first invocation to mark the audio
+`aura::primitives::realtime::thread::enter_rt()` once on first invocation to mark the audio
 thread real-time. Output then calls `Engine::render`; input de-interleaves
 into a scratch `PlanarBuffer` (and optionally `CaptureProducer::push`).
 Sample format conversion uses cpal's `FromSample` / `Sample::to_sample`,
@@ -325,8 +325,8 @@ cargo test --features devices   # unit + ignored hardware smoke
 Mirror of the output API for microphones / line inputs:
 
 ```rust
-use superb::primitives::buffers::PlanarBuffer;
-use superb::primitives::io::device::{capture_queue, input_devices, run_capture, InputConfig, InputStream};
+use aura::primitives::buffers::PlanarBuffer;
+use aura::primitives::io::device::{capture_queue, input_devices, run_capture, InputConfig, InputStream};
 
 // List inputs (empty or Err without hardware — never panics).
 let _ = input_devices();

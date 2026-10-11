@@ -18,15 +18,15 @@
 //! cargo run --example record_take
 //! ```
 
-use superb::prelude::*;
-use superb::primitives::io::capture::capture_queue;
-use superb::primitives::io::{EngineCommand, LiveInput};
-use superb::{record, session, track, transport};
+use aura::prelude::*;
+use aura::primitives::io::capture::capture_queue;
+use aura::primitives::io::{EngineCommand, LiveInput};
+use aura::{record, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let block = 256;
-    let folder = std::env::temp_dir().join("record_take.superb");
+    let folder = std::env::temp_dir().join("record_take.aura");
     let mut session = session::create(&folder, rate, block)?;
     let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
     let _bed = track::add(&mut session, "bed", TrackKind::Audio)?;
@@ -148,7 +148,7 @@ fn main() -> Result<()> {
     // With a real interface:
     #[cfg(feature = "devices")]
     {
-        use superb::devices;
+        use aura::devices;
         if devices::inputs()?.is_empty() {
             println!("no input device to record from");
         } else {

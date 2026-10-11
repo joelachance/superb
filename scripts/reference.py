@@ -361,7 +361,7 @@ for flow, path in FLOWS:
     verbs, types = parse(path)
     doc_path = ROOT / "docs" / "flows" / f"{flow}.md"
     text = doc_path.read_text()
-    ref = ["## Reference", "", f"Every function of the `{flow}` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.", ""]
+    ref = ["## Reference", "", f"Every function of the `{flow}` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.", ""]
     for v in verbs: ref.append(render_verb(flow, *v))
     ref_text = "\n".join(ref) + "\n" + render_types(types)
     # drop an older reference, then insert before "## Usage" (or append)

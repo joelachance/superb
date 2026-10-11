@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use crate::primitives::{BeatPosition, Result, SampleRate, SuperbError, TimePosition};
+use crate::primitives::{AuraError, BeatPosition, Result, SampleRate, TimePosition};
 
 use crate::primitives::transport::{Bbt, TempoMap};
 
@@ -36,7 +36,7 @@ impl LoopRange {
     /// Creates a loop range. Fails unless `start < end`.
     pub fn new(start: TimePosition, end: TimePosition) -> Result<Self> {
         if start >= end {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "loop range (start must be < end)",
             });
         }

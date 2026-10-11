@@ -22,7 +22,7 @@ ports. Without them the module is empty and the session renders through
 
 ## Reference
 
-Every function of the `devices` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `devices` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `outputs`
 
@@ -240,7 +240,7 @@ input; a device recording drains its own queue of the same blocks.
 ## Usage
 
 ```rust
-use superb::{devices, record, transport};
+use aura::{devices, record, transport};
 
 for d in devices::outputs()? {
     println!("{}{}", d.name, if d.is_default { " *" } else { "" });

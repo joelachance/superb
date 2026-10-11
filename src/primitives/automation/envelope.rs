@@ -1,6 +1,6 @@
 //! Breakpoint envelopes with hold / linear / curved segments.
 
-use crate::primitives::{Result, SuperbError, TimePosition};
+use crate::primitives::{AuraError, Result, TimePosition};
 
 /// How the segment from a point to the next interpolates.
 ///
@@ -227,7 +227,7 @@ impl Envelope {
     /// Fails if any value is NaN or infinite.
     pub fn from_points(default_value: f32, points: Vec<EnvelopePoint>) -> Result<Self> {
         if points.iter().any(|p| !p.value.is_finite()) {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "envelope point value",
             });
         }

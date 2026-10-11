@@ -1,6 +1,6 @@
 # primitives::graph
 
-The audio process graph of the Superb DAW SDK.
+The audio process graph of the Aura DAW SDK.
 
 ## Purpose
 
@@ -48,10 +48,10 @@ on this layer and the block loop in `primitives::io` drives it.
 ## Usage
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::graph::{AudioGraph, BlockTime};
-use superb::primitives::graph::nodes::{GainNode, SineNode};
-use superb::primitives::midi::MidiEventBuffer;
+use aura::primitives::SampleRate;
+use aura::primitives::graph::{AudioGraph, BlockTime};
+use aura::primitives::graph::nodes::{GainNode, SineNode};
+use aura::primitives::midi::MidiEventBuffer;
 
 let mut graph = AudioGraph::new();
 let sine = graph.add_node(Box::new(SineNode::new(440.0, 0.5, 1)));
@@ -68,7 +68,7 @@ assert!(out.peak() <= 0.25 + 1e-6);
 ```
 
 Editing after `prepare` (`add_node`, `connect`, ...) sets `graph.is_dirty()`;
-`process` then returns `Err(SuperbError::NotPrepared)` until `prepare` runs
+`process` then returns `Err(AuraError::NotPrepared)` until `prepare` runs
 again.
 
 ## MIDI edges: per-node MIDI routing
@@ -79,10 +79,10 @@ Audio edges say where samples flow; **MIDI edges** say which nodes see the
 audio schedule or cycle detection.
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::graph::nodes::{MonoSynthNode, PassThroughNode};
-use superb::primitives::graph::{AudioGraph, BlockTime, MidiEdge, MidiPort};
-use superb::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
+use aura::primitives::SampleRate;
+use aura::primitives::graph::nodes::{MonoSynthNode, PassThroughNode};
+use aura::primitives::graph::{AudioGraph, BlockTime, MidiEdge, MidiPort};
+use aura::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
 
 let mut graph = AudioGraph::new();
 let lead = graph.add_node(Box::new(MonoSynthNode::new(1)));
@@ -130,7 +130,7 @@ Rules:
   `mixer.graph_mut().connect_midi(...)` is the mixer-level API for now.
 
 See `examples/midi_route` for MIDI edges plus sample-accurate placement of a
-queued note through `superb::primitives::io::Engine`.
+queued note through `aura::primitives::io::Engine`.
 
 ## Live editing: `live_pair`, `GraphEditor`, `LiveGraph`
 
@@ -141,10 +141,10 @@ publishes whole prepared graphs; the audio thread swaps them in between
 blocks.
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::graph::nodes::{GainNode, SineNode};
-use superb::primitives::graph::{live_pair, BlockTime};
-use superb::primitives::midi::MidiEventBuffer;
+use aura::primitives::SampleRate;
+use aura::primitives::graph::nodes::{GainNode, SineNode};
+use aura::primitives::graph::{live_pair, BlockTime};
+use aura::primitives::midi::MidiEventBuffer;
 
 let (mut editor, mut live) = live_pair();      // SPSC-connected pair
 editor.configure(SampleRate::HZ_48K, 256);      // config every publish is prepared with
@@ -160,7 +160,7 @@ live.process(BlockTime::free_running(), 256, &midi, None).unwrap(); // applies t
 assert_eq!(live.swap_count(), 1);
 
 // Keep processing while building the next generation on the draft ...
-let c = editor.graph_mut().add_node(Box::new(superb::primitives::graph::nodes::ConstantNode::new(0.25, 1)));
+let c = editor.graph_mut().add_node(Box::new(aura::primitives::graph::nodes::ConstantNode::new(0.25, 1)));
 editor.graph_mut().set_output(c).unwrap();
 editor.publish().unwrap();
 live.process(BlockTime::free_running(), 256, &midi, None).unwrap();
@@ -170,7 +170,7 @@ assert_eq!(live.output().channel(0)[0], 0.25);
 Protocol and ownership:
 
 * Exactly one active `Box<AudioGraph>` lives inside `LiveGraph`; the editor
-  owns the draft. Two `superb::primitives::realtime::spsc` queues connect them: a **swap queue**
+  owns the draft. Two `aura::primitives::realtime::spsc` queues connect them: a **swap queue**
   (`GraphCommand::Swap(Box<AudioGraph>)`, editor → live, capacity 1 by
   default, `live_pair_with_capacity(n)` for more) and a **recycle queue**
   (live → editor, capacity `n + 1`).
@@ -229,9 +229,9 @@ the nodes (so a node may only know its latency once prepared):
    latency, so parallel paths stay phase-aligned.
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::graph::nodes::{DelayNode, PassThroughNode, SineNode};
-use superb::primitives::graph::AudioGraph;
+use aura::primitives::SampleRate;
+use aura::primitives::graph::nodes::{DelayNode, PassThroughNode, SineNode};
+use aura::primitives::graph::AudioGraph;
 
 let mut g = AudioGraph::new();
 let src = g.add_node(Box::new(SineNode::new(440.0, 0.5, 1)));
@@ -264,7 +264,7 @@ call `debug_assert_not_rt` and allocate (`Vec<PlanarBuffer>` per node,
 `AudioGraph::process` performs **no heap activity**: this is proven directly
 by `tests/graph_no_alloc.rs::process_is_allocation_free`, which
 runs a `SineNode`+`MonoSynthNode`+`GainNode`+`PassThroughNode` graph for 64
-varying-size blocks inside `superb::primitives::realtime::assert_no_alloc` with
+varying-size blocks inside `aura::primitives::realtime::assert_no_alloc` with
 `CountingAllocator` installed. Per-node `process` implementations reuse the
 pre-allocated input/output `PlanarBuffer`s (`input.set_frames`/`clear`,
 `output.set_frames`, `mix_into` via `add_channel_from`) rather than
@@ -303,7 +303,7 @@ latency-compensation delay line (ring write + delayed read + mix, and
   1:1, mono producers fan out, mono consumers average, otherwise only the
   first `min(src, dst)` channels map (`mix_into`,
   `src/primitives/graph/graph.rs`, tested by `channel_adaptation_rules`).
-* Cycles are rejected at `connect` time (`SuperbError::Cycle`), so there is
+* Cycles are rejected at `connect` time (`AuraError::Cycle`), so there is
   no feedback-delay-compensated loop support.
 * **Live editing swaps whole graphs.** After `publish()` the draft is empty,
   so the next generation must be rebuilt (or assembled from nodes recovered

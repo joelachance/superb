@@ -9,7 +9,7 @@ use std::path::Path;
 
 use crate::primitives::transport::{LoopRange, TempoMap};
 use crate::primitives::{
-    BeatPosition, ClipId, InsertId, MarkerId, RawId, Result, SampleRate, SendId, SuperbError,
+    AuraError, BeatPosition, ClipId, InsertId, MarkerId, RawId, Result, SampleRate, SendId,
     TimeDuration, TimePosition, TimeSignature, TrackId,
 };
 use serde::{Deserialize, Serialize};
@@ -389,8 +389,8 @@ impl From<&Memory> for MemorySnapshot {
     }
 }
 
-fn io_err(context: &str, e: impl core::fmt::Display) -> SuperbError {
-    SuperbError::Message(format!("{context}: {e}"))
+fn io_err(context: &str, e: impl core::fmt::Display) -> AuraError {
+    AuraError::Message(format!("{context}: {e}"))
 }
 
 impl Memory {
@@ -424,7 +424,7 @@ impl Memory {
     /// and meter values. Newer format versions are refused.
     pub fn from_snapshot(snap: &MemorySnapshot) -> Result<Memory> {
         if snap.format_version > FORMAT_VERSION {
-            return Err(SuperbError::Message(format!(
+            return Err(AuraError::Message(format!(
                 "session file format version {} is newer than supported version {FORMAT_VERSION}",
                 snap.format_version
             )));
@@ -437,11 +437,11 @@ impl Memory {
             .tempo
             .points
             .first()
-            .ok_or(SuperbError::InvalidArgument {
+            .ok_or(AuraError::InvalidArgument {
                 what: "tempo points (empty)",
             })?;
         if first.beat != 0.0 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "first tempo point must be at beat 0",
             });
         }
@@ -479,7 +479,7 @@ impl Memory {
         for t in &snap.tracks {
             let mut track = Track::with_id(TrackId::from_raw(t.id), t.name.clone(), t.kind);
             if !track.id.is_valid() {
-                return Err(SuperbError::InvalidArgument { what: "track id 0" });
+                return Err(AuraError::InvalidArgument { what: "track id 0" });
             }
             track.color = t.color;
             track.state.volume_db = t.volume_db;
@@ -497,14 +497,14 @@ impl Memory {
             track.state.input = t.input;
             track.state.archived = t.archived;
             if t.kind == TrackKind::Bus && !t.clips.is_empty() {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "bus tracks hold no clips",
                 });
             }
             for i in &t.clips {
                 let id = ClipId::from_raw(i.id);
                 if !id.is_valid() {
-                    return Err(SuperbError::InvalidArgument { what: "clip id 0" });
+                    return Err(AuraError::InvalidArgument { what: "clip id 0" });
                 }
                 let mut clip = Clip::with_id(
                     id,
@@ -523,7 +523,7 @@ impl Memory {
             for i in &t.inserts {
                 let insert_id = InsertId::from_raw(i.id);
                 if !insert_id.is_valid() {
-                    return Err(SuperbError::InvalidArgument {
+                    return Err(AuraError::InvalidArgument {
                         what: "insert id 0",
                     });
                 }
@@ -554,7 +554,7 @@ impl Memory {
             for s in &t.sends {
                 let send_id = SendId::from_raw(s.id);
                 if !send_id.is_valid() {
-                    return Err(SuperbError::InvalidArgument { what: "send id 0" });
+                    return Err(AuraError::InvalidArgument { what: "send id 0" });
                 }
                 let mut send = TrackSend::with_id(send_id, TrackId::from_raw(s.bus));
                 send.state.level_db = s.level_db;
@@ -567,7 +567,7 @@ impl Memory {
         for m in &snap.markers {
             let id = MarkerId::from_raw(m.id);
             if !id.is_valid() {
-                return Err(SuperbError::InvalidArgument {
+                return Err(AuraError::InvalidArgument {
                     what: "marker id 0",
                 });
             }
@@ -584,7 +584,7 @@ impl Memory {
                 let mut master =
                     Track::with_id(TrackId::from_raw(m.id), m.name.clone(), TrackKind::Bus);
                 if !master.id.is_valid() {
-                    return Err(SuperbError::InvalidArgument {
+                    return Err(AuraError::InvalidArgument {
                         what: "master id 0",
                     });
                 }
@@ -847,9 +847,9 @@ mod tests {
     #[test]
     fn save_and_load_files() {
         let s = rich_session();
-        let dir = std::env::temp_dir().join(format!("superb-memory-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("aura-memory-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("memory.superb.json");
+        let path = dir.join("memory.aura.json");
         s.save(&path).unwrap();
         let loaded = Memory::load(&path).unwrap();
         assert_eq!(loaded.snapshot(), stateless(s.snapshot()));

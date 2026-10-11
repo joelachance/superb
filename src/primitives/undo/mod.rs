@@ -1,6 +1,6 @@
 //! # primitives::undo
 //!
-//! A coalescing undo/redo command stack for the Superb DAW SDK.
+//! A coalescing undo/redo command stack for the Aura DAW SDK.
 //!
 //! * [`Command`] — a reversible edit of some memory type `T`: `apply`,
 //!   `revert`, an optional [`CoalesceKey`] and an optional `merge` so a run
@@ -17,7 +17,7 @@
 //! real-time safe and nothing needs to be.
 //!
 //! ```
-//! use superb::primitives::undo::{CoalesceKey, PropertyEdit, UndoStack};
+//! use aura::primitives::undo::{CoalesceKey, PropertyEdit, UndoStack};
 //!
 //! struct Doc { gain_db: f32 }
 //!

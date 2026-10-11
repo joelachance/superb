@@ -15,8 +15,8 @@
 //! cargo run --example live_graph_edit
 //! ```
 
-use superb::prelude::*;
-use superb::primitives::graph::live_pair;
+use aura::prelude::*;
+use aura::primitives::graph::live_pair;
 
 fn main() -> Result<()> {
     let sample_rate = SampleRate::HZ_48K;
@@ -97,9 +97,12 @@ fn main() -> Result<()> {
     render(&mut live, "gen 2 running   ", 20)?;
 
     // Generation 3: a constant DC value, published while gen 2 runs.
-    let c = editor.graph_mut().add_node(Box::new(
-        superb::primitives::graph::nodes::ConstantNode::new(0.75, 2),
-    ));
+    let c =
+        editor
+            .graph_mut()
+            .add_node(Box::new(aura::primitives::graph::nodes::ConstantNode::new(
+                0.75, 2,
+            )));
     editor.graph_mut().set_output(c)?;
     editor.publish()?;
     println!("published generation 3 (constant 0.75)");

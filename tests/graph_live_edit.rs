@@ -1,12 +1,12 @@
 //! Proves that `LiveGraph::process` performs no heap operations, both when no
 //! swap is pending and when a published graph is swapped in.
 
-use superb::primitives::graph::nodes::{ConstantNode, GainNode, SineNode};
-use superb::primitives::graph::{live_pair, BlockTime, GraphEditor};
-use superb::primitives::midi::MidiEventBuffer;
-use superb::primitives::realtime::thread::with_rt;
-use superb::primitives::realtime::CountingAllocator;
-use superb::primitives::SampleRate;
+use aura::primitives::graph::nodes::{ConstantNode, GainNode, SineNode};
+use aura::primitives::graph::{live_pair, BlockTime, GraphEditor};
+use aura::primitives::midi::MidiEventBuffer;
+use aura::primitives::realtime::thread::with_rt;
+use aura::primitives::realtime::CountingAllocator;
+use aura::primitives::SampleRate;
 
 #[global_allocator]
 static ALLOC: CountingAllocator = CountingAllocator::system();
@@ -40,7 +40,7 @@ fn live_process_is_allocation_free_with_and_without_pending_swap() {
     // Steady state: nothing pending.
     let mut time = BlockTime::free_running();
     with_rt(|| {
-        superb::primitives::realtime::assert_no_alloc(|| {
+        aura::primitives::realtime::assert_no_alloc(|| {
             for i in 0..32 {
                 let frames = if i % 2 == 0 { 256 } else { 200 };
                 live.process(time, frames, &midi, None).unwrap();
@@ -62,7 +62,7 @@ fn live_process_is_allocation_free_with_and_without_pending_swap() {
 
     // ... then the swap itself happens inside process with no heap activity.
     with_rt(|| {
-        superb::primitives::realtime::assert_no_alloc(|| {
+        aura::primitives::realtime::assert_no_alloc(|| {
             live.process(time, 256, &midi, None).unwrap();
             assert_eq!(live.output().channel(0)[0], 0.125);
             live.process(time, 128, &midi, None).unwrap();

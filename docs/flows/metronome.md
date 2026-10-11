@@ -24,7 +24,7 @@ stops at the punch-in.
 
 ## Reference
 
-Every function of the `metronome` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `metronome` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `enable`
 
@@ -112,7 +112,7 @@ metronome::count_in(&mut session, 2)?;   // two bars of click before a recording
 ## Usage
 
 ```rust
-use superb::{metronome, record, session, transport};
+use aura::{metronome, record, session, transport};
 
 metronome::enable(&mut session, true)?;
 metronome::level(&mut session, -6.0)?;

@@ -2,14 +2,14 @@
 
 use core::fmt;
 
-/// Errors produced by Superb SDK crates.
+/// Errors produced by Aura SDK crates.
 ///
 /// The enum is intentionally small. No variant owns heap data except
-/// [`SuperbError::Message`], which is only ever constructed off the audio
+/// [`AuraError::Message`], which is only ever constructed off the audio
 /// thread.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum SuperbError {
+pub enum AuraError {
     /// A numeric argument was outside its valid range.
     InvalidArgument {
         /// Name of the offending parameter.
@@ -51,43 +51,43 @@ pub enum SuperbError {
     Message(String),
 }
 
-impl fmt::Display for SuperbError {
+impl fmt::Display for AuraError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SuperbError::InvalidArgument { what } => write!(f, "invalid argument: {what}"),
-            SuperbError::CapacityExceeded { what, capacity } => {
+            AuraError::InvalidArgument { what } => write!(f, "invalid argument: {what}"),
+            AuraError::CapacityExceeded { what, capacity } => {
                 write!(f, "capacity of {what} exceeded (capacity = {capacity})")
             }
-            SuperbError::ChannelMismatch { expected, actual } => {
+            AuraError::ChannelMismatch { expected, actual } => {
                 write!(f, "channel mismatch: expected {expected}, got {actual}")
             }
-            SuperbError::FrameMismatch { expected, actual } => {
+            AuraError::FrameMismatch { expected, actual } => {
                 write!(f, "frame mismatch: expected {expected}, got {actual}")
             }
-            SuperbError::NotFound { kind, id } => write!(f, "{kind} with id {id} not found"),
-            SuperbError::Cycle => write!(f, "operation would create a cycle"),
-            SuperbError::NotPrepared => write!(f, "object has not been prepared"),
-            SuperbError::Message(msg) => f.write_str(msg),
+            AuraError::NotFound { kind, id } => write!(f, "{kind} with id {id} not found"),
+            AuraError::Cycle => write!(f, "operation would create a cycle"),
+            AuraError::NotPrepared => write!(f, "object has not been prepared"),
+            AuraError::Message(msg) => f.write_str(msg),
         }
     }
 }
 
-impl std::error::Error for SuperbError {}
+impl std::error::Error for AuraError {}
 
-impl From<String> for SuperbError {
+impl From<String> for AuraError {
     fn from(value: String) -> Self {
-        SuperbError::Message(value)
+        AuraError::Message(value)
     }
 }
 
-impl From<&str> for SuperbError {
+impl From<&str> for AuraError {
     fn from(value: &str) -> Self {
-        SuperbError::Message(value.to_owned())
+        AuraError::Message(value.to_owned())
     }
 }
 
 /// Convenience alias used across the SDK.
-pub type Result<T> = core::result::Result<T, SuperbError>;
+pub type Result<T> = core::result::Result<T, AuraError>;
 
 #[cfg(test)]
 mod tests {
@@ -95,23 +95,23 @@ mod tests {
 
     #[test]
     fn display_is_human_readable() {
-        let e = SuperbError::ChannelMismatch {
+        let e = AuraError::ChannelMismatch {
             expected: 2,
             actual: 1,
         };
         assert_eq!(e.to_string(), "channel mismatch: expected 2, got 1");
-        let e = SuperbError::NotFound {
+        let e = AuraError::NotFound {
             kind: "node",
             id: 7,
         };
         assert_eq!(e.to_string(), "node with id 7 not found");
-        let e: SuperbError = "device vanished".into();
+        let e: AuraError = "device vanished".into();
         assert_eq!(e.to_string(), "device vanished");
     }
 
     #[test]
     fn implements_std_error() {
         fn takes_error<E: std::error::Error>(_: E) {}
-        takes_error(SuperbError::Cycle);
+        takes_error(AuraError::Cycle);
     }
 }

@@ -301,7 +301,7 @@ mod tests {
             None,
             5,
             |d: &Doc| d.n,
-            |_: &mut Doc, _| Err(crate::primitives::SuperbError::InvalidArgument { what: "n" }),
+            |_: &mut Doc, _| Err(crate::primitives::AuraError::InvalidArgument { what: "n" }),
         );
         assert!(e.apply(&mut doc).is_err());
         assert!(e.previous().is_none());

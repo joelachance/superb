@@ -13,8 +13,8 @@
 
 use std::time::Duration;
 
-use superb::prelude::*;
-use superb::primitives::io::device::{output_devices, run_engine, OutputConfig};
+use aura::prelude::*;
+use aura::primitives::io::device::{output_devices, run_engine, OutputConfig};
 
 fn main() -> Result<()> {
     // List every output device cpal can see; mark the system default.

@@ -1,6 +1,6 @@
 //! Interleaved audio block.
 
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 /// A block of audio stored frame-major: `[ch0, ch1, ..., ch0, ch1, ...]`.
 ///
@@ -29,7 +29,7 @@ impl InterleavedBuffer {
     /// Wraps an existing interleaved vector. `data.len()` must be divisible by `channels`.
     pub fn from_vec(channels: usize, data: Vec<f32>) -> Result<Self> {
         if channels == 0 || data.len() % channels != 0 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "interleaved length not divisible by channels",
             });
         }
@@ -63,7 +63,7 @@ impl InterleavedBuffer {
     /// Sets the active frame count without reallocating.
     pub fn set_frames(&mut self, frames: usize) -> Result<()> {
         if frames > self.capacity {
-            return Err(SuperbError::CapacityExceeded {
+            return Err(AuraError::CapacityExceeded {
                 what: "InterleavedBuffer frames",
                 capacity: self.capacity,
             });

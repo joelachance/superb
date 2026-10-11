@@ -37,7 +37,7 @@ archived, and comes back whole.
 
 ## Reference
 
-Every function of the `track` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `track` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `add`
 
@@ -503,10 +503,10 @@ if let Some([l, r]) = track::peak(&session, vox) { draw_meter(l, r); }
 ## Usage
 
 ```rust
-use superb::prelude::*;
-use superb::{session, track};
+use aura::prelude::*;
+use aura::{session, track};
 
-let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;
+let mut session = session::create("demo.aura", SampleRate::HZ_48K, 256)?;
 let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
 for db in [-1.0, -2.0, -3.0] {

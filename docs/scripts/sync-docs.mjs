@@ -15,7 +15,7 @@ const PRIMITIVES = ['buffers', 'realtime', 'transport', 'midi', 'graph', 'dynami
 
 /** [source relative to the repository root, page path under /docs, title override] */
 const PAGES = [
-  ['README.md', 'index', 'Superb'],
+  ['README.md', 'index', 'Aura'],
   ['docs/flows.md', 'flows/index', 'Flows'],
   ...FLOWS.map((f) => [`docs/flows/${f}.md`, `flows/${f}`]),
   ['docs/primitives.md', 'primitives/index', 'Primitives'],
@@ -27,7 +27,7 @@ const PAGES = [
 ];
 
 const META = {
-  '': { title: 'Superb', pages: ['index', 'flows', 'primitives', 'architecture', 'terminology', 'examples', 'contributing'] },
+  '': { title: 'Aura', pages: ['index', 'flows', 'primitives', 'architecture', 'terminology', 'examples', 'contributing'] },
   flows: { title: 'Flows', defaultOpen: true, pages: ['index', ...FLOWS] },
   primitives: { title: 'Primitives', defaultOpen: true, pages: ['index', ...PRIMITIVES] },
 };

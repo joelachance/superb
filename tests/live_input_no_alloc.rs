@@ -1,13 +1,13 @@
 //! A running engine moves captured audio into the graph without heap activity.
 
-use superb::primitives::buffers::PlanarBuffer;
-use superb::primitives::graph::nodes::LiveInputNode;
-use superb::primitives::graph::AudioGraph;
-use superb::primitives::io::capture::capture_queue;
-use superb::primitives::io::{Engine, LiveInput};
-use superb::primitives::realtime::CountingAllocator;
-use superb::primitives::transport::Transport;
-use superb::primitives::SampleRate;
+use aura::primitives::buffers::PlanarBuffer;
+use aura::primitives::graph::nodes::LiveInputNode;
+use aura::primitives::graph::AudioGraph;
+use aura::primitives::io::capture::capture_queue;
+use aura::primitives::io::{Engine, LiveInput};
+use aura::primitives::realtime::CountingAllocator;
+use aura::primitives::transport::Transport;
+use aura::primitives::SampleRate;
 
 #[global_allocator]
 static ALLOC: CountingAllocator = CountingAllocator::system();
@@ -29,7 +29,7 @@ fn rendering_with_a_live_input_is_allocation_free() {
     // Warm-up block.
     engine.render(&mut out).unwrap();
 
-    superb::primitives::realtime::assert_no_alloc(|| {
+    aura::primitives::realtime::assert_no_alloc(|| {
         for i in 0..64u64 {
             // Sometimes two blocks arrive, sometimes none: the ring absorbs
             // both, dropping the oldest frames or filling with silence.

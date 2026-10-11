@@ -1,6 +1,6 @@
 # Architecture
 
-How Superb is put together, and the rules every module follows. Read
+How Aura is put together, and the rules every module follows. Read
 [TERMINOLOGY.md](TERMINOLOGY.md) first if the DAW words are new to you,
 and [flows.md](flows.md) for the top tier in detail.
 
@@ -11,7 +11,7 @@ remembers, its tracks, clips, tempo and routing, edited by a person on a
 UI thread that may take its time and saved to a file. The other is an
 **engine**: a callback the audio hardware fires every few milliseconds
 that must fill the next buffer before the deadline, every time, without
-ever waiting. Superb keeps the two apart
+ever waiting. Aura keeps the two apart
 and connects them deliberately.
 
 ```text
@@ -225,7 +225,7 @@ a cycle), and removing a bus detaches what fed it instead of failing.
 where recordings land as 32-bit float WAV at the session's rate, named
 `<track> <n>.wav`; clips refer to them by relative path. Undoing a
 recording deletes the files it wrote; nothing else does. The MPL-2.0 decoder is imported from exactly one source file and
-returns Superb types only; a default-feature test scans the crate for stray
+returns Aura types only; a default-feature test scans the crate for stray
 mentions. Decoding is whole-file and lenient: a truncated file yields the
 frames it has, a corrupt packet is skipped, an unrecognised container is
 an error. Writing is WAV only.

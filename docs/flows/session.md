@@ -46,7 +46,7 @@ example builds a mixer this way without a `Session`.
 
 ## Reference
 
-Every function of the `session` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `session` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `create`
 
@@ -436,10 +436,10 @@ its own rate.
 ## Usage
 
 ```rust
-use superb::prelude::*;
-use superb::{clip, marker, session, track};
+use aura::prelude::*;
+use aura::{clip, marker, session, track};
 
-let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;   // a folder
+let mut session = session::create("demo.aura", SampleRate::HZ_48K, 256)?;   // a folder
 let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 let take = session::import_audio(&mut session, "/music/take.wav")?;   // audio/take.wav
 clip::add(&mut session, vox, take, TimePosition::ZERO)?;
@@ -447,13 +447,13 @@ session::set_tempo(&mut session, 100.0)?;
 marker::add(&mut session, "verse", TimePosition::from_samples(48_000))?;
 session::undo(&mut session)?;   // the marker is gone
 session::save(&mut session)?;
-let again = session::open("demo.superb", 256)?;
+let again = session::open("demo.aura", 256)?;
 ```
 
 ## The session folder
 
 ```text
-demo.superb/
+demo.aura/
   memory.json        the Memory: tracks, clips, markers, routing, tempo
   audio/
     vox 1.wav        recordings, 32-bit float at the session's rate

@@ -5,22 +5,22 @@
 
 use std::path::PathBuf;
 
-use superb::primitives::buffers::PlanarBuffer;
-use superb::primitives::graph::nodes::SineNode;
-use superb::primitives::graph::AudioGraph;
-use superb::primitives::io::files::{
+use aura::primitives::buffers::PlanarBuffer;
+use aura::primitives::graph::nodes::SineNode;
+use aura::primitives::graph::AudioGraph;
+use aura::primitives::io::files::{
     self, bounce_wav, decode, decode_at_rate, decode_bytes, decode_from, export_wav, AudioFile,
 };
-use superb::primitives::io::wav::{self, WavFormat};
-use superb::primitives::io::Engine;
-use superb::primitives::transport::Transport;
-use superb::primitives::SampleRate;
+use aura::primitives::io::wav::{self, WavFormat};
+use aura::primitives::io::Engine;
+use aura::primitives::transport::Transport;
+use aura::primitives::SampleRate;
 
 struct TempDir(PathBuf);
 
 impl TempDir {
     fn new(tag: &str) -> Self {
-        let dir = std::env::temp_dir().join(format!("superb-files-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("aura-files-{tag}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         TempDir(dir)
     }

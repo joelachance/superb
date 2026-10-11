@@ -11,14 +11,14 @@
 //! the mixer's shape, so they rebuild it (at once while a device is
 //! playing, otherwise at the next start).
 //!
-//! Made of `superb::primitives::session` (the memory's tracks and their
-//! commands) and `superb::primitives::mixer` (`StripParams`, the live side).
+//! Made of `aura::primitives::session` (the memory's tracks and their
+//! commands) and `aura::primitives::mixer` (`StripParams`, the live side).
 
 use crate::primitives::session::commands::{
     self, AddTrack, ArchiveTrack, MoveTrack, SetTrackOutput,
 };
 use crate::primitives::session::{Input, Track, TrackKind};
-use crate::primitives::{Result, SuperbError, TrackId};
+use crate::primitives::{AuraError, Result, TrackId};
 use crate::session::Session;
 
 /// Adds a track at the end. `TrackKind::Bus` makes a bus.
@@ -61,12 +61,12 @@ pub fn restore(session: &mut Session, track: TrackId) -> Result<()> {
 /// `session::changed_structure`.
 pub fn midi_channel(session: &mut Session, track: TrackId, channel: Option<u8>) -> Result<()> {
     if session.memory.track(track)?.kind != TrackKind::Midi {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "only MIDI tracks take a MIDI channel",
         });
     }
     if channel.is_some_and(|c| c > 15) {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "MIDI channels are 0..=15",
         });
     }
@@ -98,7 +98,7 @@ pub fn color(session: &mut Session, track: TrackId, color: Option<u32>) -> Resul
 /// else.
 fn not_master(session: &Session, track: TrackId, what: &'static str) -> Result<()> {
     if session.memory.is_master(track) {
-        return Err(SuperbError::InvalidArgument { what });
+        return Err(AuraError::InvalidArgument { what });
     }
     Ok(())
 }
@@ -180,7 +180,7 @@ pub fn solo(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 /// Made of: `TrackState::arm` through `session::set_state`.
 pub fn arm(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
     if session.memory.track(track)?.kind == TrackKind::Bus {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "buses are not armed for recording",
         });
     }
@@ -213,7 +213,7 @@ pub(crate) fn armed(session: &Session) -> Vec<TrackId> {
 /// (the instrument or the input tap is a node in the mixer).
 pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
     if session.memory.track(track)?.kind == TrackKind::Bus {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "buses do not monitor",
         });
     }
@@ -233,7 +233,7 @@ pub fn monitor(session: &mut Session, track: TrackId, on: bool) -> Result<()> {
 /// Made of: `TrackState::input` through `session::set_state`.
 pub fn input(session: &mut Session, track: TrackId, input: Option<Input>) -> Result<()> {
     if session.memory.track(track)?.kind != TrackKind::Audio {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "only audio tracks take an input",
         });
     }

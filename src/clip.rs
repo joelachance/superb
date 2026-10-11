@@ -12,7 +12,7 @@
 //! each one undo step. Every change here alters what the mixer plays, so it
 //! rebuilds the mixer.
 //!
-//! Made of `superb::primitives::session` (`Clip`, `ClipSource` and the
+//! Made of `aura::primitives::session` (`Clip`, `ClipSource` and the
 //! clip commands) and the audio held on the `Session`.
 
 use crate::primitives::session::commands::{
@@ -20,7 +20,7 @@ use crate::primitives::session::commands::{
 };
 use crate::primitives::session::{Clip, ClipSource, MidiNote};
 use crate::primitives::{
-    BeatPosition, ClipId, Result, SuperbError, TimeDuration, TimePosition, TrackId,
+    AuraError, BeatPosition, ClipId, Result, TimeDuration, TimePosition, TrackId,
 };
 use crate::session::Session;
 
@@ -46,7 +46,7 @@ pub fn add(
     let (name, length) = match &source {
         ClipSource::Audio { path, offset } => {
             let audio = session.audio.get(path).ok_or_else(|| {
-                SuperbError::Message(format!("no audio named {:?} is in memory", path.display()))
+                AuraError::Message(format!("no audio named {:?} is in memory", path.display()))
             })?;
             let name = path
                 .file_stem()
@@ -70,13 +70,13 @@ pub fn add(
             )
         }
         ClipSource::Empty => {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "an empty clip has no length to infer",
             })
         }
     };
     if length.samples() <= 0 {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "a clip needs audio or notes to have a length",
         });
     }

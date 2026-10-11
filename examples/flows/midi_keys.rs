@@ -12,12 +12,12 @@
 //! cargo run --example midi_keys --features midi-io   # also lists ports
 //! ```
 
-use superb::prelude::*;
-use superb::{midi, session, track, transport};
+use aura::prelude::*;
+use aura::{midi, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut session = session::create(std::env::temp_dir().join("midi_keys.superb"), rate, 128)?;
+    let mut session = session::create(std::env::temp_dir().join("midi_keys.aura"), rate, 128)?;
     let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
 
     // Monitoring is track state (saved, not an undo step) and changes the
@@ -61,7 +61,7 @@ fn main() -> Result<()> {
     // Hardware keyboards.
     #[cfg(feature = "midi-io")]
     {
-        let ports = superb::devices::midi_inputs()?;
+        let ports = aura::devices::midi_inputs()?;
         if ports.is_empty() {
             println!("no MIDI input ports");
         }

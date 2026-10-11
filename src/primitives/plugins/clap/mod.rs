@@ -26,7 +26,7 @@ use std::sync::Arc;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::{ProcessContext, ProcessStatus};
 use crate::primitives::midi::{MidiEvent, MidiMessage};
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 use clap_sys::audio_buffer::clap_audio_buffer;
 use clap_sys::entry::clap_plugin_entry;
 use clap_sys::events::{
@@ -65,13 +65,13 @@ pub const EVENT_CAPACITY: usize = 1024;
 /// Largest channel count the host tables are sized for.
 const MAX_CHANNELS: usize = 64;
 
-const HOST_NAME: &CStr = c"Superb SDK";
-const HOST_VENDOR: &CStr = c"Superb";
+const HOST_NAME: &CStr = c"Aura SDK";
+const HOST_VENDOR: &CStr = c"Aura";
 const HOST_URL: &CStr = c"https://github.com/superb-audio/superb-sdk";
 const HOST_VERSION: &CStr = c"0.1.0";
 
-fn msg(text: impl Into<String>) -> SuperbError {
-    SuperbError::Message(text.into())
+fn msg(text: impl Into<String>) -> AuraError {
+    AuraError::Message(text.into())
 }
 
 /// Copies a C string into a `String` (empty for null).
@@ -826,7 +826,7 @@ impl PluginInstance for ClapPlugin {
         if unsafe { get_value(self.plugin, id, &mut value) } {
             Ok(value)
         } else {
-            Err(SuperbError::NotFound {
+            Err(AuraError::NotFound {
                 kind: "param",
                 id: id as u64,
             })
@@ -838,12 +838,12 @@ impl PluginInstance for ClapPlugin {
             .params
             .iter()
             .position(|p| p.id == id)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "param",
                 id: id as u64,
             })?;
         if self.events.len() >= self.events.capacity() {
-            return Err(SuperbError::CapacityExceeded {
+            return Err(AuraError::CapacityExceeded {
                 what: "plugin event queue",
                 capacity: self.events.capacity(),
             });
@@ -873,7 +873,7 @@ impl PluginInstance for ClapPlugin {
             self.deactivate();
         }
         if max_frames == 0 || max_frames > u32::MAX as usize {
-            return Err(SuperbError::InvalidArgument { what: "max_frames" });
+            return Err(AuraError::InvalidArgument { what: "max_frames" });
         }
         // SAFETY: `plugin` is valid until `drop`.
         let activate =
@@ -1142,7 +1142,7 @@ mod tests {
         let d = &descs[0];
         assert_eq!(d.id, TEST_PLUGIN_ID);
         assert_eq!(d.name, "Test Gain");
-        assert_eq!(d.vendor, "Superb");
+        assert_eq!(d.vendor, "Aura");
         assert_eq!(d.version, "1.0.0");
         assert_eq!(d.features, ["audio-effect", "utility"]);
         assert!(d.is_audio_effect() && !d.is_instrument());
@@ -1370,7 +1370,7 @@ mod tests {
     #[test]
     fn loading_missing_or_bogus_files_fails_cleanly() {
         assert!(ClapBundle::load("/nonexistent/thing.clap").is_err());
-        let dir = std::env::temp_dir().join(format!("superb-clap-bogus-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("aura-clap-bogus-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("bogus.clap");
         std::fs::write(&file, b"not a shared object").unwrap();

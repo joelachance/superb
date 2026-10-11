@@ -5,9 +5,9 @@
 //! bounce while listening.
 //!
 //! Made of [`session::steps::build_mixer`]
-//! (the mixer), `superb::primitives::io::offline` (the render loop),
-//! `superb::primitives::io::files` (resampling, feature `files`) and
-//! `superb::primitives::io::wav` (the file).
+//! (the mixer), `aura::primitives::io::offline` (the render loop),
+//! `aura::primitives::io::files` (resampling, feature `files`) and
+//! `aura::primitives::io::wav` (the file).
 
 use std::path::Path;
 
@@ -15,7 +15,7 @@ use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::wav::{self, WavFormat};
 use crate::primitives::io::{offline, Engine};
 use crate::primitives::transport::Transport;
-use crate::primitives::{Result, SampleRate, SuperbError, TimeDuration, TimePosition};
+use crate::primitives::{AuraError, Result, SampleRate, TimeDuration, TimePosition};
 use crate::session;
 use crate::session::Session;
 
@@ -65,7 +65,7 @@ pub fn bounce(session: &mut Session, path: impl AsRef<Path>, what: Bounce) -> Re
         }
     };
     if length.samples() <= 0 {
-        return Err(SuperbError::Message(
+        return Err(AuraError::Message(
             "nothing to bounce: no clips after the start, and no length given".into(),
         ));
     }
@@ -107,7 +107,7 @@ fn resample(audio: &PlanarBuffer, from: SampleRate, to: SampleRate) -> Result<Pl
 
 #[cfg(not(feature = "files"))]
 fn resample(_audio: &PlanarBuffer, _from: SampleRate, _to: SampleRate) -> Result<PlanarBuffer> {
-    Err(SuperbError::Message(
+    Err(AuraError::Message(
         "converting a bounce to another sample rate needs the `files` feature".into(),
     ))
 }
@@ -137,7 +137,7 @@ mod tests {
     }
 
     fn temp_dir(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("superb-export-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("aura-export-{tag}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }

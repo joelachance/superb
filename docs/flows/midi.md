@@ -21,7 +21,7 @@ every armed MIDI track (`record`).
 
 ## Reference
 
-Every function of the `midi` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `midi` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `play_note`
 
@@ -140,8 +140,8 @@ for port in devices::midi_inputs()? { midi::connect_input(&mut session, port.ind
 ## Usage
 
 ```rust
-use superb::prelude::*;
-use superb::{midi, session, track, transport};
+use aura::prelude::*;
+use aura::{midi, session, track, transport};
 
 let keys = track::add(&mut session, "keys", TrackKind::Midi)?;
 track::monitor(&mut session, keys, true)?;

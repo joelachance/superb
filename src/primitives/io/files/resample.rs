@@ -7,7 +7,7 @@ use rubato::audioadapter_buffers::direct::{SequentialSliceOfSlices, SequentialSl
 use rubato::{Fft, FixedSync, Indexing, Resampler};
 
 use crate::primitives::buffers::PlanarBuffer;
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 
 /// Input frames handed to rubato's FFT resampler per call.
 const CHUNK: usize = 1024;
@@ -23,8 +23,8 @@ pub fn resampled_frames(frames: usize, from: SampleRate, to: SampleRate) -> usiz
     num.div_ceil(den) as usize
 }
 
-fn rerr(context: &str, e: impl std::fmt::Display) -> SuperbError {
-    SuperbError::Message(format!("{context}: {e}"))
+fn rerr(context: &str, e: impl std::fmt::Display) -> AuraError {
+    AuraError::Message(format!("{context}: {e}"))
 }
 
 /// Converts `audio` from `from` to `to` with a band-limited FFT resampler.
@@ -44,7 +44,7 @@ pub fn resample(audio: &PlanarBuffer, from: SampleRate, to: SampleRate) -> Resul
     let channels = audio.channels();
     let frames = audio.frames();
     if channels == 0 {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "resample channels",
         });
     }
@@ -105,7 +105,7 @@ pub fn resample(audio: &PlanarBuffer, from: SampleRate, to: SampleRate) -> Resul
             dst.extend_from_slice(&src[..produced]);
         }
         if produced == 0 && avail == 0 {
-            return Err(SuperbError::Message(
+            return Err(AuraError::Message(
                 "resampler produced no more output before reaching the expected length".into(),
             ));
         }

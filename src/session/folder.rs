@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::wav::{self, WavFormat};
 use crate::primitives::session::ClipSource;
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 use crate::session::Session;
 
 /// The memory's file inside the session folder.
@@ -29,9 +29,8 @@ pub(crate) fn write_audio(
 ) -> Result<()> {
     let path = folder.join(key);
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| {
-            SuperbError::Message(format!("cannot create {}: {e}", parent.display()))
-        })?;
+        std::fs::create_dir_all(parent)
+            .map_err(|e| AuraError::Message(format!("cannot create {}: {e}", parent.display())))?;
     }
     wav::write(&path, audio, rate, WavFormat::Float32)
 }

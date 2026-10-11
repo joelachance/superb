@@ -9,7 +9,7 @@ use crate::primitives::graph::{AudioGraph, BlockProcessor, BlockTime, Node};
 use crate::primitives::midi::MidiEventBuffer;
 use crate::primitives::realtime::thread::debug_assert_not_rt;
 use crate::primitives::{
-    BusId, IdGenerator, NodeId, Result, SampleRate, SendId, SuperbError, TrackId,
+    AuraError, BusId, IdGenerator, NodeId, Result, SampleRate, SendId, TrackId,
 };
 
 use crate::primitives::mixer::{PanLaw, SendNode, SendParams, StripNode, StripParams};
@@ -246,7 +246,7 @@ impl Mixer {
     pub fn track(&self, id: TrackId) -> Result<&TrackInfo> {
         self.tracks
             .get(self.track_index(id)?)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "track",
                 id: id.raw(),
             })
@@ -324,7 +324,7 @@ impl Mixer {
     pub fn remove_bus(&mut self, id: BusId) -> Result<()> {
         debug_assert_not_rt("Mixer::remove_bus");
         if id == self.master {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "cannot remove master bus",
             });
         }
@@ -369,7 +369,7 @@ impl Mixer {
     pub fn bus(&self, id: BusId) -> Result<&BusInfo> {
         self.buses
             .get(self.bus_index(id)?)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "bus",
                 id: id.raw(),
             })
@@ -389,7 +389,7 @@ impl Mixer {
     pub fn set_bus_output(&mut self, bus: BusId, into: BusId) -> Result<()> {
         debug_assert_not_rt("Mixer::set_bus_output");
         if bus == self.master {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "master has no output bus",
             });
         }
@@ -428,7 +428,7 @@ impl Mixer {
         let on = on.into();
         let (input, strip, last) = self.strip_nodes(on)?;
         if node.channels().inputs == 0 {
-            return Err(SuperbError::ChannelMismatch {
+            return Err(AuraError::ChannelMismatch {
                 expected: 1,
                 actual: 0,
             });
@@ -466,7 +466,7 @@ impl Mixer {
         let pos = chain
             .iter()
             .position(|&n| n == node)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "insert",
                 id: node.raw(),
             })?;
@@ -579,7 +579,7 @@ impl Mixer {
             .sends
             .iter()
             .position(|s| s.id == id)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "send",
                 id: id.raw(),
             })?;
@@ -593,7 +593,7 @@ impl Mixer {
         self.sends
             .iter()
             .find(|s| s.id == id)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "send",
                 id: id.raw(),
             })
@@ -625,7 +625,7 @@ impl Mixer {
         self.tracks
             .iter()
             .position(|t| t.id == id)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "track",
                 id: id.raw(),
             })
@@ -635,7 +635,7 @@ impl Mixer {
         self.buses
             .iter()
             .position(|b| b.id == id)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "bus",
                 id: id.raw(),
             })
@@ -875,7 +875,7 @@ mod tests {
         assert_eq!(m.bus(sub).unwrap().output, Some(sub2));
 
         // cycles are rejected and the old route restored
-        assert_eq!(m.set_bus_output(sub2, sub), Err(SuperbError::Cycle));
+        assert_eq!(m.set_bus_output(sub2, sub), Err(AuraError::Cycle));
         assert_eq!(m.bus(sub2).unwrap().output, Some(m.master()));
         assert!(m.set_bus_output(m.master(), sub).is_err());
 

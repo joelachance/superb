@@ -20,11 +20,11 @@
 //! graphs travel back to the control side to be dropped there.
 //!
 //! ```
-//! use superb::primitives::graph::nodes::ConstantNode;
-//! use superb::primitives::graph::AudioGraph;
-//! use superb::primitives::io::{Engine, EngineCommand};
-//! use superb::primitives::buffers::PlanarBuffer;
-//! use superb::primitives::{SampleRate, TimePosition};
+//! use aura::primitives::graph::nodes::ConstantNode;
+//! use aura::primitives::graph::AudioGraph;
+//! use aura::primitives::io::{Engine, EngineCommand};
+//! use aura::primitives::buffers::PlanarBuffer;
+//! use aura::primitives::{SampleRate, TimePosition};
 //!
 //! let (mut control, mut audio) = Engine::live(SampleRate::HZ_48K, 64, 120.0).unwrap();
 //!
@@ -54,7 +54,7 @@ use crate::primitives::midi::{MidiEvent, TimestampedMessage};
 use crate::primitives::realtime::spsc::{self, Consumer, Producer};
 use crate::primitives::realtime::LoadMeter;
 use crate::primitives::transport::{LoopRange, TempoMap, Transport, TransportState};
-use crate::primitives::{Result, SampleRate, SuperbError, TimePosition};
+use crate::primitives::{AuraError, Result, SampleRate, TimePosition};
 
 use super::{Engine, LiveInput, MidiTiming};
 
@@ -224,12 +224,12 @@ pub struct EngineHandle {
 }
 
 impl EngineHandle {
-    /// Queues a command. Fails with [`SuperbError::CapacityExceeded`] if
+    /// Queues a command. Fails with [`AuraError::CapacityExceeded`] if
     /// [`COMMAND_CAPACITY`] commands are already waiting.
     pub fn send(&mut self, command: EngineCommand) -> Result<()> {
         self.commands
             .push(command)
-            .map_err(|_| SuperbError::CapacityExceeded {
+            .map_err(|_| AuraError::CapacityExceeded {
                 what: "engine command queue",
                 capacity: COMMAND_CAPACITY,
             })
@@ -271,7 +271,7 @@ impl EngineHandle {
     pub fn push_midi(&mut self, message: TimestampedMessage) -> Result<()> {
         self.midi
             .push(message)
-            .map_err(|_| SuperbError::CapacityExceeded {
+            .map_err(|_| AuraError::CapacityExceeded {
                 what: "engine midi queue",
                 capacity: MIDI_CAPACITY,
             })
@@ -525,9 +525,9 @@ impl AudioThread {
         let (rate, frames) = self
             .engine
             .prepared_config()
-            .ok_or(SuperbError::NotPrepared)?;
+            .ok_or(AuraError::NotPrepared)?;
         if config.sample_rate != rate || config.max_block_frames != frames {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "output config must match the live engine's sample rate and block size",
             });
         }
@@ -596,9 +596,9 @@ impl LiveOutput {
         let mut slot = self
             .thread
             .lock()
-            .map_err(|_| SuperbError::Message("the audio thread panicked on the device".into()))?;
+            .map_err(|_| AuraError::Message("the audio thread panicked on the device".into()))?;
         slot.take()
-            .ok_or_else(|| SuperbError::Message("the audio thread is gone".into()))
+            .ok_or_else(|| AuraError::Message("the audio thread is gone".into()))
     }
 }
 
@@ -856,21 +856,21 @@ mod tests {
         }
         assert!(matches!(
             control.send(EngineCommand::Stop),
-            Err(SuperbError::CapacityExceeded { .. })
+            Err(AuraError::CapacityExceeded { .. })
         ));
         for _ in 0..MIDI_CAPACITY {
             control.push_midi(note_on(0)).unwrap();
         }
         assert!(matches!(
             control.push_midi(note_on(0)),
-            Err(SuperbError::CapacityExceeded { .. })
+            Err(AuraError::CapacityExceeded { .. })
         ));
         // Two publishes may wait; a third is refused until the audio thread applies them.
         control.publish(constant_graph(0.1)).unwrap();
         control.publish(constant_graph(0.2)).unwrap();
         assert!(matches!(
             control.publish(constant_graph(0.3)),
-            Err(SuperbError::CapacityExceeded { .. })
+            Err(AuraError::CapacityExceeded { .. })
         ));
     }
 

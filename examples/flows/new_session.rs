@@ -14,9 +14,9 @@
 //! cargo run --example new_session
 //! ```
 
-use superb::prelude::*;
-use superb::primitives::session::MidiNote;
-use superb::{clip, marker, session, track};
+use aura::prelude::*;
+use aura::primitives::session::MidiNote;
+use aura::{clip, marker, session, track};
 
 fn main() -> Result<()> {
     // A session is a folder: memory.json plus an audio/ folder, created at

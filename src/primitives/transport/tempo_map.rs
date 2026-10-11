@@ -3,9 +3,7 @@
 
 use core::fmt;
 
-use crate::primitives::{
-    BeatPosition, Result, SampleRate, SuperbError, TimePosition, TimeSignature,
-};
+use crate::primitives::{AuraError, BeatPosition, Result, SampleRate, TimePosition, TimeSignature};
 
 /// Resolution of [`Bbt::tick`]: ticks per quarter note.
 pub const TICKS_PER_QUARTER: u32 = 960;
@@ -132,7 +130,7 @@ impl TempoMap {
 
     fn validate_bpm(bpm: f64) -> Result<()> {
         if !(bpm.is_finite() && bpm > 0.0 && bpm <= 2_000.0) {
-            return Err(SuperbError::InvalidArgument { what: "bpm" });
+            return Err(AuraError::InvalidArgument { what: "bpm" });
         }
         Ok(())
     }
@@ -158,8 +156,8 @@ impl TempoMap {
     /// tempo is held until one is added.
     ///
     /// ```
-    /// use superb::primitives::{BeatPosition, SampleRate};
-    /// use superb::primitives::transport::TempoMap;
+    /// use aura::primitives::{BeatPosition, SampleRate};
+    /// use aura::primitives::transport::TempoMap;
     ///
     /// let mut map = TempoMap::new(SampleRate::HZ_48K, 120.0);
     /// map.set_tempo_ramp(BeatPosition::ZERO, true).unwrap(); // ramp from beat 0 ...
@@ -185,7 +183,7 @@ impl TempoMap {
                 self.rebuild();
                 Ok(())
             }
-            Err(_) => Err(SuperbError::NotFound {
+            Err(_) => Err(AuraError::NotFound {
                 kind: "tempo point",
                 id: 0,
             }),
@@ -195,7 +193,7 @@ impl TempoMap {
     fn upsert_tempo(&mut self, beat: BeatPosition, bpm: f64, ramp: bool) -> Result<()> {
         Self::validate_bpm(bpm)?;
         if !beat.is_finite() || beat.beats() < 0.0 {
-            return Err(SuperbError::InvalidArgument { what: "tempo beat" });
+            return Err(AuraError::InvalidArgument { what: "tempo beat" });
         }
         match self
             .tempos
@@ -222,7 +220,7 @@ impl TempoMap {
     /// Removes the tempo change at exactly `beat`. The point at beat zero cannot be removed.
     pub fn remove_tempo(&mut self, beat: BeatPosition) -> Result<()> {
         if beat == BeatPosition::ZERO {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "cannot remove initial tempo",
             });
         }
@@ -235,7 +233,7 @@ impl TempoMap {
                 self.rebuild();
                 Ok(())
             }
-            Err(_) => Err(SuperbError::NotFound {
+            Err(_) => Err(AuraError::NotFound {
                 kind: "tempo point",
                 id: 0,
             }),
@@ -268,7 +266,7 @@ impl TempoMap {
     /// Adds (or replaces) a meter change starting at 1-based `bar`.
     pub fn add_meter(&mut self, bar: u32, signature: TimeSignature) -> Result<()> {
         if bar == 0 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "bar (1-based)",
             });
         }
@@ -290,7 +288,7 @@ impl TempoMap {
     /// Removes the meter change at `bar`. Bar 1 cannot be removed.
     pub fn remove_meter(&mut self, bar: u32) -> Result<()> {
         if bar <= 1 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "cannot remove initial meter",
             });
         }
@@ -300,7 +298,7 @@ impl TempoMap {
                 self.rebuild();
                 Ok(())
             }
-            Err(_) => Err(SuperbError::NotFound {
+            Err(_) => Err(AuraError::NotFound {
                 kind: "meter point",
                 id: bar as u64,
             }),
@@ -399,7 +397,7 @@ impl TempoMap {
     /// Converts bars/beats/ticks to a beat position.
     pub fn bbt_to_beat(&self, bbt: Bbt) -> Result<BeatPosition> {
         if bbt.bar == 0 || bbt.beat == 0 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "bbt (1-based bar/beat)",
             });
         }

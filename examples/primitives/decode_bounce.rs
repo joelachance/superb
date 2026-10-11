@@ -12,12 +12,12 @@
 //!
 //! Writes `decode_bounce_48k.wav` (the bounce) and `decode_bounce_44k1.wav`
 //! (the same audio decoded back and converted to CD rate) in the working
-//! directory. Everything file-related lives behind `superb`'s `files`
+//! directory. Everything file-related lives behind `aura`'s `files`
 //! feature, which this example enables in its `Cargo.toml`.
 
-use superb::prelude::*;
-use superb::primitives::io::files::{bounce_wav, decode, resampled_frames};
-use superb::primitives::io::wav::WavFormat;
+use aura::prelude::*;
+use aura::primitives::io::files::{bounce_wav, decode, resampled_frames};
+use aura::primitives::io::wav::WavFormat;
 
 fn main() -> Result<()> {
     // SampleRate is a newtype around Hz — HZ_48K is the usual DAW default.

@@ -1,6 +1,6 @@
 //! # primitives::plugins
 //!
-//! Plugin hosting for the Superb DAW SDK.
+//! Plugin hosting for the Aura DAW SDK.
 //!
 //! * [`PluginInstance`] — the format-agnostic contract a hosted plugin
 //!   fulfils: descriptor, audio port layout, parameters, activate/process,
@@ -21,31 +21,31 @@
 //! invariant.
 //!
 //! ```
-//! use superb::primitives::SampleRate;
-//! use superb::primitives::graph::nodes::SineNode;
-//! use superb::primitives::graph::{AudioGraph, BlockTime};
-//! use superb::primitives::midi::MidiEventBuffer;
-//! use superb::primitives::plugins::{ParamChange, PluginNode};
+//! use aura::primitives::SampleRate;
+//! use aura::primitives::graph::nodes::SineNode;
+//! use aura::primitives::graph::{AudioGraph, BlockTime};
+//! use aura::primitives::midi::MidiEventBuffer;
+//! use aura::primitives::plugins::{ParamChange, PluginNode};
 //!
-//! # struct Gain { gain: f64, active: bool, desc: superb::primitives::plugins::PluginDescriptor }
-//! # impl superb::primitives::plugins::PluginInstance for Gain {
-//! #     fn descriptor(&self) -> &superb::primitives::plugins::PluginDescriptor { &self.desc }
-//! #     fn ports(&self) -> superb::primitives::plugins::AudioPortLayout { superb::primitives::plugins::AudioPortLayout { inputs: 1, outputs: 1 } }
-//! #     fn params(&self) -> &[superb::primitives::plugins::ParamInfo] { &[] }
-//! #     fn param_value(&self, _id: u32) -> superb::primitives::Result<f64> { Ok(self.gain) }
-//! #     fn set_param(&mut self, _id: u32, v: f64) -> superb::primitives::Result<()> { self.gain = v; Ok(()) }
-//! #     fn activate(&mut self, _r: SampleRate, _m: usize) -> superb::primitives::Result<()> { self.active = true; Ok(()) }
+//! # struct Gain { gain: f64, active: bool, desc: aura::primitives::plugins::PluginDescriptor }
+//! # impl aura::primitives::plugins::PluginInstance for Gain {
+//! #     fn descriptor(&self) -> &aura::primitives::plugins::PluginDescriptor { &self.desc }
+//! #     fn ports(&self) -> aura::primitives::plugins::AudioPortLayout { aura::primitives::plugins::AudioPortLayout { inputs: 1, outputs: 1 } }
+//! #     fn params(&self) -> &[aura::primitives::plugins::ParamInfo] { &[] }
+//! #     fn param_value(&self, _id: u32) -> aura::primitives::Result<f64> { Ok(self.gain) }
+//! #     fn set_param(&mut self, _id: u32, v: f64) -> aura::primitives::Result<()> { self.gain = v; Ok(()) }
+//! #     fn activate(&mut self, _r: SampleRate, _m: usize) -> aura::primitives::Result<()> { self.active = true; Ok(()) }
 //! #     fn deactivate(&mut self) { self.active = false; }
 //! #     fn is_active(&self) -> bool { self.active }
 //! #     fn reset(&mut self) {}
-//! #     fn process(&mut self, _c: &superb::primitives::graph::ProcessContext<'_>, i: &superb::primitives::buffers::PlanarBuffer, o: &mut superb::primitives::buffers::PlanarBuffer) -> superb::primitives::graph::ProcessStatus {
-//! #         o.copy_from(i).unwrap(); o.apply_gain(self.gain as f32); superb::primitives::graph::ProcessStatus::Normal }
+//! #     fn process(&mut self, _c: &aura::primitives::graph::ProcessContext<'_>, i: &aura::primitives::buffers::PlanarBuffer, o: &mut aura::primitives::buffers::PlanarBuffer) -> aura::primitives::graph::ProcessStatus {
+//! #         o.copy_from(i).unwrap(); o.apply_gain(self.gain as f32); aura::primitives::graph::ProcessStatus::Normal }
 //! #     fn latency_frames(&self) -> usize { 0 }
-//! #     fn save_state(&mut self) -> superb::primitives::Result<Vec<u8>> { Ok(Vec::new()) }
-//! #     fn load_state(&mut self, _b: &[u8]) -> superb::primitives::Result<()> { Ok(()) }
+//! #     fn save_state(&mut self) -> aura::primitives::Result<Vec<u8>> { Ok(Vec::new()) }
+//! #     fn load_state(&mut self, _b: &[u8]) -> aura::primitives::Result<()> { Ok(()) }
 //! # }
-//! # let instance = Box::new(Gain { gain: 1.0, active: false, desc: superb::primitives::plugins::PluginDescriptor::new(superb::primitives::plugins::PluginFormat::Clap, "x", "gain") });
-//! // `instance` comes from `superb::primitives::plugins::clap::ClapBundle::instantiate` (or any
+//! # let instance = Box::new(Gain { gain: 1.0, active: false, desc: aura::primitives::plugins::PluginDescriptor::new(aura::primitives::plugins::PluginFormat::Clap, "x", "gain") });
+//! // `instance` comes from `aura::primitives::plugins::clap::ClapBundle::instantiate` (or any
 //! // other `PluginInstance`); wrap it in a node and place it in the graph.
 //! let mut node = PluginNode::new(instance);
 //! let mut params = node.take_param_sender().unwrap();

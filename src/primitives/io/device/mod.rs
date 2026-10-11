@@ -6,7 +6,7 @@
 //!   so a capture callback can hand blocks to another thread without
 //!   allocating.
 //!
-//! The callback thread is marked real-time with `superb::primitives::realtime::thread::enter_rt`.
+//! The callback thread is marked real-time with `aura::primitives::realtime::thread::enter_rt`.
 //! Sample format conversion uses `cpal`'s `FromSample` (no allocation). Scratch
 //! [`PlanarBuffer`]s are allocated when the stream opens and reused every
 //! callback; active frames are adjusted with `set_frames`.
@@ -23,7 +23,7 @@
 //! are different epochs; see the crate docs for the MIDI caveat.
 
 use crate::primitives::buffers::PlanarBuffer;
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 use cpal::{FromSample, Sample};
 
 mod input;
@@ -58,7 +58,7 @@ pub(crate) fn validate_io_config(
     what: &'static str,
 ) -> Result<()> {
     if channels == 0 || max_block_frames == 0 {
-        return Err(SuperbError::InvalidArgument { what });
+        return Err(AuraError::InvalidArgument { what });
     }
     Ok(())
 }

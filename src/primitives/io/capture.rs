@@ -1,6 +1,6 @@
 //! Pre-allocated planar-block SPSC for capture → engine / control thread.
 //!
-//! Independent of any audio backend: `superb::primitives::io::device`
+//! Independent of any audio backend: `aura::primitives::io::device`
 //! fills it from a real input, and anything else (a test, a file reader, a
 //! network stream) can fill it the same way.
 
@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::realtime::spsc::{self, Consumer, Producer};
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 /// One captured planar block travelling through a recycle SPSC pair.
 ///
@@ -179,14 +179,14 @@ impl CaptureConsumer {
 /// control or engine thread.
 ///
 /// # Errors
-/// Returns [`SuperbError::InvalidArgument`] if any argument is zero.
+/// Returns [`AuraError::InvalidArgument`] if any argument is zero.
 pub fn capture_queue(
     channels: usize,
     max_block_frames: usize,
     capacity: usize,
 ) -> Result<(CaptureProducer, CaptureConsumer)> {
     if channels == 0 || max_block_frames == 0 || capacity == 0 {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "capture_queue",
         });
     }
@@ -199,7 +199,7 @@ pub fn capture_queue(
         };
         free_tx
             .push(block)
-            .map_err(|_| SuperbError::Message("capture_queue: free ring rejected block".into()))?;
+            .map_err(|_| AuraError::Message("capture_queue: free ring rejected block".into()))?;
     }
     let dropped = Arc::new(AtomicU64::new(0));
     let producer = CaptureProducer {

@@ -38,8 +38,8 @@ the running meters allocate when built and never while fed.
 ## Usage
 
 ```rust
-use superb::primitives::analysis::{meter, offset, silence};
-use superb::primitives::buffers::gain::db_to_linear;
+use aura::primitives::analysis::{meter, offset, silence};
+use aura::primitives::buffers::gain::db_to_linear;
 
 // Live meters, fed as blocks arrive (one true-peak meter per channel).
 let mut loudness = meter::Loudness::new(rate, 2)?;

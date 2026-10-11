@@ -12,7 +12,7 @@
 use core::fmt;
 use core::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 
 // ---------------------------------------------------------------------------
 // Audio-domain time
@@ -105,7 +105,7 @@ impl TimePosition {
 
     /// Returns the position as an unsigned sample index, or an error if negative.
     pub fn as_unsigned(self) -> Result<u64> {
-        u64::try_from(self.0).map_err(|_| SuperbError::InvalidArgument {
+        u64::try_from(self.0).map_err(|_| AuraError::InvalidArgument {
             what: "negative position",
         })
     }
@@ -349,12 +349,12 @@ impl TimeSignature {
     /// in `1..=64`.
     pub const fn new(numerator: u8, denominator: u8) -> Result<Self> {
         if numerator == 0 || numerator > 64 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "time_signature.numerator",
             });
         }
         if denominator == 0 || denominator > 64 || !denominator.is_power_of_two() {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "time_signature.denominator",
             });
         }

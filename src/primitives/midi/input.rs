@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::primitives::realtime::spsc::{self, Consumer};
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 use midir::{Ignore, MidiInput, MidiInputConnection};
 
 use crate::primitives::midi::event::TimestampedMessage;
@@ -34,13 +34,12 @@ pub struct MidiPortInfo {
 /// Lists the MIDI input ports currently visible to the system.
 ///
 /// # Errors
-/// Returns [`SuperbError::Message`] if the underlying MIDI backend could not
+/// Returns [`AuraError::Message`] if the underlying MIDI backend could not
 /// be initialised (for example, no ALSA sequencer is available). This is
 /// expected in headless CI environments.
 pub fn list_input_ports() -> Result<Vec<MidiPortInfo>> {
-    let midi_in = MidiInput::new("superb-midi-list").map_err(|e| {
-        SuperbError::Message(format!("failed to initialise MIDI input backend: {e}"))
-    })?;
+    let midi_in = MidiInput::new("aura-midi-list")
+        .map_err(|e| AuraError::Message(format!("failed to initialise MIDI input backend: {e}")))?;
     let ports = midi_in.ports();
     let mut out = Vec::with_capacity(ports.len());
     for (index, port) in ports.iter().enumerate() {
@@ -75,20 +74,20 @@ impl MidiInputBridge {
     /// [`MidiInputBridge::dropped`] — the callback thread never blocks.
     ///
     /// # Errors
-    /// Returns [`SuperbError::Message`] if the MIDI backend cannot be
+    /// Returns [`AuraError::Message`] if the MIDI backend cannot be
     /// initialised or the port cannot be opened, or
-    /// [`SuperbError::NotFound`] if `port_index` is out of range.
+    /// [`AuraError::NotFound`] if `port_index` is out of range.
     pub fn connect(
         port_index: usize,
         queue_capacity: usize,
     ) -> Result<(MidiInputBridge, Consumer<TimestampedMessage>)> {
-        let mut midi_in = MidiInput::new("superb-midi-input").map_err(|e| {
-            SuperbError::Message(format!("failed to initialise MIDI input backend: {e}"))
+        let mut midi_in = MidiInput::new("aura-midi-input").map_err(|e| {
+            AuraError::Message(format!("failed to initialise MIDI input backend: {e}"))
         })?;
         midi_in.ignore(Ignore::None);
 
         let ports = midi_in.ports();
-        let port = ports.get(port_index).ok_or(SuperbError::NotFound {
+        let port = ports.get(port_index).ok_or(AuraError::NotFound {
             kind: "midi_input_port",
             id: port_index as u64,
         })?;
@@ -103,7 +102,7 @@ impl MidiInputBridge {
         let connection = midi_in
             .connect(
                 port,
-                "superb-midi-in",
+                "aura-midi-in",
                 move |timestamp_us, bytes, _data: &mut ()| {
                     if let Ok(message) = MidiMessage::from_bytes(bytes) {
                         let event = TimestampedMessage {
@@ -118,7 +117,7 @@ impl MidiInputBridge {
                 (),
             )
             .map_err(|e| {
-                SuperbError::Message(format!("failed to connect to MIDI input port: {e}"))
+                AuraError::Message(format!("failed to connect to MIDI input port: {e}"))
             })?;
 
         Ok((
@@ -158,7 +157,7 @@ mod tests {
         match list_input_ports() {
             Ok(_ports) => {}
             Err(e) => assert!(
-                matches!(e, SuperbError::Message(_)),
+                matches!(e, AuraError::Message(_)),
                 "unexpected error variant: {e:?}"
             ),
         }
@@ -181,7 +180,7 @@ mod tests {
         let err = MidiInputBridge::connect(usize::MAX, 8).err().unwrap();
         assert!(matches!(
             err,
-            SuperbError::NotFound {
+            AuraError::NotFound {
                 kind: "midi_input_port",
                 ..
             }

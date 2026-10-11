@@ -21,8 +21,8 @@
 //! instants with the output's playback instants on the device clock, so
 //! the buffers in and out are taken back by themselves.
 //!
-//! Made of `superb::primitives::io::capture` (the queue),
-//! `superb::primitives::io::wav::Writer` (the files), the session's audio
+//! Made of `aura::primitives::io::capture` (the queue),
+//! `aura::primitives::io::wav::Writer` (the files), the session's audio
 //! input (`devices::input`, feature `devices`), the audio held on the
 //! `Session`, and [`clip::add`](crate::clip::add).
 
@@ -41,8 +41,7 @@ use crate::primitives::session::{Clip, ClipSource, Input, Memory, MidiNote, Trac
 use crate::primitives::transport::TempoMap;
 use crate::primitives::undo::Command;
 use crate::primitives::{
-    BeatPosition, ClipId, RawId, Result, SampleRate, SuperbError, TimeDuration, TimePosition,
-    TrackId,
+    AuraError, BeatPosition, ClipId, RawId, Result, SampleRate, TimeDuration, TimePosition, TrackId,
 };
 use crate::session;
 use crate::session::Session;
@@ -315,7 +314,7 @@ impl Collector {
         let handle = self.handle.take().expect("finish is called once");
         handle
             .join()
-            .map_err(|_| SuperbError::Message("the recording collector thread panicked".into()))
+            .map_err(|_| AuraError::Message("the recording collector thread panicked".into()))
     }
 }
 
@@ -404,9 +403,9 @@ impl Tag {
 
     fn write(&self, file: &Path) -> Result<()> {
         let json = serde_json::to_string_pretty(self)
-            .map_err(|e| SuperbError::Message(format!("cannot encode the recording tag: {e}")))?;
+            .map_err(|e| AuraError::Message(format!("cannot encode the recording tag: {e}")))?;
         std::fs::write(Self::path_for(file), json).map_err(|e| {
-            SuperbError::Message(format!(
+            AuraError::Message(format!(
                 "cannot write {}: {e}",
                 Self::path_for(file).display()
             ))
@@ -415,9 +414,9 @@ impl Tag {
 
     fn read(path: &Path) -> Result<Tag> {
         let json = std::fs::read_to_string(path)
-            .map_err(|e| SuperbError::Message(format!("cannot read {}: {e}", path.display())))?;
+            .map_err(|e| AuraError::Message(format!("cannot read {}: {e}", path.display())))?;
         serde_json::from_str(&json).map_err(|e| {
-            SuperbError::Message(format!("{} is not a recording tag: {e}", path.display()))
+            AuraError::Message(format!("{} is not a recording tag: {e}", path.display()))
         })
     }
 }
@@ -561,12 +560,10 @@ impl Files {
 /// [`transport::playhead`] for where it all started.
 pub fn start(session: &mut Session, source: Source) -> Result<()> {
     if session.recording.is_some() {
-        return Err(SuperbError::Message(
-            "a recording is already running".into(),
-        ));
+        return Err(AuraError::Message("a recording is already running".into()));
     }
     if crate::track::armed(session).is_empty() {
-        return Err(SuperbError::Message("arm a track before recording".into()));
+        return Err(AuraError::Message("arm a track before recording".into()));
     }
     let audio = crate::track::armed(session).iter().any(|t| {
         session
@@ -587,7 +584,7 @@ pub fn start(session: &mut Session, source: Source) -> Result<()> {
             let input = session
                 .input
                 .as_mut()
-                .ok_or_else(|| SuperbError::Message("the audio input did not open".into()))?;
+                .ok_or_else(|| AuraError::Message("the audio input did not open".into()))?;
             let channels = input.channels();
             let blocks = input.begin_recording()?;
             begin(session, Some((blocks, channels, true)))
@@ -750,7 +747,7 @@ pub fn stop(session: &mut Session) -> Result<Vec<ClipId>> {
     let recording = session
         .recording
         .take()
-        .ok_or_else(|| SuperbError::Message("nothing is being recorded".into()))?;
+        .ok_or_else(|| AuraError::Message("nothing is being recorded".into()))?;
     session.mixer.click.set_count_in_until(None);
     session.engine.send(EngineCommand::CaptureMidi(false))?;
     let ended_at = session.engine.position();
@@ -914,7 +911,7 @@ pub fn unfinished(session: &Session) -> Vec<PathBuf> {
 /// per file, inside one undo group; rebuilds the mixer.
 pub fn recover(session: &mut Session) -> Result<Vec<ClipId>> {
     if session.recording.is_some() {
-        return Err(SuperbError::Message(
+        return Err(AuraError::Message(
             "stop the recording before recovering older ones".into(),
         ));
     }
@@ -1033,7 +1030,7 @@ impl Command<Memory> for RecordClip {
         match std::fs::remove_file(self.folder.join(&self.key)) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(SuperbError::Message(format!(
+            Err(e) => Err(AuraError::Message(format!(
                 "cannot delete {}: {e}",
                 self.key.display()
             ))),
@@ -1062,7 +1059,7 @@ pub(crate) mod steps {
         let rate = session.memory.sample_rate();
         let audio_dir = session.folder.join(crate::session::folder::AUDIO_DIR);
         std::fs::create_dir_all(&audio_dir).map_err(|e| {
-            SuperbError::Message(format!("cannot create {}: {e}", audio_dir.display()))
+            AuraError::Message(format!("cannot create {}: {e}", audio_dir.display()))
         })?;
         let mut entries = Vec::new();
         for track in tracks {
@@ -1124,7 +1121,7 @@ pub(crate) mod steps {
         let stop = Arc::new(AtomicBool::new(false));
         let stop_t = Arc::clone(&stop);
         let handle = std::thread::Builder::new()
-            .name("superb recording collector".into())
+            .name("aura recording collector".into())
             .spawn(move || loop {
                 let appended = files.append(&mut blocks);
                 if stop_t.load(Ordering::Acquire) {
@@ -1137,7 +1134,7 @@ pub(crate) mod steps {
                 }
             })
             .map_err(|e| {
-                SuperbError::Message(format!("cannot start the recording collector: {e}"))
+                AuraError::Message(format!("cannot start the recording collector: {e}"))
             })?;
         Ok(Collector {
             dropped,
@@ -1599,7 +1596,7 @@ mod tests {
             "buses are not armed"
         );
         assert!(
-            matches!(stop(&mut session), Err(SuperbError::Message(_))),
+            matches!(stop(&mut session), Err(AuraError::Message(_))),
             "nothing recording"
         );
         let (_mic, blocks) = capture_queue(1, 64, 2).unwrap();

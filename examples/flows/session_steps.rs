@@ -19,11 +19,11 @@
 
 use std::path::PathBuf;
 
-use superb::prelude::*;
-use superb::primitives::io::wav::{self, WavFormat};
-use superb::primitives::io::{offline, Engine};
-use superb::primitives::session::MidiNote;
-use superb::session;
+use aura::prelude::*;
+use aura::primitives::io::wav::{self, WavFormat};
+use aura::primitives::io::{offline, Engine};
+use aura::primitives::session::MidiNote;
+use aura::session;
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;

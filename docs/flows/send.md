@@ -22,7 +22,7 @@ send, coalescing); whether a send is on is state.
 
 ## Reference
 
-Every function of the `send` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `send` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `add`
 
@@ -139,8 +139,8 @@ send::enable(&mut session, s, false)?;
 ## Usage
 
 ```rust
-use superb::prelude::*; // SendTap, TrackKind
-use superb::{send, session, track};
+use aura::prelude::*; // SendTap, TrackKind
+use aura::{send, session, track};
 
 let room = track::add(&mut session, "room", TrackKind::Bus)?;
 let vox_room = send::add(&mut session, vox, room, -6.0, SendTap::PostFader)?;

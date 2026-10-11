@@ -8,8 +8,8 @@
 //! coalescing, and onto the live send at once. Whether a send is on is
 //! state: saved, heard at the next block, never an undo step.
 //!
-//! Made of `superb::primitives::session::commands` (the memory side) and
-//! `superb::primitives::mixer::SendParams` (the live side).
+//! Made of `aura::primitives::session::commands` (the memory side) and
+//! `aura::primitives::mixer::SendParams` (the live side).
 
 use crate::primitives::mixer::SendTap;
 use crate::primitives::session::commands::{self, AddSend, RemoveSend};

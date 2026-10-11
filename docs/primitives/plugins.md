@@ -6,7 +6,7 @@ CLAP host, and a VST3 stub.
 ## Purpose
 
 `primitives::plugins` is built on `primitives::graph`. It turns an
-external plugin into a `superb::primitives::graph::Node`, so a hosted effect or
+external plugin into a `aura::primitives::graph::Node`, so a hosted effect or
 instrument takes part in scheduling, silence propagation, MIDI routing and
 latency compensation like any built-in node. CLAP is the only backend;
 VST3 is a stub (see the `vst3` module).
@@ -28,7 +28,7 @@ Third-party deps (all behind the default `clap` feature): `clap-sys` 0.5
   channel counts of the main ports), `ParamChange`.
 * `PluginNode` — wraps `Box<dyn PluginInstance>` as a `Node`. `prepare`
   activates (a failure makes the node silent), `process` drains the
-  wait-free parameter queue (`take_param_sender()` → `superb::primitives::realtime::spsc`
+  wait-free parameter queue (`take_param_sender()` → `aura::primitives::realtime::spsc`
   producer for the UI thread) then renders; `latency_frames` forwards the
   plugin's latency so the graph compensates it.
 * `clap::ClapBundle` — `load(path)` (`.clap` shared library, or a macOS
@@ -46,15 +46,15 @@ Third-party deps (all behind the default `clap` feature): `clap-sys` 0.5
 ## Usage
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::graph::nodes::SineNode;
-use superb::primitives::graph::AudioGraph;
-use superb::primitives::plugins::scan::{scan_default, ScanReport};
-use superb::primitives::plugins::{PluginFormat, PluginNode};
+use aura::primitives::SampleRate;
+use aura::primitives::graph::nodes::SineNode;
+use aura::primitives::graph::AudioGraph;
+use aura::primitives::plugins::scan::{scan_default, ScanReport};
+use aura::primitives::plugins::{PluginFormat, PluginNode};
 
 let report: ScanReport = scan_default(PluginFormat::Clap).unwrap();
 if let Some(desc) = report.plugins.iter().find(|d| d.is_audio_effect()) {
-    let bundle = superb::primitives::plugins::clap::ClapBundle::load(&desc.path).unwrap();
+    let bundle = aura::primitives::plugins::clap::ClapBundle::load(&desc.path).unwrap();
     let plugin = bundle.instantiate(&desc.id).unwrap();
     let mut node = PluginNode::new(Box::new(plugin));
     let mut params = node.take_param_sender().unwrap(); // keep for the UI thread
@@ -65,7 +65,7 @@ if let Some(desc) = report.plugins.iter().find(|d| d.is_audio_effect()) {
     graph.connect(osc, fx).unwrap();
     graph.set_output(fx).unwrap();
     graph.prepare(SampleRate::HZ_48K, 256).unwrap(); // activates the plugin
-    let _ = params.push(superb::primitives::plugins::ParamChange { id: 0, value: 0.5 });
+    let _ = params.push(aura::primitives::plugins::ParamChange { id: 0, value: 0.5 });
 }
 ```
 

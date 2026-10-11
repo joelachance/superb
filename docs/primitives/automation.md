@@ -24,9 +24,9 @@ strip/node parameters already expose — no new parameter system required.
 
 ```rust
 use std::sync::Arc;
-use superb::primitives::automation::{AutomationLane, AutomationMode, EnvelopePoint};
-use superb::primitives::{IdGenerator, TimePosition};
-use superb::primitives::realtime::AtomicF32;
+use aura::primitives::automation::{AutomationLane, AutomationMode, EnvelopePoint};
+use aura::primitives::{IdGenerator, TimePosition};
+use aura::primitives::realtime::AtomicF32;
 
 let ids = IdGenerator::new();
 let gain = Arc::new(AtomicF32::new(1.0));
@@ -45,9 +45,9 @@ Write / touch / latch:
 
 ```rust
 # use std::sync::Arc;
-# use superb::primitives::automation::{AutomationLane, AutomationMode};
-# use superb::primitives::{IdGenerator, TimePosition};
-# use superb::primitives::realtime::AtomicF32;
+# use aura::primitives::automation::{AutomationLane, AutomationMode};
+# use aura::primitives::{IdGenerator, TimePosition};
+# use aura::primitives::realtime::AtomicF32;
 # let ids = IdGenerator::new();
 # let gain = Arc::new(AtomicF32::new(1.0));
 # let mut lane = AutomationLane::new(ids.next(), Arc::clone(&gain));

@@ -14,8 +14,8 @@
 //! cargo run --example mix_session
 //! ```
 
-use superb::prelude::*;
-use superb::{clip, send, session, track, transport};
+use aura::prelude::*;
+use aura::{clip, send, session, track, transport};
 
 /// Renders four blocks and returns the peak of the last one, so ramps have
 /// settled: what a meter would show.
@@ -29,7 +29,7 @@ fn level(session: &mut Session) -> Result<f32> {
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut session = session::create(std::env::temp_dir().join("mix_session.superb"), rate, 128)?;
+    let mut session = session::create(std::env::temp_dir().join("mix_session.aura"), rate, 128)?;
     let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
     let gtr = track::add(&mut session, "gtr", TrackKind::Audio)?;
 

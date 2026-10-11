@@ -15,12 +15,12 @@
 //! cargo run --example play_session --features devices   # also plays on speakers
 //! ```
 
-use superb::prelude::*;
-use superb::{clip, session, track, transport};
+use aura::prelude::*;
+use aura::{clip, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
-    let mut session = session::create(std::env::temp_dir().join("play_session.superb"), rate, 256)?;
+    let mut session = session::create(std::env::temp_dir().join("play_session.aura"), rate, 256)?;
     let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 
     // Half a second of a plucked-sounding tone: a sine with a decay.
@@ -96,7 +96,7 @@ fn main() -> Result<()> {
     // the device pulls blocks, so `render_blocks` is no longer available.
     #[cfg(feature = "devices")]
     {
-        use superb::devices;
+        use aura::devices;
         transport::looping(&mut session, false)?;
         devices::output(&mut session, None)?; // the default output, matched to the session
         transport::start(&mut session)?;

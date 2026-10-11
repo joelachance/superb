@@ -3,7 +3,7 @@
 
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::capture::CaptureConsumer;
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 /// Captured audio on its way into the engine.
 ///
@@ -36,7 +36,7 @@ impl LiveInput {
     /// frames per block.
     pub fn new(blocks: CaptureConsumer, channels: usize, max_frames: usize) -> Result<Self> {
         if channels == 0 || max_frames == 0 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "live input channels and max_frames",
             });
         }

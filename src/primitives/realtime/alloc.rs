@@ -4,11 +4,11 @@
 //!
 //! ```ignore
 //! #[global_allocator]
-//! static ALLOC: superb::primitives::realtime::CountingAllocator = superb::primitives::realtime::CountingAllocator::system();
+//! static ALLOC: aura::primitives::realtime::CountingAllocator = aura::primitives::realtime::CountingAllocator::system();
 //!
 //! #[test]
 //! fn process_does_not_allocate() {
-//!     superb::primitives::realtime::assert_no_alloc(|| graph.process());
+//!     aura::primitives::realtime::assert_no_alloc(|| graph.process());
 //! }
 //! ```
 //!

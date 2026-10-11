@@ -1,8 +1,8 @@
 //! Audio file decoding, resampling and bounce/export helpers (feature `files`).
 //!
 //! **MPL-2.0 boundary: symphonia is confined to `decode.rs`.** This module
-//! and every other Superb source file only see Superb types
-//! ([`PlanarBuffer`], [`SampleRate`], [`SuperbError`](crate::primitives::SuperbError));
+//! and every other Aura source file only see Aura types
+//! ([`PlanarBuffer`], [`SampleRate`], [`AuraError`](crate::primitives::AuraError));
 //! the symphonia
 //! crate (MPL-2.0, file-level copyleft) is imported by exactly one file,
 //! `src/files/decode.rs`, which is the only file subject to that licence's
@@ -19,15 +19,15 @@
 //! thread, never the audio callback.
 //!
 //! ```
-//! use superb::primitives::SampleRate;
-//! use superb::primitives::graph::nodes::SineNode;
-//! use superb::primitives::graph::AudioGraph;
-//! use superb::primitives::io::files::{bounce_wav, decode_at_rate};
-//! use superb::primitives::io::wav::WavFormat;
-//! use superb::primitives::io::Engine;
-//! use superb::primitives::transport::Transport;
+//! use aura::primitives::SampleRate;
+//! use aura::primitives::graph::nodes::SineNode;
+//! use aura::primitives::graph::AudioGraph;
+//! use aura::primitives::io::files::{bounce_wav, decode_at_rate};
+//! use aura::primitives::io::wav::WavFormat;
+//! use aura::primitives::io::Engine;
+//! use aura::primitives::transport::Transport;
 //!
-//! let dir = std::env::temp_dir().join(format!("superb-files-doc-{}", std::process::id()));
+//! let dir = std::env::temp_dir().join(format!("aura-files-doc-{}", std::process::id()));
 //! std::fs::create_dir_all(&dir).unwrap();
 //! let path = dir.join("bounce.wav");
 //!
@@ -121,7 +121,7 @@ impl AudioFile {
 /// and float) and FLAC. The first audio track is decoded in full; a stream
 /// truncated mid-file yields the frames decoded so far rather than an error,
 /// and packets that fail to decode are skipped, while data that is not a
-/// recognised audio container fails with [`SuperbError::Message`](crate::primitives::SuperbError::Message).
+/// recognised audio container fails with [`AuraError::Message`](crate::primitives::AuraError::Message).
 pub fn decode(path: impl AsRef<Path>) -> Result<AudioFile> {
     decode::decode_path(path.as_ref())
 }

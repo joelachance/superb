@@ -5,7 +5,7 @@
 //! its last block. Only [`looping`] touches the memory: whether playback
 //! loops is saved with the session, like a track's mute.
 //!
-//! Made of `superb::primitives::io` (`Engine::live`) (`EngineHandle::send`, the
+//! Made of `aura::primitives::io` (`Engine::live`) (`EngineHandle::send`, the
 //! position and state atomics).
 
 use crate::primitives::io::EngineCommand;

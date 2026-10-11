@@ -1,4 +1,4 @@
-# Contributing to Superb
+# Contributing to Aura
 
 Thanks for helping. This page covers how to build, what the checks are,
 and the few rules that keep the SDK safe to use on an audio thread.
@@ -198,7 +198,7 @@ request that adds unsafe elsewhere needs a very good reason.
 
 ## Licensing and originality
 
-Superb is dual-licensed Apache-2.0 OR MIT, and its value depends on that
+Aura is dual-licensed Apache-2.0 OR MIT, and its value depends on that
 staying true.
 
 * All code and tests must be original work written for this repository.

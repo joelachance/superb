@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use crate::primitives::buffers::convert::f32_to_i16_saturating;
 use crate::primitives::buffers::PlanarBuffer;
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 
 /// Sample encoding used on disk.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,7 +59,7 @@ impl WavFormat {
             (1, 16) => Ok(WavFormat::Pcm16),
             (1, 24) => Ok(WavFormat::Pcm24),
             (3, 32) => Ok(WavFormat::Float32),
-            _ => Err(SuperbError::Message(format!(
+            _ => Err(AuraError::Message(format!(
                 "unsupported wav format tag {tag} / {bits} bits"
             ))),
         }
@@ -93,8 +93,8 @@ impl WavFormat {
     }
 }
 
-fn io_err(e: io::Error) -> SuperbError {
-    SuperbError::Message(format!("wav io error: {e}"))
+fn io_err(e: io::Error) -> AuraError {
+    AuraError::Message(format!("wav io error: {e}"))
 }
 
 /// The `fmt ` chunk's 16 bytes.
@@ -114,7 +114,7 @@ fn fmt_chunk(channels: usize, rate: SampleRate, format: WavFormat) -> [u8; 16] {
 
 fn check_channels(channels: usize) -> Result<()> {
     if channels == 0 || channels > u16::MAX as usize {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "wav channels",
         });
     }
@@ -255,7 +255,7 @@ impl Writer {
     ) -> Result<Self> {
         let path = path.as_ref();
         let file = File::create(path)
-            .map_err(|e| SuperbError::Message(format!("cannot create {}: {e}", path.display())))?;
+            .map_err(|e| AuraError::Message(format!("cannot create {}: {e}", path.display())))?;
         let mut writer = Self::new(file, channels, sample_rate, format)?;
         writer.path = Some(path.to_path_buf());
         Ok(writer)
@@ -332,14 +332,14 @@ impl Writer {
     /// the writer stays usable, so a collector can keep draining its queue.
     pub fn write(&mut self, planes: &[&[f32]]) -> Result<()> {
         if planes.len() != self.channels {
-            return Err(SuperbError::ChannelMismatch {
+            return Err(AuraError::ChannelMismatch {
                 expected: self.channels,
                 actual: planes.len(),
             });
         }
         let frames = planes.first().map_or(0, |p| p.len());
         if planes.iter().any(|p| p.len() != frames) {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "wav planes of unequal length",
             });
         }
@@ -460,12 +460,12 @@ struct Layout {
 /// header), taking `file_len` as the truth when the sizes are not.
 fn layout(bytes: &[u8], file_len: usize) -> Result<Layout> {
     if bytes.len() < 12 || &bytes[8..12] != b"WAVE" {
-        return Err(SuperbError::Message("not a RIFF/WAVE file".into()));
+        return Err(AuraError::Message("not a RIFF/WAVE file".into()));
     }
     let rf64 = match &bytes[0..4] {
         b"RIFF" => false,
         b"RF64" => true,
-        _ => return Err(SuperbError::Message("not a RIFF/WAVE file".into())),
+        _ => return Err(AuraError::Message("not a RIFF/WAVE file".into())),
     };
     let u32_at =
         |at: usize| u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
@@ -486,7 +486,7 @@ fn layout(bytes: &[u8], file_len: usize) -> Result<Layout> {
         match id {
             b"fmt " => {
                 if len < 16 || start + 16 > bytes.len() {
-                    return Err(SuperbError::Message("fmt chunk too short".into()));
+                    return Err(AuraError::Message("fmt chunk too short".into()));
                 }
                 fmt = Some((
                     u16::from_le_bytes([bytes[start], bytes[start + 1]]),
@@ -527,9 +527,9 @@ fn layout(bytes: &[u8], file_len: usize) -> Result<Layout> {
         pos = start + len + (len & 1); // chunks are word aligned
     }
     let (tag, channels, rate, bits) =
-        fmt.ok_or_else(|| SuperbError::Message("missing fmt chunk".into()))?;
+        fmt.ok_or_else(|| AuraError::Message("missing fmt chunk".into()))?;
     let (data_start, data_len, unfinished) =
-        data.ok_or_else(|| SuperbError::Message("missing data chunk".into()))?;
+        data.ok_or_else(|| AuraError::Message("missing data chunk".into()))?;
     let format = WavFormat::from_tag(tag, bits)?;
     check_channels(channels as usize)?;
     let frame_bytes = channels as usize * format.bytes_per_sample() as usize;
@@ -592,7 +592,7 @@ pub fn repair(path: impl AsRef<Path>) -> Result<u64> {
         .read(true)
         .write(true)
         .open(path)
-        .map_err(|e| SuperbError::Message(format!("cannot open {}: {e}", path.display())))?;
+        .map_err(|e| AuraError::Message(format!("cannot open {}: {e}", path.display())))?;
     let file_len = file.metadata().map_err(io_err)?.len() as usize;
     let mut head = vec![0u8; file_len.min(4096)];
     file.read_exact(&mut head).map_err(io_err)?;
@@ -609,7 +609,7 @@ pub fn repair(path: impl AsRef<Path>) -> Result<u64> {
     let rf64 = riff_size > SIZE_LIMIT;
     if rf64 {
         let junk_at = layout.junk_at.ok_or_else(|| {
-            SuperbError::Message(format!(
+            AuraError::Message(format!(
                 "{}: too large for a RIFF header and no room for ds64",
                 path.display()
             ))
@@ -652,7 +652,7 @@ mod tests {
     }
 
     fn scratch(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("superb-wav-{}-{tag}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("aura-wav-{}-{tag}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
@@ -904,7 +904,7 @@ mod tests {
         // most systems, so force the error path through a bad plane set.
         assert!(matches!(
             writer.write(&[&[0.0; 4], &[0.0; 4]]),
-            Err(SuperbError::ChannelMismatch { .. })
+            Err(AuraError::ChannelMismatch { .. })
         ));
         assert!(writer.write(&[&[0.0; 4]]).is_ok());
         assert_eq!(counters.disk_errors(), 0, "mismatches are not disk errors");

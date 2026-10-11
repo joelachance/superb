@@ -1,6 +1,6 @@
 # primitives::realtime
 
-Real-time safety primitives for the Superb DAW SDK.
+Real-time safety primitives for the Aura DAW SDK.
 
 ## Purpose
 
@@ -32,7 +32,7 @@ plus load meter for diagnosing when it isn't fast enough.
 ## Usage
 
 ```rust
-use superb::primitives::realtime::spsc;
+use aura::primitives::realtime::spsc;
 
 let (mut tx, mut rx) = spsc::channel::<u32>(4);
 tx.push(1).unwrap();
@@ -44,9 +44,9 @@ assert_eq!(rx.pop(), None);
 
 ```rust,ignore
 #[global_allocator]
-static ALLOC: superb::primitives::realtime::CountingAllocator = superb::primitives::realtime::CountingAllocator::system();
+static ALLOC: aura::primitives::realtime::CountingAllocator = aura::primitives::realtime::CountingAllocator::system();
 
-superb::primitives::realtime::assert_no_alloc(|| {
+aura::primitives::realtime::assert_no_alloc(|| {
     // audio-thread work here; panics if it touches the heap
 });
 ```

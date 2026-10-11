@@ -23,7 +23,7 @@ use crate::primitives::midi::{MidiEvent, MidiEventBuffer, MidiMessage, Timestamp
 use crate::primitives::realtime::spsc::{Consumer, Producer};
 use crate::primitives::realtime::{LoadMeter, ProcessBudget};
 use crate::primitives::transport::{Transport, TransportState};
-use crate::primitives::{Result, SampleRate, SuperbError, TimePosition};
+use crate::primitives::{AuraError, Result, SampleRate, TimePosition};
 
 /// Counters maintained by [`Engine::render`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -70,7 +70,7 @@ pub enum MidiTiming {
 ///
 /// The engine owns everything the audio thread touches. Build it off the
 /// audio thread, call [`Engine::prepare`], then move it into the callback
-/// (see `superb::primitives::io::device::run_engine`) or drive it with
+/// (see `aura::primitives::io::device::run_engine`) or drive it with
 /// [`offline::render`](crate::primitives::io::offline::render).
 pub struct Engine<P: BlockProcessor> {
     processor: P,
@@ -144,7 +144,7 @@ impl<P: BlockProcessor> Engine<P> {
     /// Off the audio thread; allocates.
     pub fn prepare(&mut self, sample_rate: SampleRate, max_frames: usize) -> Result<()> {
         if max_frames == 0 {
-            return Err(SuperbError::InvalidArgument { what: "max_frames" });
+            return Err(AuraError::InvalidArgument { what: "max_frames" });
         }
         self.transport.tempo_map_mut().set_sample_rate(sample_rate);
         self.processor.prepare(sample_rate, max_frames)?;
@@ -193,7 +193,7 @@ impl<P: BlockProcessor> Engine<P> {
     }
 
     /// Attaches a queue of timestamped messages (e.g. from
-    /// `superb::primitives::midi::input::MidiInputBridge`).
+    /// `aura::primitives::midi::input::MidiInputBridge`).
     ///
     /// Messages are drained at the start of every `render` and placed in
     /// that block according to [`midi_timing`](Engine::midi_timing): with
@@ -206,13 +206,13 @@ impl<P: BlockProcessor> Engine<P> {
     /// rejected; use [`MidiTiming::BlockStart`] if you only want frame 0.
     ///
     /// ```
-    /// use superb::primitives::buffers::PlanarBuffer;
-    /// use superb::primitives::SampleRate;
-    /// use superb::primitives::graph::nodes::MonoSynthNode;
-    /// use superb::primitives::graph::AudioGraph;
-    /// use superb::primitives::io::{Engine, MidiTiming};
-    /// use superb::primitives::midi::{MidiChannel, MidiMessage, TimestampedMessage};
-    /// use superb::primitives::transport::Transport;
+    /// use aura::primitives::buffers::PlanarBuffer;
+    /// use aura::primitives::SampleRate;
+    /// use aura::primitives::graph::nodes::MonoSynthNode;
+    /// use aura::primitives::graph::AudioGraph;
+    /// use aura::primitives::io::{Engine, MidiTiming};
+    /// use aura::primitives::midi::{MidiChannel, MidiMessage, TimestampedMessage};
+    /// use aura::primitives::transport::Transport;
     ///
     /// let mut graph = AudioGraph::new();
     /// let synth = graph.add_node(Box::new(MonoSynthNode::new(1)));
@@ -221,7 +221,7 @@ impl<P: BlockProcessor> Engine<P> {
     /// engine.prepare(SampleRate::HZ_48K, 480).unwrap(); // 480 frames = 10 ms
     /// assert_eq!(engine.midi_timing(), MidiTiming::Stream);
     ///
-    /// let (mut tx, rx) = superb::primitives::realtime::spsc::channel::<TimestampedMessage>(16);
+    /// let (mut tx, rx) = aura::primitives::realtime::spsc::channel::<TimestampedMessage>(16);
     /// engine.set_midi_input(Some(rx));
     ///
     /// // Stamp on the engine's stream clock: block 0 spans 0..10_000 µs.
@@ -314,10 +314,10 @@ impl<P: BlockProcessor> Engine<P> {
     /// prepared maximum. `out` may have any channel count: the processor
     /// output is adapted with [`PlanarBuffer::copy_block_from`].
     pub fn render(&mut self, out: &mut PlanarBuffer) -> Result<()> {
-        let (sample_rate, max_frames) = self.prepared.ok_or(SuperbError::NotPrepared)?;
+        let (sample_rate, max_frames) = self.prepared.ok_or(AuraError::NotPrepared)?;
         let frames = out.frames();
         if frames > max_frames {
-            return Err(SuperbError::CapacityExceeded {
+            return Err(AuraError::CapacityExceeded {
                 what: "block frames",
                 capacity: max_frames,
             });
@@ -402,7 +402,7 @@ impl<P: BlockProcessor> Engine<P> {
 }
 
 /// Timestamp (µs) of sample `frames` at `hz`, rounded **up** so that
-/// `superb::primitives::midi::timing::us_to_frames(frames_to_us(f), hz) == f` for every
+/// `aura::primitives::midi::timing::us_to_frames(frames_to_us(f), hz) == f` for every
 /// `f` (floor/floor would land one sample early for non-integer periods).
 fn frames_to_us(frames: u64, hz: u32) -> u64 {
     let hz = hz.max(1) as u128;
@@ -431,12 +431,12 @@ mod tests {
     fn render_requires_prepare_and_respects_max_frames() {
         let mut e = constant_engine(1.0, 2);
         let mut out = PlanarBuffer::new(2, 64);
-        assert_eq!(e.render(&mut out), Err(SuperbError::NotPrepared));
+        assert_eq!(e.render(&mut out), Err(AuraError::NotPrepared));
         assert!(e.prepare(R, 0).is_err());
         e.prepare(R, 32).unwrap();
         assert!(matches!(
             e.render(&mut out),
-            Err(SuperbError::CapacityExceeded { .. })
+            Err(AuraError::CapacityExceeded { .. })
         ));
         out.set_frames(32).unwrap();
         e.render(&mut out).unwrap();

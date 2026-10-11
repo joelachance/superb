@@ -38,10 +38,10 @@
 //! it has been handed back.
 //!
 //! ```
-//! use superb::primitives::SampleRate;
-//! use superb::primitives::graph::nodes::ConstantNode;
-//! use superb::primitives::graph::{live_pair, BlockTime};
-//! use superb::primitives::midi::MidiEventBuffer;
+//! use aura::primitives::SampleRate;
+//! use aura::primitives::graph::nodes::ConstantNode;
+//! use aura::primitives::graph::{live_pair, BlockTime};
+//! use aura::primitives::midi::MidiEventBuffer;
 //!
 //! let (mut editor, mut live) = live_pair();
 //! editor.configure(SampleRate::HZ_48K, 64);
@@ -73,7 +73,7 @@ use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::midi::MidiEventBuffer;
 use crate::primitives::realtime::spsc::{channel, Consumer, Producer};
 use crate::primitives::realtime::thread::debug_assert_not_rt;
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 
 use crate::primitives::graph::{AudioGraph, BlockProcessor, BlockTime};
 
@@ -162,19 +162,19 @@ impl GraphEditor {
     /// the swap queue and reset the draft to an empty graph. On error the
     /// draft is left untouched (still dirty) so the caller can fix and retry.
     ///
-    /// Errors: [`SuperbError::InvalidArgument`] if
+    /// Errors: [`AuraError::InvalidArgument`] if
     /// [`configure`](GraphEditor::configure) was never called,
-    /// [`SuperbError::CapacityExceeded`] if the previous publish has not been
+    /// [`AuraError::CapacityExceeded`] if the previous publish has not been
     /// consumed yet (see [`is_busy`](GraphEditor::is_busy)), plus anything
     /// [`AudioGraph::prepare`] can return.
     pub fn publish(&mut self) -> Result<()> {
         debug_assert_not_rt("GraphEditor::publish");
         self.try_reclaim();
-        let (sample_rate, max_frames) = self.config.ok_or(SuperbError::InvalidArgument {
+        let (sample_rate, max_frames) = self.config.ok_or(AuraError::InvalidArgument {
             what: "GraphEditor::configure was not called",
         })?;
         if self.swaps.is_full() {
-            return Err(SuperbError::CapacityExceeded {
+            return Err(AuraError::CapacityExceeded {
                 what: "graph swap queue",
                 capacity: self.swaps.capacity(),
             });
@@ -188,7 +188,7 @@ impl GraphEditor {
             }
             Err(GraphCommand::Swap(back)) => {
                 self.draft = *back;
-                Err(SuperbError::CapacityExceeded {
+                Err(AuraError::CapacityExceeded {
                     what: "graph swap queue",
                     capacity: self.swaps.capacity(),
                 })
@@ -273,7 +273,7 @@ impl core::fmt::Debug for GraphEditor {
 ///
 /// Implements [`BlockProcessor`], so it can drive the `Engine` in `primitives::io`
 /// directly. Starts with an empty, unprepared graph: `process` returns
-/// [`SuperbError::NotPrepared`] until either [`prepare`](LiveGraph::prepare)
+/// [`AuraError::NotPrepared`] until either [`prepare`](LiveGraph::prepare)
 /// is called or the first published graph arrives.
 pub struct LiveGraph {
     active: Box<AudioGraph>,
@@ -557,7 +557,7 @@ mod tests {
         editor.configure(R, 64);
         assert_eq!(
             live.process(BlockTime::free_running(), 64, &no_midi(), None),
-            Err(SuperbError::NotPrepared)
+            Err(AuraError::NotPrepared)
         );
 
         publish_constant(&mut editor, 0.25);
@@ -630,7 +630,7 @@ mod tests {
         editor.graph_mut().set_output(c).unwrap();
         assert!(matches!(
             editor.publish(),
-            Err(SuperbError::InvalidArgument { .. })
+            Err(AuraError::InvalidArgument { .. })
         ));
         // Draft untouched by the failed publish.
         assert_eq!(editor.graph().node_count(), 1);
@@ -654,7 +654,7 @@ mod tests {
         editor.graph_mut().set_output(c).unwrap();
         assert!(matches!(
             editor.publish(),
-            Err(SuperbError::InvalidArgument { .. })
+            Err(AuraError::InvalidArgument { .. })
         ));
         assert_eq!(editor.graph().node_count(), 1);
     }
@@ -671,7 +671,7 @@ mod tests {
         editor.graph_mut().set_output(c).unwrap();
         assert!(matches!(
             editor.publish(),
-            Err(SuperbError::CapacityExceeded { .. })
+            Err(AuraError::CapacityExceeded { .. })
         ));
         assert_eq!(editor.graph().node_count(), 1);
         assert_eq!(editor.published_count(), 1);
@@ -813,7 +813,7 @@ mod tests {
             .graph_mut()
             .add_node(Box::new(PassThroughNode::new(1)));
         editor.graph_mut().connect(a, b).unwrap();
-        assert_eq!(editor.graph_mut().connect(b, a), Err(SuperbError::Cycle));
+        assert_eq!(editor.graph_mut().connect(b, a), Err(AuraError::Cycle));
         assert!(editor.graph_mut().connect(a, b).is_err());
         let mut fresh = AudioGraph::new();
         let c = fresh.add_node(Box::new(ConstantNode::new(1.0, 1)));

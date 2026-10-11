@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::midi::MidiEventBuffer;
 use crate::primitives::realtime::thread::debug_assert_not_rt;
-use crate::primitives::{IdGenerator, NodeId, Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, IdGenerator, NodeId, Result, SampleRate};
 
 use crate::primitives::graph::delay::DelayLine;
 use crate::primitives::graph::{BlockTime, Node, ProcessContext, ProcessStatus};
@@ -88,7 +88,7 @@ struct Slot {
 /// Editing methods (`add_node`, `connect`, ...) mark the graph *dirty*;
 /// [`prepare`](AudioGraph::prepare) recompiles the schedule and allocates all
 /// buffers. [`process`](AudioGraph::process) fails with
-/// [`SuperbError::NotPrepared`] on a dirty graph rather than allocating on
+/// [`AuraError::NotPrepared`] on a dirty graph rather than allocating on
 /// the audio thread.
 ///
 /// # Latency compensation
@@ -214,23 +214,23 @@ impl AudioGraph {
         let from_idx = self.slot_index(from)?;
         let to_idx = self.slot_index(to)?;
         if self.slots[from_idx].outputs == 0 {
-            return Err(SuperbError::ChannelMismatch {
+            return Err(AuraError::ChannelMismatch {
                 expected: 1,
                 actual: 0,
             });
         }
         if self.slots[to_idx].inputs == 0 {
-            return Err(SuperbError::ChannelMismatch {
+            return Err(AuraError::ChannelMismatch {
                 expected: 1,
                 actual: 0,
             });
         }
         if from == to || self.reaches(to, from) {
-            return Err(SuperbError::Cycle);
+            return Err(AuraError::Cycle);
         }
         let edge = Edge { from, to };
         if self.edges.contains(&edge) {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "edge already exists",
             });
         }
@@ -245,7 +245,7 @@ impl AudioGraph {
         let before = self.edges.len();
         self.edges.retain(|e| !(e.from == from && e.to == to));
         if self.edges.len() == before {
-            return Err(SuperbError::NotFound {
+            return Err(AuraError::NotFound {
                 kind: "edge",
                 id: from.raw(),
             });
@@ -267,10 +267,10 @@ impl AudioGraph {
     /// cycle.
     ///
     /// ```
-    /// use superb::primitives::SampleRate;
-    /// use superb::primitives::graph::nodes::{MonoSynthNode, PassThroughNode};
-    /// use superb::primitives::graph::{AudioGraph, BlockTime, MidiEdge, MidiPort};
-    /// use superb::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
+    /// use aura::primitives::SampleRate;
+    /// use aura::primitives::graph::nodes::{MonoSynthNode, PassThroughNode};
+    /// use aura::primitives::graph::{AudioGraph, BlockTime, MidiEdge, MidiPort};
+    /// use aura::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
     ///
     /// let mut graph = AudioGraph::new();
     /// let lead = graph.add_node(Box::new(MonoSynthNode::new(1)));
@@ -297,7 +297,7 @@ impl AudioGraph {
         self.slot_index(to)?;
         let edge = MidiEdge { from, to };
         if self.midi_edges.contains(&edge) {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "midi edge already exists",
             });
         }
@@ -312,7 +312,7 @@ impl AudioGraph {
         let before = self.midi_edges.len();
         self.midi_edges.retain(|e| !(e.from == from && e.to == to));
         if self.midi_edges.len() == before {
-            return Err(SuperbError::NotFound {
+            return Err(AuraError::NotFound {
                 kind: "midi edge",
                 id: to.raw(),
             });
@@ -330,7 +330,7 @@ impl AudioGraph {
     pub fn set_output(&mut self, id: NodeId) -> Result<()> {
         let idx = self.slot_index(id)?;
         if self.slots[idx].outputs == 0 {
-            return Err(SuperbError::ChannelMismatch {
+            return Err(AuraError::ChannelMismatch {
                 expected: 1,
                 actual: 0,
             });
@@ -431,7 +431,7 @@ impl AudioGraph {
     /// among its producers). Fails if the graph is dirty.
     pub fn node_input_latency(&self, id: NodeId) -> Result<usize> {
         if self.dirty {
-            return Err(SuperbError::NotPrepared);
+            return Err(AuraError::NotPrepared);
         }
         Ok(self.input_latency[self.slot_index(id)?])
     }
@@ -440,7 +440,7 @@ impl AudioGraph {
     /// [`Node::latency_frames`]). Fails if the graph is dirty.
     pub fn node_output_latency(&self, id: NodeId) -> Result<usize> {
         if self.dirty {
-            return Err(SuperbError::NotPrepared);
+            return Err(AuraError::NotPrepared);
         }
         Ok(self.output_latency[self.slot_index(id)?])
     }
@@ -450,7 +450,7 @@ impl AudioGraph {
     /// the edge does not exist.
     pub fn edge_delay(&self, from: NodeId, to: NodeId) -> Result<usize> {
         if self.dirty {
-            return Err(SuperbError::NotPrepared);
+            return Err(AuraError::NotPrepared);
         }
         let from_idx = self.slot_index(from)?;
         let to_idx = self.slot_index(to)?;
@@ -458,7 +458,7 @@ impl AudioGraph {
             .producers
             .iter()
             .find(|p| p.slot == from_idx)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "edge",
                 id: from.raw(),
             })?;
@@ -472,12 +472,12 @@ impl AudioGraph {
     /// Compiles the schedule, allocates buffers and prepares every node.
     ///
     /// Must be called off the audio thread after any edit. Fails with
-    /// [`SuperbError::Cycle`] if the edge set is cyclic (cannot normally
+    /// [`AuraError::Cycle`] if the edge set is cyclic (cannot normally
     /// happen because `connect` rejects cycles).
     pub fn prepare(&mut self, sample_rate: SampleRate, max_frames: usize) -> Result<()> {
         debug_assert_not_rt("AudioGraph::prepare");
         if max_frames == 0 {
-            return Err(SuperbError::InvalidArgument { what: "max_frames" });
+            return Err(AuraError::InvalidArgument { what: "max_frames" });
         }
         self.compile()?;
         let n = self.slots.len();
@@ -582,7 +582,7 @@ impl AudioGraph {
             }
         }
         if order.len() != n {
-            return Err(SuperbError::Cycle);
+            return Err(AuraError::Cycle);
         }
         self.order = order;
 
@@ -621,7 +621,7 @@ impl AudioGraph {
     }
 
     fn slot_index(&self, id: NodeId) -> Result<usize> {
-        self.index.get(&id).copied().ok_or(SuperbError::NotFound {
+        self.index.get(&id).copied().ok_or(AuraError::NotFound {
             kind: "node",
             id: id.raw(),
         })
@@ -654,10 +654,10 @@ impl AudioGraph {
     ) -> Result<()> {
         let (sample_rate, max_frames) = match (self.dirty, self.prepared) {
             (false, Some(cfg)) => cfg,
-            _ => return Err(SuperbError::NotPrepared),
+            _ => return Err(AuraError::NotPrepared),
         };
         if frames > max_frames {
-            return Err(SuperbError::CapacityExceeded {
+            return Err(AuraError::CapacityExceeded {
                 what: "block frames",
                 capacity: max_frames,
             });
@@ -750,7 +750,7 @@ impl AudioGraph {
     /// The output buffer of any node from the last `process` call.
     pub fn node_output(&self, id: NodeId) -> Result<&PlanarBuffer> {
         if self.dirty {
-            return Err(SuperbError::NotPrepared);
+            return Err(AuraError::NotPrepared);
         }
         Ok(&self.output_buffers[self.slot_index(id)?])
     }
@@ -859,7 +859,7 @@ mod tests {
         g.set_output(c).unwrap();
         assert_eq!(
             g.process(BlockTime::free_running(), 16, &no_midi(), None),
-            Err(SuperbError::NotPrepared)
+            Err(AuraError::NotPrepared)
         );
         g.prepare(R, 16).unwrap();
         run(&mut g, 16);
@@ -867,7 +867,7 @@ mod tests {
         assert!(g.is_dirty());
         assert_eq!(
             g.process(BlockTime::free_running(), 16, &no_midi(), None),
-            Err(SuperbError::NotPrepared)
+            Err(AuraError::NotPrepared)
         );
         assert_eq!(g.output().channels(), 0);
         assert!(g.prepared_config().is_none());
@@ -875,7 +875,7 @@ mod tests {
         assert_eq!(g.prepared_config(), Some((R, 16)));
         assert!(matches!(
             g.process(BlockTime::free_running(), 17, &no_midi(), None),
-            Err(SuperbError::CapacityExceeded { .. })
+            Err(AuraError::CapacityExceeded { .. })
         ));
         assert!(g.prepare(R, 0).is_err());
     }
@@ -942,17 +942,17 @@ mod tests {
         let c = g.add_node(Box::new(PassThroughNode::new(1)));
         g.connect(a, b).unwrap();
         g.connect(b, c).unwrap();
-        assert_eq!(g.connect(c, a), Err(SuperbError::Cycle));
-        assert_eq!(g.connect(a, a), Err(SuperbError::Cycle));
+        assert_eq!(g.connect(c, a), Err(AuraError::Cycle));
+        assert_eq!(g.connect(a, a), Err(AuraError::Cycle));
         assert!(g.connect(a, b).is_err()); // duplicate
         let ghost = NodeId::from_raw(999);
         assert!(matches!(
             g.connect(a, ghost),
-            Err(SuperbError::NotFound { .. })
+            Err(AuraError::NotFound { .. })
         ));
         assert!(matches!(
             g.set_output(ghost),
-            Err(SuperbError::NotFound { .. })
+            Err(AuraError::NotFound { .. })
         ));
         let gen = g.add_node(Box::new(ConstantNode::new(1.0, 1)));
         assert!(g.connect(a, gen).is_err()); // generator has no inputs
@@ -1176,18 +1176,18 @@ mod tests {
         g.connect_midi(MidiPort::External, a).unwrap();
         assert!(matches!(
             g.connect_midi(MidiPort::External, a),
-            Err(SuperbError::InvalidArgument {
+            Err(AuraError::InvalidArgument {
                 what: "midi edge already exists"
             })
         ));
         let ghost = NodeId::from_raw(999);
         assert!(matches!(
             g.connect_midi(MidiPort::External, ghost),
-            Err(SuperbError::NotFound { .. })
+            Err(AuraError::NotFound { .. })
         ));
         assert!(matches!(
             g.disconnect_midi(MidiPort::External, b),
-            Err(SuperbError::NotFound { .. })
+            Err(AuraError::NotFound { .. })
         ));
         // Editing MIDI edges dirties the graph like audio edits.
         g.prepare(R, 8).unwrap();
@@ -1195,7 +1195,7 @@ mod tests {
         assert!(g.is_dirty());
         assert_eq!(
             g.process(BlockTime::free_running(), 8, &no_midi(), None),
-            Err(SuperbError::NotPrepared)
+            Err(AuraError::NotPrepared)
         );
         // remove_node drops the MIDI edges targeting it.
         g.remove_node(a).unwrap();

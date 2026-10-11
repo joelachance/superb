@@ -13,14 +13,14 @@
 //! cargo run --example metronome_count_in
 //! ```
 
-use superb::prelude::*;
-use superb::primitives::io::capture::capture_queue;
-use superb::{metronome, record, session, track, transport};
+use aura::prelude::*;
+use aura::primitives::io::capture::capture_queue;
+use aura::{metronome, record, session, track, transport};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
     let block = 256;
-    let folder = std::env::temp_dir().join("metronome_count_in.superb");
+    let folder = std::env::temp_dir().join("metronome_count_in.aura");
     let mut session = session::create(&folder, rate, block)?;
     session::set_tempo(&mut session, 120.0)?; // a beat is half a second
     let vox = track::add(&mut session, "vox", TrackKind::Audio)?;

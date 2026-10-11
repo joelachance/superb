@@ -2,7 +2,7 @@
 
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::graph::BlockProcessor;
-use crate::primitives::{Result, SampleRate, SuperbError};
+use crate::primitives::{AuraError, Result, SampleRate};
 
 use crate::primitives::io::Engine;
 
@@ -19,7 +19,7 @@ pub fn render<P: BlockProcessor>(
     total_frames: usize,
 ) -> Result<PlanarBuffer> {
     if block_size == 0 {
-        return Err(SuperbError::InvalidArgument { what: "block_size" });
+        return Err(AuraError::InvalidArgument { what: "block_size" });
     }
     engine.prepare(sample_rate, block_size)?;
     let channels = engine.output_channels();
@@ -34,9 +34,9 @@ pub fn render_prepared<P: BlockProcessor>(
     block_size: usize,
     total_frames: usize,
 ) -> Result<PlanarBuffer> {
-    let (_, max_frames) = engine.prepared_config().ok_or(SuperbError::NotPrepared)?;
+    let (_, max_frames) = engine.prepared_config().ok_or(AuraError::NotPrepared)?;
     if block_size == 0 || block_size > max_frames {
-        return Err(SuperbError::InvalidArgument { what: "block_size" });
+        return Err(AuraError::InvalidArgument { what: "block_size" });
     }
     let mut result = PlanarBuffer::new(channels, total_frames);
     let mut block = PlanarBuffer::new(channels, block_size);
@@ -100,7 +100,7 @@ mod tests {
         let mut e = Engine::new(g, Transport::new(R, 120.0));
         assert_eq!(
             render_prepared(&mut e, 1, 8, 8).unwrap_err(),
-            SuperbError::NotPrepared
+            AuraError::NotPrepared
         );
         e.prepare(R, 8).unwrap();
         assert!(render_prepared(&mut e, 1, 9, 8).is_err());

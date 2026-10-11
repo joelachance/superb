@@ -6,8 +6,8 @@
 //! with the `midi-io` feature, from a hardware port (`connect_input`;
 //! `devices::midi_inputs` lists them).
 //!
-//! Made of `superb::primitives::midi` (messages), the engine's MIDI queue
-//! in `superb::primitives::io` (`Engine::live`), and the live instrument
+//! Made of `aura::primitives::midi` (messages), the engine's MIDI queue
+//! in `aura::primitives::io` (`Engine::live`), and the live instrument
 //! [`session::steps::build_mixer`](crate::session::steps::build_mixer) adds.
 
 use crate::primitives::midi::{MidiChannel, MidiMessage, TimestampedMessage};
@@ -65,7 +65,7 @@ mod tests {
     use super::*;
     use crate::primitives::session::TrackKind;
     use crate::primitives::SampleRate;
-    use crate::primitives::{SuperbError, TrackId};
+    use crate::primitives::{AuraError, TrackId};
     use crate::session;
     use crate::track;
     use crate::transport;
@@ -107,7 +107,7 @@ mod tests {
         let fx = track::add(&mut session, "fx", TrackKind::Bus).unwrap();
         assert!(matches!(
             track::monitor(&mut session, fx, true),
-            Err(SuperbError::InvalidArgument { .. })
+            Err(AuraError::InvalidArgument { .. })
         ));
         assert!(track::monitor(&mut session, TrackId::from_raw(99), true).is_err());
         assert!(

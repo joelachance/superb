@@ -152,7 +152,7 @@ pub(crate) mod tests {
     use crate::primitives::graph::{AudioGraph, BlockTime};
     use crate::primitives::midi::MidiEventBuffer;
     use crate::primitives::plugins::{AudioPortLayout, ParamInfo, PluginDescriptor, PluginFormat};
-    use crate::primitives::{Result, SuperbError};
+    use crate::primitives::{AuraError, Result};
 
     /// A pure-Rust gain plugin used to test the adapter without FFI.
     pub(crate) struct MockGain {
@@ -169,7 +169,7 @@ pub(crate) mod tests {
     impl MockGain {
         pub fn new(latency: usize) -> Self {
             Self {
-                desc: PluginDescriptor::new(PluginFormat::Clap, "superb.mock.gain", "Mock Gain"),
+                desc: PluginDescriptor::new(PluginFormat::Clap, "aura.mock.gain", "Mock Gain"),
                 params: vec![ParamInfo {
                     id: 1,
                     name: "Gain".into(),
@@ -210,7 +210,7 @@ pub(crate) mod tests {
             if id == 1 {
                 Ok(self.gain)
             } else {
-                Err(SuperbError::NotFound {
+                Err(AuraError::NotFound {
                     kind: "param",
                     id: id as u64,
                 })
@@ -218,14 +218,14 @@ pub(crate) mod tests {
         }
         fn set_param(&mut self, id: u32, value: f64) -> Result<()> {
             if id != 1 {
-                return Err(SuperbError::NotFound {
+                return Err(AuraError::NotFound {
                     kind: "param",
                     id: id as u64,
                 });
             }
             if self.active {
                 if self.queue.len() == self.queue.capacity() {
-                    return Err(SuperbError::CapacityExceeded {
+                    return Err(AuraError::CapacityExceeded {
                         what: "mock queue",
                         capacity: 8,
                     });
@@ -238,7 +238,7 @@ pub(crate) mod tests {
         }
         fn activate(&mut self, _sample_rate: SampleRate, _max_frames: usize) -> Result<()> {
             if self.fail_activate {
-                return Err(SuperbError::Message("mock refuses to activate".into()));
+                return Err(AuraError::Message("mock refuses to activate".into()));
             }
             self.active = true;
             Ok(())
@@ -274,7 +274,7 @@ pub(crate) mod tests {
         fn load_state(&mut self, bytes: &[u8]) -> Result<()> {
             let arr: [u8; 8] = bytes
                 .try_into()
-                .map_err(|_| SuperbError::InvalidArgument { what: "state" })?;
+                .map_err(|_| AuraError::InvalidArgument { what: "state" })?;
             self.gain = f64::from_le_bytes(arr);
             Ok(())
         }
@@ -296,7 +296,7 @@ pub(crate) mod tests {
             node.take_param_sender().is_none(),
             "sender is handed out once"
         );
-        assert_eq!(node.instance().descriptor().id, "superb.mock.gain");
+        assert_eq!(node.instance().descriptor().id, "aura.mock.gain");
         node.instance_mut().set_param(1, 0.25).unwrap();
         assert_eq!(node.into_instance().param_value(1).unwrap(), 0.25);
     }

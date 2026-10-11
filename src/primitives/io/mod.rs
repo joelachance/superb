@@ -1,12 +1,12 @@
 //! # primitives::io
 //!
-//! Where audio leaves (and later enters) the Superb DAW SDK.
+//! Where audio leaves (and later enters) the Aura DAW SDK.
 //!
 //! * [`Engine`] — the block loop: advances a [`Transport`](crate::primitives::transport::Transport),
 //!   splits the block at loop points, runs a [`BlockProcessor`](crate::primitives::graph::BlockProcessor)
 //!   per segment, delivers queued MIDI, and records DSP load. Its `render`
 //!   method is allocation-free. Queued `TimestampedMessage`s are placed
-//!   sample-accurately via `superb::primitives::midi::timing::FrameMapper` against the
+//!   sample-accurately via `aura::primitives::midi::timing::FrameMapper` against the
 //!   engine's stream clock ([`MidiTiming::Stream`], the default) or forced
 //!   to frame 0 ([`MidiTiming::BlockStart`]).
 //! * [`LiveInput`] — captured audio on its way into a running engine, which
@@ -33,11 +33,11 @@
 //!   (`device::capture_queue` / `device::run_capture`).
 //!
 //! ```
-//! use superb::primitives::SampleRate;
-//! use superb::primitives::graph::nodes::SineNode;
-//! use superb::primitives::graph::AudioGraph;
-//! use superb::primitives::io::{offline, Engine};
-//! use superb::primitives::transport::Transport;
+//! use aura::primitives::SampleRate;
+//! use aura::primitives::graph::nodes::SineNode;
+//! use aura::primitives::graph::AudioGraph;
+//! use aura::primitives::io::{offline, Engine};
+//! use aura::primitives::transport::Transport;
 //!
 //! let mut graph = AudioGraph::new();
 //! let sine = graph.add_node(Box::new(SineNode::new(440.0, 0.25, 2)));

@@ -6,7 +6,7 @@
 //! how clearly it peaks says how much to trust it.
 
 use super::fft::Fft;
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 /// What [`estimate`] found.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -36,7 +36,7 @@ pub struct Offset {
 /// An empty signal.
 pub fn estimate(reference: &[f32], other: &[f32], max_shift: usize) -> Result<Offset> {
     if reference.is_empty() || other.is_empty() {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "offset::estimate needs two signals",
         });
     }

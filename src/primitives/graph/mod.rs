@@ -1,6 +1,6 @@
 //! # primitives::graph
 //!
-//! The audio process graph of the Superb DAW SDK.
+//! The audio process graph of the Aura DAW SDK.
 //!
 //! * [`Node`] — the trait every processor implements: `prepare` once (may
 //!   allocate), `process` per block (must not allocate).
@@ -29,10 +29,10 @@
 //! [`ProcessStatus::Silent`] is not mixed into its consumers.
 //!
 //! ```
-//! use superb::primitives::SampleRate;
-//! use superb::primitives::graph::{AudioGraph, BlockTime};
-//! use superb::primitives::graph::nodes::{GainNode, SineNode};
-//! use superb::primitives::midi::MidiEventBuffer;
+//! use aura::primitives::SampleRate;
+//! use aura::primitives::graph::{AudioGraph, BlockTime};
+//! use aura::primitives::graph::nodes::{GainNode, SineNode};
+//! use aura::primitives::midi::MidiEventBuffer;
 //!
 //! let mut graph = AudioGraph::new();
 //! let sine = graph.add_node(Box::new(SineNode::new(440.0, 0.5, 1)));

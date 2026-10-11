@@ -34,7 +34,7 @@ rebuilds the mixer.
 
 ## Reference
 
-Every function of the `clip` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `clip` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `add`
 
@@ -450,10 +450,10 @@ clip::change_note(&mut session, m, note, MidiNote { beat: note.beat + 0.25, ..no
 ## Usage
 
 ```rust
-use superb::prelude::*;
-use superb::{clip, session, track};
+use aura::prelude::*;
+use aura::{clip, session, track};
 
-let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;
+let mut session = session::create("demo.aura", SampleRate::HZ_48K, 256)?;
 let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 
 let mut audio = PlanarBuffer::new(2, 48_000);

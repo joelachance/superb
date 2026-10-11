@@ -33,7 +33,7 @@ use clap_sys::stream::{clap_istream, clap_ostream};
 use clap_sys::version::CLAP_VERSION;
 
 /// ID of the test plugin.
-pub const TEST_PLUGIN_ID: &str = "superb.test.gain";
+pub const TEST_PLUGIN_ID: &str = "aura.test.gain";
 const PARAM_GAIN: u32 = 7;
 const PARAM_NOTES: u32 = 8;
 
@@ -86,14 +86,14 @@ static FEATURES: SyncPtrs<3> =
 
 static DESCRIPTOR: clap_plugin_descriptor = clap_plugin_descriptor {
     clap_version: CLAP_VERSION,
-    id: c"superb.test.gain".as_ptr(),
+    id: c"aura.test.gain".as_ptr(),
     name: c"Test Gain".as_ptr(),
-    vendor: c"Superb".as_ptr(),
+    vendor: c"Aura".as_ptr(),
     url: c"https://example.invalid".as_ptr(),
     manual_url: c"".as_ptr(),
     support_url: c"".as_ptr(),
     version: c"1.0.0".as_ptr(),
-    description: c"Stereo gain used by the superb-plugins host tests".as_ptr(),
+    description: c"Stereo gain used by the aura-plugins host tests".as_ptr(),
     features: FEATURES.0.as_ptr(),
 };
 
@@ -134,7 +134,7 @@ unsafe extern "C" fn create(
     id: *const c_char,
 ) -> *const clap_plugin {
     // SAFETY: the host passes a NUL-terminated id.
-    if unsafe { CStr::from_ptr(id) } != c"superb.test.gain" {
+    if unsafe { CStr::from_ptr(id) } != c"aura.test.gain" {
         return ptr::null();
     }
     LAST_HOST.store(host as usize, Ordering::SeqCst);

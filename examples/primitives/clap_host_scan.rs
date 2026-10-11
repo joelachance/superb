@@ -18,16 +18,16 @@
 
 use std::path::PathBuf;
 
-use superb::primitives::graph::nodes::SineNode;
-use superb::primitives::graph::AudioGraph;
-use superb::primitives::io::{offline, Engine};
-use superb::primitives::plugins::clap::ClapBundle;
-use superb::primitives::plugins::scan::{
+use aura::primitives::graph::nodes::SineNode;
+use aura::primitives::graph::AudioGraph;
+use aura::primitives::io::{offline, Engine};
+use aura::primitives::plugins::clap::ClapBundle;
+use aura::primitives::plugins::scan::{
     default_search_paths, scan_default, scan_directory, ScanReport,
 };
-use superb::primitives::plugins::{PluginFormat, PluginInstance, PluginNode};
-use superb::primitives::transport::Transport;
-use superb::primitives::{Result, SampleRate};
+use aura::primitives::plugins::{PluginFormat, PluginInstance, PluginNode};
+use aura::primitives::transport::Transport;
+use aura::primitives::{Result, SampleRate};
 
 // Result<()> means "succeed with nothing, or return an error".
 // The `?` operator below forwards errors up to main's caller (the OS).

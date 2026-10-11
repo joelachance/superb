@@ -2,5 +2,5 @@
 **/*.rs.bk
 *.wav
 !docs/**/*.wav
-*.superb.json
+*.aura.json
 /.claude/

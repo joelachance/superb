@@ -23,8 +23,8 @@
 //! freely and is meant for the UI/memory thread.
 //!
 //! ```
-//! use superb::primitives::{SampleRate, TimeDuration, TimePosition};
-//! use superb::primitives::session::{Clip, ClipSource, Memory, TrackKind};
+//! use aura::primitives::{SampleRate, TimeDuration, TimePosition};
+//! use aura::primitives::session::{Clip, ClipSource, Memory, TrackKind};
 //!
 //! let mut memory = Memory::new("demo", SampleRate::HZ_48K);
 //! let drums = memory.add_track("drums", TrackKind::Audio);

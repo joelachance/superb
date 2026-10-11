@@ -1,13 +1,13 @@
 # primitives::mixer
 
-A mixing console built on `superb::primitives::graph::AudioGraph`.
+A mixing console built on `aura::primitives::graph::AudioGraph`.
 
 ## Purpose
 
 `primitives::mixer` is built on `primitives::graph`. It wires **tracks**,
 **buses**, a **master** bus and **sends** into an `AudioGraph` and implements
-`superb::primitives::graph::BlockProcessor`, so a `Mixer` drops straight into
-`superb::primitives::io::Engine` (or `offline::render`) exactly like a bare
+`aura::primitives::graph::BlockProcessor`, so a `Mixer` drops straight into
+`aura::primitives::io::Engine` (or `offline::render`) exactly like a bare
 `AudioGraph` does.
 
 ## Key types
@@ -32,11 +32,11 @@ A mixing console built on `superb::primitives::graph::AudioGraph`.
 ## Usage
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::graph::nodes::ConstantNode;
-use superb::primitives::graph::{BlockProcessor, BlockTime};
-use superb::primitives::midi::MidiEventBuffer;
-use superb::primitives::mixer::Mixer;
+use aura::primitives::SampleRate;
+use aura::primitives::graph::nodes::ConstantNode;
+use aura::primitives::graph::{BlockProcessor, BlockTime};
+use aura::primitives::midi::MidiEventBuffer;
+use aura::primitives::mixer::Mixer;
 
 let mut mixer = Mixer::new(2);
 let drums = mixer.add_track("drums");
@@ -71,7 +71,7 @@ it, and `is_effectively_muted` just checks whether the count is nonzero and
 the strip itself isn't one of the soloed ones — this is why solo state is
 consistent no matter which thread flips it. Structural edits
 (`add_track`, `add_send`, `set_track_output`, `set_bus_output`, ...) call
-`superb::primitives::realtime::thread::debug_assert_not_rt` and mutate the graph, so they need
+`aura::primitives::realtime::thread::debug_assert_not_rt` and mutate the graph, so they need
 a `prepare` afterward (`routing_to_buses_and_removal_reroutes_to_master`,
 `pan_laws_on_master_output`); parameter changes do not.
 `tests/mixer_no_alloc.rs::mixer_process_is_allocation_free`

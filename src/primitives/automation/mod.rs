@@ -1,6 +1,6 @@
 //! # primitives::automation
 //!
-//! Parameter envelopes and DAW-style automation modes for the Superb SDK.
+//! Parameter envelopes and DAW-style automation modes for the Aura SDK.
 //!
 //! * [`Envelope`] / [`EnvelopePoint`] / [`CurveShape`] — breakpoint curves
 //!   with hold, linear and tensioned segments; sample-accurate evaluation.
@@ -14,9 +14,9 @@
 //!
 //! ```
 //! use std::sync::Arc;
-//! use superb::primitives::automation::{AutomationLane, AutomationMode, CurveShape, EnvelopePoint};
-//! use superb::primitives::{IdGenerator, TimePosition};
-//! use superb::primitives::realtime::AtomicF32;
+//! use aura::primitives::automation::{AutomationLane, AutomationMode, CurveShape, EnvelopePoint};
+//! use aura::primitives::{IdGenerator, TimePosition};
+//! use aura::primitives::realtime::AtomicF32;
 //!
 //! let ids = IdGenerator::new();
 //! let gain = Arc::new(AtomicF32::new(1.0));

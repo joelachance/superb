@@ -24,7 +24,7 @@ use crate::primitives::io::{EngineCommand, EngineHandle};
 use crate::primitives::mixer::{Mixer, SendParams, SendTap, StripId, StripParams};
 use crate::primitives::session::{Clip, ClipSource, Input, Memory, MidiNote, TrackKind};
 use crate::primitives::transport::TempoMap;
-use crate::primitives::{BeatPosition, Result, SendId, SuperbError, TrackId};
+use crate::primitives::{AuraError, BeatPosition, Result, SendId, TrackId};
 use crate::session::{MixerHandles, Session};
 
 /// Rebuilds the mixer from the memory and swaps it into the engine.
@@ -81,7 +81,7 @@ pub fn render_blocks(session: &mut Session, blocks: usize) -> Result<PlanarBuffe
     }
     let block = session.engine.max_frames();
     let audio_thread = session.audio_thread.as_mut().ok_or_else(|| {
-        SuperbError::Message("the audio thread is running on a device stream".into())
+        AuraError::Message("the audio thread is running on a device stream".into())
     })?;
     let mut out = PlanarBuffer::new(session.channels, blocks * block);
     let mut scratch = PlanarBuffer::new(session.channels, block);
@@ -157,7 +157,7 @@ pub fn publish(engine: &mut EngineHandle, mixer: Mixer) -> Result<()> {
     let started = Instant::now();
     loop {
         match engine.editor().publish() {
-            Err(SuperbError::CapacityExceeded { .. }) if started.elapsed() < SWAP_WAIT => {
+            Err(AuraError::CapacityExceeded { .. }) if started.elapsed() < SWAP_WAIT => {
                 std::thread::sleep(Duration::from_micros(500));
             }
             result => return result,
@@ -769,7 +769,7 @@ mod tests {
         session.audio_thread = None;
         assert!(matches!(
             render_blocks(&mut session, 1),
-            Err(SuperbError::Message(_))
+            Err(AuraError::Message(_))
         ));
     }
 

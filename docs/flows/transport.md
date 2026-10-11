@@ -23,7 +23,7 @@ is saved with the session, like a track's mute.
 
 ## Reference
 
-Every function of the `transport` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
+Every function of the `transport` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
 
 ### `start`
 
@@ -205,8 +205,8 @@ if transport::state(&session).is_rolling() { /* draw a moving playhead */ }
 ## Usage
 
 ```rust
-use superb::prelude::*;
-use superb::{session, transport};
+use aura::prelude::*;
+use aura::{session, transport};
 
 transport::start(&mut session)?;
 let audio = session::steps::render_blocks(&mut session, 47)?;   // ~0.25 s at 48 kHz, no device
@@ -218,7 +218,7 @@ transport::stop(&mut session)?;
 With the `devices` feature the same session plays through the speakers:
 
 ```rust
-superb::devices::output(&mut session, None)?;   // the default output now drives the engine
+aura::devices::output(&mut session, None)?;   // the default output now drives the engine
 transport::start(&mut session)?;
 ```
 

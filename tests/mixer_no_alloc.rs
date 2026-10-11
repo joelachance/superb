@@ -1,11 +1,11 @@
 //! A prepared mixer processes without heap activity, even while parameters move.
 
-use superb::primitives::graph::nodes::{GainNode, SineNode};
-use superb::primitives::graph::{BlockProcessor, BlockTime};
-use superb::primitives::midi::MidiEventBuffer;
-use superb::primitives::mixer::{Mixer, SendTap};
-use superb::primitives::realtime::CountingAllocator;
-use superb::primitives::SampleRate;
+use aura::primitives::graph::nodes::{GainNode, SineNode};
+use aura::primitives::graph::{BlockProcessor, BlockTime};
+use aura::primitives::midi::MidiEventBuffer;
+use aura::primitives::mixer::{Mixer, SendTap};
+use aura::primitives::realtime::CountingAllocator;
+use aura::primitives::SampleRate;
 
 #[global_allocator]
 static ALLOC: CountingAllocator = CountingAllocator::system();
@@ -43,7 +43,7 @@ fn mixer_process_is_allocation_free() {
         .process(BlockTime::free_running(), 256, &midi, None)
         .unwrap();
 
-    superb::primitives::realtime::assert_no_alloc(|| {
+    aura::primitives::realtime::assert_no_alloc(|| {
         for i in 0..100 {
             pa.set_gain(0.5 + (i % 5) as f32 * 0.1);
             pa.set_pan((i % 7) as f32 / 3.0 - 1.0);

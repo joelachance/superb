@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::primitives::{Result, SuperbError};
+use crate::primitives::{AuraError, Result};
 
 use crate::primitives::plugins::{PluginDescriptor, PluginFormat};
 
@@ -85,14 +85,14 @@ pub fn scan_directory(dir: impl AsRef<Path>, format: PluginFormat) -> Result<Sca
         return Err(crate::primitives::plugins::vst3::unsupported());
     }
     if !cfg!(feature = "clap") {
-        return Err(SuperbError::Message(
+        return Err(AuraError::Message(
             "CLAP hosting is disabled (feature `clap`)".into(),
         ));
     }
     let mut report = ScanReport::default();
     let mut bundles = Vec::new();
     collect_bundles(dir, format.extension(), &mut bundles)
-        .map_err(|e| SuperbError::Message(format!("scan {}: {e}", dir.display())))?;
+        .map_err(|e| AuraError::Message(format!("scan {}: {e}", dir.display())))?;
     bundles.sort();
     for bundle in bundles {
         load_descriptors(&bundle, format, &mut report);
@@ -152,10 +152,10 @@ mod tests {
 
     #[test]
     fn default_paths_include_env_and_platform_entries() {
-        std::env::set_var("CLAP_PATH", "/tmp/superb-clap-a:/tmp/superb-clap-b");
+        std::env::set_var("CLAP_PATH", "/tmp/aura-clap-a:/tmp/aura-clap-b");
         let paths = default_search_paths(PluginFormat::Clap);
-        assert!(paths.contains(&PathBuf::from("/tmp/superb-clap-a")));
-        assert!(paths.contains(&PathBuf::from("/tmp/superb-clap-b")));
+        assert!(paths.contains(&PathBuf::from("/tmp/aura-clap-a")));
+        assert!(paths.contains(&PathBuf::from("/tmp/aura-clap-b")));
         assert!(
             paths.len() >= 3,
             "platform defaults follow the env entries: {paths:?}"
@@ -180,7 +180,7 @@ mod tests {
     #[cfg(feature = "clap")]
     #[test]
     fn broken_bundles_are_reported_not_fatal() {
-        let dir = std::env::temp_dir().join(format!("superb-plugins-scan-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("aura-plugins-scan-{}", std::process::id()));
         let nested = dir.join("nested");
         std::fs::create_dir_all(&nested).unwrap();
         std::fs::write(

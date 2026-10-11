@@ -11,10 +11,10 @@
 //! pushed (the stack takes ownership of the command):
 //!
 //! ```
-//! use superb::primitives::{SampleRate, TimeDuration, TimePosition};
-//! use superb::primitives::session::commands::{AddClip, AddTrack, MoveClip};
-//! use superb::primitives::session::{Clip, ClipSource, Memory, Track, TrackKind};
-//! use superb::primitives::undo::UndoStack;
+//! use aura::primitives::{SampleRate, TimeDuration, TimePosition};
+//! use aura::primitives::session::commands::{AddClip, AddTrack, MoveClip};
+//! use aura::primitives::session::{Clip, ClipSource, Memory, Track, TrackKind};
+//! use aura::primitives::undo::UndoStack;
 //!
 //! let mut memory = Memory::new("demo", SampleRate::HZ_48K);
 //! let mut history = UndoStack::new();
@@ -45,7 +45,7 @@
 use crate::primitives::transport::LoopRange;
 use crate::primitives::undo::{CoalesceKey, Command, PropertyEdit};
 use crate::primitives::{
-    BeatPosition, ClipId, InsertId, MarkerId, Result, SendId, SuperbError, TimeDuration,
+    AuraError, BeatPosition, ClipId, InsertId, MarkerId, Result, SendId, TimeDuration,
     TimePosition, TimeSignature, TrackId,
 };
 
@@ -117,8 +117,8 @@ pub mod keys {
     pub const INSERT_PARAM_BASE: u64 = 1 << 32;
 }
 
-fn not_applied() -> SuperbError {
-    SuperbError::Message("command has not been applied".into())
+fn not_applied() -> AuraError {
+    AuraError::Message("command has not been applied".into())
 }
 
 // ---------------------------------------------------------------------------
@@ -816,7 +816,7 @@ impl Command<Memory> for TrimClip {
     fn apply(&mut self, memory: &mut Memory) -> Result<()> {
         let length = TimeDuration::from_samples(self.end.samples() - self.start.samples());
         if length.samples() <= 0 {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "clip trim (end must be after start)",
             });
         }
@@ -908,7 +908,7 @@ impl Command<Memory> for SplitClip {
         let track = memory.clip_track(self.id)?;
         let clip = memory.clip(self.id)?;
         if self.at <= clip.start() || self.at >= clip.end() {
-            return Err(SuperbError::InvalidArgument {
+            return Err(AuraError::InvalidArgument {
                 what: "clip split (must fall inside the clip)",
             });
         }
@@ -1194,7 +1194,7 @@ impl Command<Memory> for RemoveTempo {
             .iter()
             .find(|p| p.beat == self.beat)
             .map(|p| (p.bpm, p.ramp))
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "tempo change",
                 id: self.beat.beats().to_bits(),
             })?;
@@ -1268,12 +1268,12 @@ impl Command<Memory> for SetMeter {
 /// and keeps its numbers in MIDI range.
 fn check_note(note: &MidiNote) -> Result<()> {
     if note.beat.is_nan() || note.beat < 0.0 || note.length.is_nan() || note.length <= 0.0 {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "a note starts at or after the clip start and has a length",
         });
     }
     if note.note > 127 || note.velocity == 0 || note.velocity > 127 || note.channel > 15 {
-        return Err(SuperbError::InvalidArgument {
+        return Err(AuraError::InvalidArgument {
             what: "note 0..=127, velocity 1..=127, channel 0..=15",
         });
     }
@@ -1284,7 +1284,7 @@ fn check_note(note: &MidiNote) -> Result<()> {
 fn notes_mut(memory: &mut Memory, clip: ClipId) -> Result<&mut Vec<MidiNote>> {
     match &mut memory.clip_mut(clip)?.source {
         ClipSource::Midi { notes } => Ok(notes),
-        _ => Err(SuperbError::InvalidArgument {
+        _ => Err(AuraError::InvalidArgument {
             what: "only a MIDI clip holds notes",
         }),
     }
@@ -1351,7 +1351,7 @@ impl Command<Memory> for AddNote {
         let i = notes
             .iter()
             .position(|n| *n == self.note)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "note",
                 id: u64::from(self.note.note),
             })?;
@@ -1386,7 +1386,7 @@ impl Command<Memory> for RemoveNote {
         let i = notes
             .iter()
             .position(|n| *n == self.note)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "note",
                 id: u64::from(self.note.note),
             })?;
@@ -1436,7 +1436,7 @@ impl Command<Memory> for ChangeNote {
         let i = notes
             .iter()
             .position(|n| *n == self.from)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "note",
                 id: u64::from(self.from.note),
             })?;
@@ -1451,7 +1451,7 @@ impl Command<Memory> for ChangeNote {
         let i = notes
             .iter()
             .position(|n| *n == self.to)
-            .ok_or(SuperbError::NotFound {
+            .ok_or(AuraError::NotFound {
                 kind: "note",
                 id: u64::from(self.to.note),
             })?;
@@ -1705,7 +1705,7 @@ pub fn set_track_volume_db(id: TrackId, gain_db: f32) -> PropertyEdit<Memory, f3
         |t| t.state.volume_db,
         |t, v| {
             if !v.is_finite() {
-                return Err(SuperbError::InvalidArgument { what: "gain_db" });
+                return Err(AuraError::InvalidArgument { what: "gain_db" });
             }
             t.state.volume_db = v;
             Ok(())
@@ -1723,7 +1723,7 @@ pub fn set_track_pan(id: TrackId, pan: f32) -> PropertyEdit<Memory, f32> {
         |t| t.state.pan,
         |t, v| {
             if !(-1.0..=1.0).contains(&v) {
-                return Err(SuperbError::InvalidArgument { what: "pan" });
+                return Err(AuraError::InvalidArgument { what: "pan" });
             }
             t.state.pan = v;
             Ok(())
@@ -1834,7 +1834,7 @@ pub fn set_send_level_db(id: SendId, level_db: f32) -> PropertyEdit<Memory, f32>
         |s| s.state.level_db,
         |s, v| {
             if !v.is_finite() {
-                return Err(SuperbError::InvalidArgument { what: "level_db" });
+                return Err(AuraError::InvalidArgument { what: "level_db" });
             }
             s.state.level_db = v;
             Ok(())

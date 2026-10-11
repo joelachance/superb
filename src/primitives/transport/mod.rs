@@ -1,6 +1,6 @@
 //! # primitives::transport
 //!
-//! The playhead and musical clock of the Superb DAW SDK.
+//! The playhead and musical clock of the Aura DAW SDK.
 //!
 //! * [`TempoMap`] — piecewise-constant tempo changes plus time-signature
 //!   changes, with exact conversions between samples, seconds, beats and
@@ -12,8 +12,8 @@
 //!   loop boundaries so every node sees a contiguous timeline slice.
 //!
 //! ```
-//! use superb::primitives::{SampleRate, TimePosition};
-//! use superb::primitives::transport::{LoopRange, Transport};
+//! use aura::primitives::{SampleRate, TimePosition};
+//! use aura::primitives::transport::{LoopRange, Transport};
 //!
 //! let mut t = Transport::new(SampleRate::HZ_48K, 120.0);
 //! t.set_loop(Some(LoopRange::new(

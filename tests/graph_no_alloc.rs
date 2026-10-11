@@ -1,16 +1,16 @@
 //! Proves that `AudioGraph::process` performs no heap operations once prepared.
 
+use aura::primitives::buffers::PlanarBuffer;
 use std::sync::Arc;
-use superb::primitives::buffers::PlanarBuffer;
 
-use superb::primitives::graph::nodes::{
+use aura::primitives::graph::nodes::{
     ClickNode, ClickParams, DelayNode, GainNode, LiveInputNode, MonoSynthNode, PassThroughNode,
     SineNode,
 };
-use superb::primitives::graph::{AudioGraph, BlockTime, MidiPort};
-use superb::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
-use superb::primitives::realtime::CountingAllocator;
-use superb::primitives::{SampleRate, TimePosition};
+use aura::primitives::graph::{AudioGraph, BlockTime, MidiPort};
+use aura::primitives::midi::{MidiChannel, MidiEvent, MidiEventBuffer, MidiMessage};
+use aura::primitives::realtime::CountingAllocator;
+use aura::primitives::{SampleRate, TimePosition};
 
 #[global_allocator]
 static ALLOC: CountingAllocator = CountingAllocator::system();
@@ -70,7 +70,7 @@ fn process_is_allocation_free() {
         rolling: true,
         ..BlockTime::free_running()
     };
-    superb::primitives::realtime::assert_no_alloc(|| {
+    aura::primitives::realtime::assert_no_alloc(|| {
         for i in 0..64 {
             let frames = if i % 3 == 0 { 512 } else { 480 };
             input.set_frames(frames).unwrap();

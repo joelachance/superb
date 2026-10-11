@@ -11,14 +11,14 @@
 //! cargo run --example session_undo
 //! ```
 
-use superb::primitives::session::commands::{
+use aura::primitives::session::commands::{
     self, AddClip, AddMarker, AddSend, AddTrack, MoveClip, SetTempo, SetTrackOutput,
 };
-use superb::primitives::session::{
+use aura::primitives::session::{
     Clip, ClipSource, Marker, Memory, MidiNote, Track, TrackKind, TrackSend,
 };
-use superb::primitives::undo::UndoStack;
-use superb::primitives::{BeatPosition, Result, SampleRate, TimeDuration, TimePosition};
+use aura::primitives::undo::UndoStack;
+use aura::primitives::{BeatPosition, Result, SampleRate, TimeDuration, TimePosition};
 
 // Helper: print a one-line snapshot of memory + undo/redo tip labels.
 // `&Memory` / `&UndoStack` = shared borrows (read-only).
@@ -172,7 +172,7 @@ fn main() -> Result<()> {
         describe(&memory, &history);
     }
 
-    let path = "session_undo.superb.json";
+    let path = "session_undo.aura.json";
     memory.save(path)?;
     // mark_clean remembers this revision as the last saved ("not dirty").
     history.mark_clean();

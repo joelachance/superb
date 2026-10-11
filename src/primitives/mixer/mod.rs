@@ -5,7 +5,7 @@
 //! * [`Mixer`] — owns a graph and wires **tracks**, **buses**, a **master**
 //!   bus and **sends** into it. Implements
 //!   [`BlockProcessor`](crate::primitives::graph::BlockProcessor) so it drops straight
-//!   into `superb::primitives::io::Engine`.
+//!   into `aura::primitives::io::Engine`.
 //! * [`StripParams`] — the lock-free control surface of a track or bus:
 //!   gain, pan, mute, solo and peak meters. Cloned `Arc`s go to the UI
 //!   thread; the audio thread only reads atomics.
@@ -19,11 +19,11 @@
 //! the inserts and before the fader; post-fader sends tap the strip output.
 //!
 //! ```
-//! use superb::primitives::SampleRate;
-//! use superb::primitives::graph::nodes::ConstantNode;
-//! use superb::primitives::graph::{BlockProcessor, BlockTime};
-//! use superb::primitives::midi::MidiEventBuffer;
-//! use superb::primitives::mixer::Mixer;
+//! use aura::primitives::SampleRate;
+//! use aura::primitives::graph::nodes::ConstantNode;
+//! use aura::primitives::graph::{BlockProcessor, BlockTime};
+//! use aura::primitives::midi::MidiEventBuffer;
+//! use aura::primitives::mixer::Mixer;
 //!
 //! let mut mixer = Mixer::new(2);
 //! let drums = mixer.add_track("drums");

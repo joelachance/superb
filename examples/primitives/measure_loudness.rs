@@ -15,9 +15,9 @@
 //! cargo run --example measure_loudness
 //! ```
 
-use superb::prelude::*;
-use superb::primitives::analysis::{meter, offset, silence};
-use superb::primitives::buffers::gain::{db_to_linear, linear_to_db};
+use aura::prelude::*;
+use aura::primitives::analysis::{meter, offset, silence};
+use aura::primitives::buffers::gain::{db_to_linear, linear_to_db};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;

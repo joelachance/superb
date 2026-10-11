@@ -52,7 +52,7 @@ property edits. `Memory::allocate_insert_id` mints IDs.
   `TempoSnapshot`) — primitive-only, `serde` types with a `format_version`.
   `Memory::snapshot` / `from_snapshot` / `to_json` / `from_json` /
   `save` / `load`.
-* `commands` — `superb::primitives::undo::Command<Session>` implementations: `AddTrack`,
+* `commands` — `aura::primitives::undo::Command<Session>` implementations: `AddTrack`,
   `RemoveTrack`, `MoveTrack`, `SetTrackOutput`, `AddSend`, `RemoveSend`,
   `AddClip`, `RemoveClip`, `MoveClip`, `ResizeClip`, `AddMarker`,
   `RemoveMarker`, `MoveMarker`, `SetTempo`, `SetLoopRange`, plus
@@ -63,10 +63,10 @@ property edits. `Memory::allocate_insert_id` mints IDs.
 ## Usage
 
 ```rust
-use superb::primitives::{SampleRate, TimeDuration, TimePosition};
-use superb::primitives::session::commands::{AddClip, AddTrack, MoveClip};
-use superb::primitives::session::{Clip, ClipSource, Session, Track, TrackKind};
-use superb::primitives::undo::UndoStack;
+use aura::primitives::{SampleRate, TimeDuration, TimePosition};
+use aura::primitives::session::commands::{AddClip, AddTrack, MoveClip};
+use aura::primitives::session::{Clip, ClipSource, Session, Track, TrackKind};
+use aura::primitives::undo::UndoStack;
 
 let mut session = Memory::new("demo", SampleRate::HZ_48K);
 let mut history = UndoStack::new();
@@ -105,10 +105,10 @@ Direct (non-undoable) editing uses the same verbs on `Memory`:
 Routing lives in the memory too:
 
 ```rust
-use superb::primitives::SampleRate;
-use superb::primitives::session::commands::{AddSend, SetTrackOutput, set_send_level_db};
-use superb::primitives::session::{Session, TrackKind, TrackSend};
-use superb::primitives::undo::UndoStack;
+use aura::primitives::SampleRate;
+use aura::primitives::session::commands::{AddSend, SetTrackOutput, set_send_level_db};
+use aura::primitives::session::{Session, TrackKind, TrackSend};
+use aura::primitives::undo::UndoStack;
 
 let mut session = Memory::new("routing", SampleRate::HZ_48K);
 let mut history = UndoStack::new();
@@ -126,7 +126,7 @@ history.push(&mut session, set_send_level_db(send, -12.0)).unwrap();
 assert_eq!(memory.send(send).unwrap().state.level_db, -12.0);
 
 // Removing the verb bus drops the send; undo puts both back.
-history.push(&mut session, superb::primitives::session::commands::RemoveTrack::new(verb)).unwrap();
+history.push(&mut session, aura::primitives::session::commands::RemoveTrack::new(verb)).unwrap();
 assert_eq!(session.send_count(), 0);
 history.undo(&mut session).unwrap();
 assert_eq!(session.send_track(send).unwrap(), vox);
@@ -154,7 +154,7 @@ the IDs present.
 None — nothing in this module is meant for the audio thread. Every mutating
 method may allocate. Keep the session on the UI/memory thread and push
 derived parameter changes to the engine through `Arc<AtomicF32>` handles
-or `superb::primitives::graph::live`.
+or `aura::primitives::graph::live`.
 
 ## Limitations / next
 
@@ -173,8 +173,8 @@ saving it as JSON and reloading it.
 ## From memory to mixer
 
 The `Memory` and the live [`Mixer`](mixer.md) use separate `TrackId` /
-`SendId` namespaces. `superb::session::steps::build_mixer` builds a fresh
+`SendId` namespaces. `aura::session::steps::build_mixer` builds a fresh
 mixer from a `Memory` (a strip per track, a node per clip) and returns the
-live controls keyed by the memory's ids; `superb::export` runs such a mixer
+live controls keyed by the memory's ids; `aura::export` runs such a mixer
 offline. See `docs/flows/session.md` and the `session_steps` example.
 
