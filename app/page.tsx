@@ -15,7 +15,7 @@ export default function Home() {
       <footer className="mt-auto p-6">
         <p className="m-0 text-sm leading-none text-black">Superb</p>
         <p
-          className={`${berkeleyMono.className} m-0 mt-2 text-xs leading-none text-black`}
+          className={`${berkeleyMono.className} m-0 mt-2 text-[10px] leading-none text-black`}
         >
           © 2026 Most Fun Corporation
         </p>
