@@ -44,8 +44,8 @@ export function WaveLine() {
       farMix += (far - farMix) * 0.18;
 
       const closeness = (1 - farMix) ** 2;
-      const amplitude = 0.2 + closeness * 55.8;
-      const wavelength = 320;
+      const amplitude = 0.15 + closeness * 22;
+      const wavelength = 140;
       const speed = 0.1 + farMix * 1.05;
       phase += speed * (dt / 16.67);
 
