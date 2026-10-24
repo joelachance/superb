@@ -2,11 +2,177 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 
+:root {
+  --color-fd-background: #fff;
+  --color-fd-foreground: #000;
+  --color-fd-muted: #f4f3f2;
+  --color-fd-muted-foreground: #767676;
+  --color-fd-popover: #fff;
+  --color-fd-popover-foreground: #000;
+  --color-fd-card: #f4f3f2;
+  --color-fd-card-foreground: #000;
+  --color-fd-border: #c8c8c8;
+  --color-fd-primary: #000;
+  --color-fd-primary-foreground: #fff;
+  --color-fd-secondary: #f4f3f2;
+  --color-fd-secondary-foreground: #000;
+  --color-fd-accent: #f4f3f2;
+  --color-fd-accent-foreground: #000;
+  --color-fd-ring: #000;
+  --color-fd-overlay: rgb(0 0 0 / 20%);
+}
+
 html {
   scrollbar-gutter: stable;
+}
+
+html,
+body {
+  background: #fff;
+  color: #000;
+  font-family: var(--font-berkeley), ui-monospace, monospace;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: #000;
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 1px solid #000;
+  outline-offset: 3px;
+}
+
+.wordmark {
+  font-family: var(--font-radwave), sans-serif;
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+}
+
+h1.display {
+  font-family: var(--font-radwave), sans-serif;
+  font-weight: 400;
+  font-size: 32px;
+  letter-spacing: 0.04em;
+  line-height: 1.15;
+}
+
+.home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 48px 28px;
+  text-align: center;
+}
+
+.home .wordmark {
+  font-size: 42px;
+}
+
+.home p {
+  max-width: 76ch;
+  margin: 0;
+  line-height: 1.7;
+  color: #767676;
+}
+
+.home-links {
+  display: flex;
+  gap: 18px;
+}
+
+.home-links a {
+  color: #000;
+  text-decoration: none;
+  border-bottom: 1px solid #c8c8c8;
+  padding-bottom: 3px;
+}
+
+.home-links a:hover {
+  border-bottom-color: #000;
+}
+
+code,
+pre,
+kbd,
+button {
+  font-family: var(--font-berkeley), ui-monospace, monospace;
+  border-radius: 0;
 }
 
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* The command palette is type on a white panel. The overlay around it stays. */
+[data-search-full] {
+  border: 0;
+  background: transparent;
+  width: auto;
+  max-width: none;
+  padding: 0;
+  gap: 8px;
+}
+
+[data-search-full]:hover {
+  background: transparent;
+  color: #000;
+}
+
+[data-search-full] > div {
+  margin-inline-start: 0;
+}
+
+[data-search-full] kbd {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+#fd-search-dialog-content {
+  border: 0;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: none;
+  padding: 20px 22px 16px;
+}
+
+#fd-search-dialog-content > * {
+  border-bottom: 0;
+  padding: 0;
+}
+
+#fd-search-dialog-content #fd-search-list {
+  padding: 12px 0 0;
+}
+
+#fd-search-dialog-content [role="option"] {
+  padding-inline: 0;
+}
+
+#fd-search-dialog-content button {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#fd-search-dialog-content [role="option"][aria-selected="true"] {
+  background: transparent;
+  color: #000;
+}
+
+#fd-search-dialog-content code,
+#fd-search-dialog-content pre {
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
