@@ -12,7 +12,9 @@
 //! cargo run --example midi_keys --features midi-io   # also lists ports
 //! ```
 
-use superb::prelude::*;
+use superb::primitives::midi::{MidiChannel, MidiMessage};
+use superb::primitives::session::TrackKind;
+use superb::primitives::{Result, SampleRate};
 use superb::{midi, session, track, transport};
 
 fn main() -> Result<()> {

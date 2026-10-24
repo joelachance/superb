@@ -14,7 +14,7 @@
 //! ```
 
 use superb::devices;
-use superb::prelude::*;
+use superb::primitives::Result;
 
 /// `max_channels` is 0 when the host does not say.
 fn channels(max: usize) -> String {

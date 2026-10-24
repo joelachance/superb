@@ -15,9 +15,13 @@
 //! directory. Everything file-related lives behind `superb`'s `files`
 //! feature, which this example enables in its `Cargo.toml`.
 
-use superb::prelude::*;
+use superb::primitives::graph::nodes::SineNode;
 use superb::primitives::io::files::{bounce_wav, decode, resampled_frames};
 use superb::primitives::io::wav::WavFormat;
+use superb::primitives::io::Engine;
+use superb::primitives::mixer::Mixer;
+use superb::primitives::transport::Transport;
+use superb::primitives::{Result, SampleRate};
 
 fn main() -> Result<()> {
     // SampleRate is a newtype around Hz — HZ_48K is the usual DAW default.

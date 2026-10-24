@@ -16,8 +16,13 @@
 //! cargo run --example midi_route
 //! ```
 
-use superb::prelude::*;
-use superb::primitives::graph::MidiPort;
+use superb::primitives::buffers::PlanarBuffer;
+use superb::primitives::graph::nodes::{MonoSynthNode, PassThroughNode};
+use superb::primitives::graph::{AudioGraph, MidiPort};
+use superb::primitives::io::Engine;
+use superb::primitives::midi::{MidiChannel, MidiMessage, TimestampedMessage};
+use superb::primitives::transport::Transport;
+use superb::primitives::{Result, SampleRate, SuperbError};
 
 fn main() -> Result<()> {
     let sample_rate = SampleRate::HZ_48K;

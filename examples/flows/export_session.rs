@@ -14,8 +14,10 @@
 //! ```
 
 use superb::export::{self, Bounce};
-use superb::prelude::*;
+use superb::primitives::buffers::PlanarBuffer;
 use superb::primitives::io::wav::{self, WavFormat};
+use superb::primitives::session::TrackKind;
+use superb::primitives::{Result, SampleRate, TimeDuration, TimePosition};
 use superb::{clip, session, track, transport};
 
 fn main() -> Result<()> {

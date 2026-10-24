@@ -15,8 +15,9 @@
 
 use std::time::{Duration, Instant};
 
-use superb::prelude::*;
 use superb::primitives::midi::input::{list_input_ports, MidiInputBridge};
+use superb::primitives::midi::TimestampedMessage;
+use superb::primitives::Result;
 
 fn main() -> Result<()> {
     // Ask the OS (via midir) for available MIDI input ports.

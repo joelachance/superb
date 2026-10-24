@@ -14,8 +14,9 @@
 //! cargo run --example new_session
 //! ```
 
-use superb::prelude::*;
-use superb::primitives::session::MidiNote;
+use superb::primitives::buffers::PlanarBuffer;
+use superb::primitives::session::{MidiNote, TrackKind};
+use superb::primitives::{BeatPosition, Result, SampleRate, TimePosition};
 use superb::{clip, marker, session, track};
 
 fn main() -> Result<()> {

@@ -13,8 +13,11 @@
 //! cargo run --example metronome_count_in
 //! ```
 
-use superb::prelude::*;
+use superb::primitives::buffers::PlanarBuffer;
 use superb::primitives::io::capture::capture_queue;
+use superb::primitives::session::TrackKind;
+use superb::primitives::transport::TransportState;
+use superb::primitives::{Result, SampleRate, TimePosition};
 use superb::{metronome, record, session, track, transport};
 
 fn main() -> Result<()> {

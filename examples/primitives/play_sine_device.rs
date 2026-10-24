@@ -13,8 +13,12 @@
 
 use std::time::Duration;
 
-use superb::prelude::*;
+use superb::primitives::graph::nodes::{GainNode, SineNode};
+use superb::primitives::graph::AudioGraph;
 use superb::primitives::io::device::{output_devices, run_engine, OutputConfig};
+use superb::primitives::io::Engine;
+use superb::primitives::transport::Transport;
+use superb::primitives::{Result, SampleRate};
 
 fn main() -> Result<()> {
     // List every output device cpal can see; mark the system default.

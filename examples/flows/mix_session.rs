@@ -14,7 +14,11 @@
 //! cargo run --example mix_session
 //! ```
 
-use superb::prelude::*;
+use superb::primitives::buffers::PlanarBuffer;
+use superb::primitives::mixer::{PanLaw, SendTap};
+use superb::primitives::session::TrackKind;
+use superb::primitives::{Result, SampleRate, TimePosition};
+use superb::session::Session;
 use superb::{clip, send, session, track, transport};
 
 /// Renders four blocks and returns the peak of the last one, so ramps have

@@ -11,9 +11,13 @@
 //! cargo run --example sine_through_graph
 //! ```
 
-use superb::prelude::*;
+use superb::primitives::graph::nodes::{GainNode, SineNode};
 use superb::primitives::io::offline;
 use superb::primitives::io::wav::{self, WavFormat};
+use superb::primitives::io::Engine;
+use superb::primitives::mixer::Mixer;
+use superb::primitives::transport::{LoopRange, Transport};
+use superb::primitives::{BeatPosition, Result, SampleRate, TimePosition};
 
 fn main() -> Result<()> {
     let sample_rate = SampleRate::HZ_48K;

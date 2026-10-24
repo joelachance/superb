@@ -11,7 +11,8 @@
 //! cargo run --example transport_tempo_map
 //! ```
 
-use superb::prelude::*;
+use superb::primitives::transport::{LoopRange, TempoMap, Transport};
+use superb::primitives::{BeatPosition, Result, SampleRate, TimePosition, TimeSignature};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;

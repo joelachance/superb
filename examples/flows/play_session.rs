@@ -15,7 +15,10 @@
 //! cargo run --example play_session --features devices   # also plays on speakers
 //! ```
 
-use superb::prelude::*;
+use superb::primitives::buffers::PlanarBuffer;
+use superb::primitives::session::TrackKind;
+use superb::primitives::transport::LoopRange;
+use superb::primitives::{Result, SampleRate, TimePosition};
 use superb::{clip, session, track, transport};
 
 fn main() -> Result<()> {

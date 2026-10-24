@@ -15,8 +15,10 @@
 //! cargo run --example live_graph_edit
 //! ```
 
-use superb::prelude::*;
-use superb::primitives::graph::live_pair;
+use superb::primitives::graph::nodes::{GainNode, PassThroughNode, SineNode};
+use superb::primitives::graph::{live_pair, BlockTime, LiveGraph};
+use superb::primitives::midi::MidiEventBuffer;
+use superb::primitives::{Result, SampleRate};
 
 fn main() -> Result<()> {
     let sample_rate = SampleRate::HZ_48K;

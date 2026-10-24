@@ -18,9 +18,11 @@
 //! cargo run --example record_take
 //! ```
 
-use superb::prelude::*;
+use superb::primitives::buffers::PlanarBuffer;
 use superb::primitives::io::capture::capture_queue;
 use superb::primitives::io::{EngineCommand, LiveInput};
+use superb::primitives::session::{Input, TrackKind};
+use superb::primitives::{Result, SampleRate, TimePosition};
 use superb::{record, session, track, transport};
 
 fn main() -> Result<()> {

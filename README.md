@@ -108,7 +108,9 @@ language models too (`/llms.txt`, `/llms-full.txt`).
 ## Quick start
 
 ```rust
-use superb::prelude::*;
+use superb::primitives::buffers::PlanarBuffer;
+use superb::primitives::session::TrackKind;
+use superb::primitives::{SampleRate, TimePosition};
 use superb::{clip, session, track, transport};
 
 let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;   // a folder
