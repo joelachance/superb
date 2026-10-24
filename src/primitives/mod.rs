@@ -1,8 +1,8 @@
 //! # primitives
 //!
-//! Foundation types shared by every Superb SDK crate. This crate has **no
-//! dependencies** and performs **no I/O**; everything here is `Copy`-friendly
-//! and safe to use on the audio thread.
+//! Shared types the rest of `superb` is built from: sample rate, time, IDs
+//! and [`SuperbError`]. The engine modules live beside them. These root types
+//! perform no I/O.
 //!
 //! * [`SampleRate`] — integer sample rate with float helpers.
 //! * [`TimePosition`] / [`TimeDuration`] — sample-accurate positions on the

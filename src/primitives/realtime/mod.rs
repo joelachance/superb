@@ -1,8 +1,8 @@
 //! # primitives::realtime
 //!
-//! Real-time safety primitives for the Superb DAW SDK.
+//! Real-time safety primitives.
 //!
-//! The audio thread must never block, allocate, or take a lock. This crate
+//! The audio thread must never block, allocate, or take a lock. This module
 //! provides the building blocks that make that discipline practical:
 //!
 //! * [`spsc`] — a wait-free single-producer / single-consumer ring buffer for

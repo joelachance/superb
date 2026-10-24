@@ -90,7 +90,7 @@ column is what not to say in code, docs or UI text.
 - **LUFS** — Loudness units relative to full scale (`analysis::meter::Loudness`): what the ear hears over time rather than what the meter's needle touches. Momentary (400 ms), short-term (3 s), integrated (the whole programme, gated so silence does not count). Podcasts deliver at −16, broadcast at −23.
 - **Offset** — How many samples one recording lags another (`analysis::offset::estimate`), found from the audio itself, with a confidence; what lines a second microphone or a remote guest up.
 - **Recover** — Placing the recordings a crash left unfinished: their files are still there with their tags; `record::unfinished` lists them and `record::recover` finishes the headers and places the clips. Nothing is deleted.
-- **Insert** — An effect or instrument sitting in a track's signal path, in order. A primitive today (the memory stores it); the flow for it comes back with plugins.
+- **Insert** — An effect or instrument sitting in a track's signal path, in order. The memory stores it (`Insert`, edited by `AddInsert` and the insert commands). `session::steps::build_mixer` does not load it, and there is no flow for it yet. Place a `PluginNode` yourself, or call `Mixer::add_insert` on a mixer you built.
 - **State vs. edit** — A track's mute, solo, arm, monitor and input, a clip's mute, a send's on/off, whether playback loops, the click and its count-in, and where the playhead is are state: heard at the next block, never in the undo history, never in `memory.json`, and saved only where the application says with `session::state_file` (a `state.json` beside the memory, say). Everything else you change is an edit: undoable, and saved with `session::save`.
 
 ## Plugin formats (short map)

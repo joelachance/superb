@@ -24,7 +24,9 @@ position and tempo.
 * `Bbt` — 1-based bar/beat, 0-based tick (`TICKS_PER_QUARTER` = 960 ticks per
   quarter note) position for display and grid snapping.
 * `Transport` — stopped/playing/recording state, sample-accurate position,
-  optional `LoopRange`; owns the `TempoMap`.
+  optional `LoopRange`; owns the `TempoMap`. `snapshot()` returns a
+  `TransportSnapshot`: state, position in samples, seconds and beats,
+  `Bbt`, bpm, and whether looping is on.
 * `LoopRange` — a half-open `[start, end)` sample range.
 * `Segment` / `Segments` — the allocation-free iterator `Transport::advance`
   returns, splitting a block at loop boundaries.

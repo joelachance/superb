@@ -1,7 +1,6 @@
 //! # primitives::midi
 //!
-//! MIDI 1.0 messages and real-time-safe event plumbing for the Superb DAW
-//! SDK.
+//! MIDI 1.0 messages and real-time-safe event plumbing.
 //!
 //! * [`MidiChannel`] — validated 0-based/1-based MIDI channel newtype.
 //! * [`MidiMessage`] — a decoded channel-voice or system message, `Copy` and

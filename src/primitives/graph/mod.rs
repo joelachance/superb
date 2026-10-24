@@ -1,6 +1,6 @@
 //! # primitives::graph
 //!
-//! The audio process graph of the Superb DAW SDK.
+//! The audio process graph.
 //!
 //! * [`Node`] — the trait every processor implements: `prepare` once (may
 //!   allocate), `process` per block (must not allocate).

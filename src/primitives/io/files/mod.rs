@@ -1,15 +1,16 @@
 //! Audio file decoding, resampling and bounce/export helpers (feature `files`).
 //!
 //! **MPL-2.0 boundary: symphonia is confined to `decode.rs`.** This module
-//! and every other Superb source file only see Superb types
+//! and every other source file only sees superb types
 //! ([`PlanarBuffer`], [`SampleRate`], [`SuperbError`](crate::primitives::SuperbError));
 //! the symphonia
 //! crate (MPL-2.0, file-level copyleft) is imported by exactly one file,
-//! `src/files/decode.rs`, which is the only file subject to that licence's
+//! `src/primitives/io/files/decode.rs`, which is the only file subject to that licence's
 //! per-file obligations. A crate-wide test enforces this.
 //!
-//! * [`decode`] / [`decode_from`] / [`decode_bytes`] — any container/codec
-//!   symphonia was built with (WAV + FLAC by default) into an [`AudioFile`].
+//! * [`decode`] / [`decode_from`] / [`decode_bytes`] — WAV, AIFF, FLAC, ALAC,
+//!   MP3, AAC (MP4/M4A), Ogg Vorbis, CAF and Matroska (symphonia is built
+//!   with `all-codecs` and `all-formats`) into an [`AudioFile`].
 //! * [`decode_at_rate`] — decode and resample to a target rate in one call.
 //! * [`resample`] — offline sample-rate conversion with rubato (MIT).
 //! * [`bounce_wav`] / [`export_wav`] — render an [`Engine`](crate::primitives::io::Engine)

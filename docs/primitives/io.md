@@ -360,11 +360,13 @@ let (mut tx, mut rx) = capture_queue(2, 512, 8)?;
 * **Writing is WAV only** (PCM16, PCM24 and float32; RF64 past 4 GiB). The
   `wav` module's own *reader* is equally plain; for extensible
   headers, FLAC and friends use `files::decode` (feature `files`).
-* **Decoding covers WAV + FLAC** in the default `files` build; MP3/AAC/
-  Vorbis/OGG/MP4 need extra symphonia features (and a licence review for
-  the patent-encumbered ones). Only the first audio track is read; no
-  seeking, streaming or partial reads — the whole file is decoded into
-  memory. No metadata (tags, cue points, loop markers) is surfaced yet.
+* **Decoding** (feature `files`) reads WAV, AIFF, FLAC, ALAC, MP3, AAC
+  (MP4/M4A), Ogg Vorbis, CAF and Matroska. Symphonia is built with
+  `all-codecs` and `all-formats`; there is no further feature to turn on.
+  Only the first audio track is read; no seeking, streaming or partial
+  reads — the whole file is decoded into memory. No metadata (tags, cue
+  points, loop markers) is surfaced. Without `files`, `wav::read` reads
+  WAV only.
 * **No encoders** other than WAV; no FLAC/OGG export.
 * **Resampling is offline only**: `resample` allocates and works on whole
   clips. A real-time (`process_into_buffer`-based, pre-allocated) variant

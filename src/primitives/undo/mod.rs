@@ -1,6 +1,6 @@
 //! # primitives::undo
 //!
-//! A coalescing undo/redo command stack for the Superb DAW SDK.
+//! A coalescing undo/redo command stack.
 //!
 //! * [`Command`] — a reversible edit of some memory type `T`: `apply`,
 //!   `revert`, an optional [`CoalesceKey`] and an optional `merge` so a run

@@ -4,8 +4,8 @@ Coalescing undo/redo command stack for memory edits.
 
 ## Purpose
 
-`primitives::undo` sits in front of any memory type `T` (typically
-`superb::primitives::session::Session`) on the UI thread. It knows nothing
+`primitives::undo` sits in front of any memory type `T` (for a session,
+`superb::primitives::session::Memory`) on the UI thread. It knows nothing
 about audio: mutations happen through `Command::apply` / `revert`, and nothing
 here is real-time safe.
 

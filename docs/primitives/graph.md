@@ -38,9 +38,12 @@ on this layer and the block loop in `primitives::io` drives it.
   (the engine's live audio input, when one is attached), sample rate,
   frame count, timeline position/tempo/rolling/wrapped state, the block's
   `MidiEventBuffer`, and `input_is_silent`.
-* `nodes` module — fixtures: `SineNode`, `GainNode` (click-free ramped gain),
-  `PassThroughNode`, `ConstantNode`, `SilenceNode`, `MonoSynthNode`,
-  `DelayNode` (fixed delay that reports itself as latency).
+* `nodes` — `SineNode`, `GainNode` (click-free ramped gain),
+  `PassThroughNode`, `MonoSynthNode`, `DelayNode` (a fixed delay that
+  reports itself as latency), and the test fixtures `ConstantNode` and
+  `SilenceNode`. The session builds `BufferPlayerNode`,
+  `ScheduledSynthNode`, `LiveInputNode` and `ClickNode` from this module;
+  see below.
 * `dynamics` module — compressor, true-peak limiter with lookahead, gate
   and expander, de-esser, leveler, as nodes driven by shared `Params`;
   see [dynamics.md](dynamics.md).
@@ -282,6 +285,12 @@ latency-compensation delay line (ring write + delayed read + mix, and
 * `ScheduledSynthNode` / `ScheduledNoteEvent` — monophonic sine synth
   driven by absolute-sample note on/off events (built from session MIDI
   clips via the session's wiring).
+* `LiveInputNode` — plays chosen channels of the engine's live input
+  (`ProcessContext::input`). `build_mixer` places one on each monitoring
+  audio track.
+* `ClickNode` / `ClickParams` — the metronome click, driven by the block's
+  beat position. `ClickParams` is the live level and on/off.
+  `build_mixer` places one on the master.
 
 ## Limitations / next
 
@@ -302,7 +311,7 @@ latency-compensation delay line (ring write + delayed read + mix, and
 * **Channel adaptation is a fixed rule, not configurable**: equal counts map
   1:1, mono producers fan out, mono consumers average, otherwise only the
   first `min(src, dst)` channels map (`mix_into`,
-  `src/primitives/graph/graph.rs`, tested by `channel_adaptation_rules`).
+  `src/primitives/graph/audio_graph.rs`, tested by `channel_adaptation_rules`).
 * Cycles are rejected at `connect` time (`SuperbError::Cycle`), so there is
   no feedback-delay-compensated loop support.
 * **Live editing swaps whole graphs.** After `publish()` the draft is empty,

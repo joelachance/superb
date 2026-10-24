@@ -1,6 +1,6 @@
 //! # primitives::automation
 //!
-//! Parameter envelopes and DAW-style automation modes for the Superb SDK.
+//! Parameter envelopes and DAW-style automation modes.
 //!
 //! * [`Envelope`] / [`EnvelopePoint`] / [`CurveShape`] — breakpoint curves
 //!   with hold, linear and tensioned segments; sample-accurate evaluation.

@@ -32,8 +32,12 @@ impl From<&PluginDescriptor> for PluginRef {
 ///
 /// The memory stores what is needed to recreate the effect: which plugin,
 /// its state (bypass and the parameter values the user has set), and the
-/// plugin's own saved preset. Turning this into a running node is the job
-/// of the session's steps, not the memory.
+/// plugin's own saved preset. Nothing in the crate turns this into a
+/// running node: [`session::steps::build_mixer`](crate::session::steps::build_mixer)
+/// does not read insert chains. Load the plugin and place a
+/// [`PluginNode`](crate::primitives::plugins::PluginNode), or call
+/// [`Mixer::add_insert`](crate::primitives::mixer::Mixer::add_insert) on a
+/// mixer you built.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Insert {
     pub(crate) id: InsertId,

@@ -28,6 +28,11 @@ A mixing console built on `superb::primitives::graph::AudioGraph`.
 * `PanLaw::{ConstantPower, Balance}` — tracks default to `ConstantPower`
   (−3 dB centre); buses and the master default to `Balance` (unity centre).
 * `StripNode` / `SendNode` — the graph nodes a strip and a send compile to.
+* `TrackInfo` / `BusInfo` / `SendInfo` — what `Mixer::track`, `bus` and
+  `send` report after a strip or send is built: its id, and the graph
+  nodes it was wired to (`input_node`, `strip_node`; a send also names its
+  track, bus and `SendTap`). `StripId::{Track, Bus}` names either kind of
+  strip, master included.
 
 ## Usage
 
@@ -56,7 +61,7 @@ where `connect_source` and pre-fader sends attach) followed by a `StripNode`
 (gain → pan → mute/solo → meter). Post-fader sends tap the strip node
 instead. This split is why `SendTap::PreFader` sends survive a track's mute
 and gain changes while `SendTap::PostFader` sends do not — see
-`sends_pre_and_post_fader` in `src/primitives/mixer/mixer.rs`.
+`sends_pre_and_post_fader` in `src/primitives/mixer/console.rs`.
 
 ## Real-time notes
 

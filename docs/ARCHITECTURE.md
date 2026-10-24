@@ -230,19 +230,22 @@ mentions. Decoding is whole-file and lenient: a truncated file yields the
 frames it has, a corrupt packet is skipped, an unrecognised container is
 an error. Writing is WAV only.
 
-**Plugins.** Hosted plugins enter the graph only as `PluginNode`, so
+**Plugins.** Hosted plugins enter a graph only as `PluginNode`, so
 scheduling, silence, MIDI routing and latency compensation treat them like
 built-ins. The CLAP host is the only FFI in the SDK; every unsafe block
 states its invariant, and the host is tested against an in-process plugin
 so no shared library is needed. `start_processing` is deferred to the
-first `process` and `stop_processing` to `deactivate`. The session stores a
-plugin reference, parameter values and saved state; the instance is
-recreated at every rebuild and the stored values re-applied.
+first `process` and `stop_processing` to `deactivate`. The memory stores a
+plugin reference, parameter values and saved preset on an `Insert`.
+`session::steps::rebuild` does not load those inserts or reapply their
+values. There is no plugins flow. A caller who wants a plugin in the
+signal path loads it and places a `PluginNode`, or calls
+`Mixer::add_insert` on a mixer they built themselves.
 
 **Rebuild.** A rebuild builds a whole new mixer and swaps it in; it never
 edits the running one. That keeps the audio thread's contract simple at
-the cost of resetting plugin tails and meters when the mixer's shape
-changes. Structural edits trigger it themselves: at once while a device
+the cost of resetting meters, and plugin tails when that mixer contains
+plugins. Structural edits trigger it themselves: at once while a device
 drives the engine, otherwise at the next start or render. Level edits and
 state changes do not rebuild because they go to the live handles directly.
 
@@ -267,7 +270,8 @@ but Rust. The CLAP host (`clap`) is on by default and can be turned off.
 ## Not there yet
 
 Duplex device streams. Re-stamping hardware MIDI onto the audio clock.
-A plugins flow (the host is a primitive). Incremental edits to a running mixer (a
+A plugins flow (the host is a primitive). Loading a track's stored inserts
+into the mixer on rebuild. Incremental edits to a running mixer (a
 rebuild replaces it). Loop recording. VST3 hosting. SysEx, MIDI Time Code and
 Standard MIDI Files. Encoders other than WAV. Per-clip automation lanes
 owned by the session. Multi-bus or sidechain nodes.

@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-/// Errors produced by Superb SDK crates.
+/// Errors produced by superb.
 ///
 /// The enum is intentionally small. No variant owns heap data except
 /// [`SuperbError::Message`], which is only ever constructed off the audio

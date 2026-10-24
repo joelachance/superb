@@ -1,6 +1,6 @@
 //! # primitives::buffers
 //!
-//! Audio block buffers for the Superb DAW SDK.
+//! Audio block buffers.
 //!
 //! * [`PlanarBuffer`] — one contiguous `f32` slice per channel. This is the
 //!   native layout of the process graph: DSP code operates on plain slices.

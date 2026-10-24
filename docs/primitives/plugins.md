@@ -104,7 +104,7 @@ on a machine with no plugins installed.
    `clap_ostream`/`clap_istream`.
 
 Everything is verified against an **in-process test plugin**
-(`src/clap/test_plugin.rs`, `cfg(test)`): a stereo gain written directly
+(`src/primitives/plugins/clap/test_plugin.rs`, `cfg(test)`): a stereo gain written directly
 against `clap-sys` with a `params` extension (one automatable + one hidden
 diagnostic parameter), `state`, `latency` (16 frames) and `audio-ports`. The
 tests cover descriptor parsing, params/flush/process, MIDI conversion, host

@@ -74,4 +74,4 @@ since `AudioGraph::process` calls them every block.
 * No buffer pooling/arena across nodes — `primitives::graph` allocates one input
   and one output `PlanarBuffer` per node in `prepare`.
 * `channel_pair_mut` only splits two *distinct* channels; there is no
-  general multi-channel split helper.
+  general multi-channel split helper. `planes_mut` walks every channel.

@@ -1,6 +1,6 @@
 //! # primitives::transport
 //!
-//! The playhead and musical clock of the Superb DAW SDK.
+//! The playhead and musical clock.
 //!
 //! * [`TempoMap`] — piecewise-constant tempo changes plus time-signature
 //!   changes, with exact conversions between samples, seconds, beats and

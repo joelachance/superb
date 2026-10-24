@@ -1,6 +1,6 @@
 //! # primitives::plugins
 //!
-//! Plugin hosting for the Superb DAW SDK.
+//! Plugin hosting.
 //!
 //! * [`PluginInstance`] — the format-agnostic contract a hosted plugin
 //!   fulfils: descriptor, audio port layout, parameters, activate/process,
