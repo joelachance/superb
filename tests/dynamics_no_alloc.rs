@@ -2,16 +2,16 @@
 
 use std::sync::Arc;
 
-use aura::primitives::buffers::PlanarBuffer;
-use aura::primitives::graph::dynamics::{
+use superb::primitives::buffers::PlanarBuffer;
+use superb::primitives::graph::dynamics::{
     Compressor, CompressorParams, DeEsser, DeEsserParams, Gate, GateParams, Leveler, LevelerParams,
     Limiter, LimiterParams,
 };
-use aura::primitives::graph::nodes::SineNode;
-use aura::primitives::graph::{AudioGraph, BlockTime};
-use aura::primitives::midi::MidiEventBuffer;
-use aura::primitives::realtime::CountingAllocator;
-use aura::primitives::SampleRate;
+use superb::primitives::graph::nodes::SineNode;
+use superb::primitives::graph::{AudioGraph, BlockTime};
+use superb::primitives::midi::MidiEventBuffer;
+use superb::primitives::realtime::CountingAllocator;
+use superb::primitives::SampleRate;
 
 #[global_allocator]
 static ALLOC: CountingAllocator = CountingAllocator::system();
@@ -42,7 +42,7 @@ fn a_chain_of_dynamics_processes_without_allocating() {
         .process(BlockTime::default(), 256, &midi, None)
         .unwrap();
 
-    aura::primitives::realtime::assert_no_alloc(|| {
+    superb::primitives::realtime::assert_no_alloc(|| {
         for i in 0..96u32 {
             // Parameters move while it runs, including the de-esser's
             // filter frequency, which is redesigned in place.

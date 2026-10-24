@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use crate::primitives::{AuraError, Result};
+use crate::primitives::{Result, SuperbError};
 
 use crate::primitives::undo::{CoalesceKey, Command};
 
@@ -381,7 +381,7 @@ impl<T: 'static> UndoStack<T> {
 
     fn ensure_no_group(&self, what: &'static str) -> Result<()> {
         if self.depth > 0 {
-            return Err(AuraError::Message(format!(
+            return Err(SuperbError::Message(format!(
                 "cannot {what} while an undo group is open"
             )));
         }
@@ -472,13 +472,13 @@ mod tests {
         }
         fn apply(&mut self, _: &mut Doc) -> Result<()> {
             if self.on_apply {
-                Err(AuraError::InvalidArgument { what: "apply" })
+                Err(SuperbError::InvalidArgument { what: "apply" })
             } else {
                 Ok(())
             }
         }
         fn revert(&mut self, _: &mut Doc) -> Result<()> {
-            Err(AuraError::InvalidArgument { what: "revert" })
+            Err(SuperbError::InvalidArgument { what: "revert" })
         }
     }
 

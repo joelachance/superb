@@ -12,9 +12,11 @@
 
 use std::sync::Arc;
 
-use aura::primitives::automation::{advance_block, AutomationLane, AutomationMode, EnvelopePoint};
-use aura::primitives::realtime::AtomicF32;
-use aura::primitives::{IdGenerator, TimePosition};
+use superb::primitives::automation::{
+    advance_block, AutomationLane, AutomationMode, EnvelopePoint,
+};
+use superb::primitives::realtime::AtomicF32;
+use superb::primitives::{IdGenerator, TimePosition};
 
 fn main() {
     // IdGenerator hands out unique IDs for lanes, nodes, tracks, etc.

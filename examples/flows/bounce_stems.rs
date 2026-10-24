@@ -2,7 +2,7 @@
 //! and every strip bounced to its own file in one pass.
 //!
 //! What you'll learn:
-//! - Sessions live side by side under a root, `~/aura` by default; an
+//! - Sessions live side by side under a root, `~/superb` by default; an
 //!   application that keeps them elsewhere names its own root
 //! - Every session folder has the same shape, and `session::layout` names
 //!   each part of it, so nothing hard-codes a path
@@ -14,22 +14,22 @@
 //! cargo run --example bounce_stems
 //! ```
 
-use aura::export::{self, Bounce, StemSource, Stems};
-use aura::prelude::*;
-use aura::session::{Layout, Root};
-use aura::{clip, session, track};
+use superb::export::{self, Bounce, StemSource, Stems};
+use superb::prelude::*;
+use superb::session::{Layout, Root};
+use superb::{clip, session, track};
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;
 
-    // Where sessions live. The default is `aura` in your home folder; this
+    // Where sessions live. The default is `superb` in your home folder; this
     // example keeps its session in the temp folder instead, the way an app
     // would honour a folder the user picked.
     println!(
         "sessions live in {} by default",
         Root::default().path().display()
     );
-    let root = Root::new(std::env::temp_dir().join("aura-example"));
+    let root = Root::new(std::env::temp_dir().join("superb-example"));
     let folder = root.folder("Bounce Stems");
     let _ = std::fs::remove_dir_all(&folder); // a fresh run every time
     let mut session = session::create(&folder, rate, 256)?;

@@ -137,7 +137,7 @@ REB = "; rebuilds the mixer (at once while a device plays, otherwise at the next
 # ---- session ----
 note("session::create", returns="the new `Session`, running an offline engine; nothing plays until `devices::output` or `session::steps::render_blocks`",
      errors="the folder cannot be created or `memory.json` cannot be written; a block size of zero",
-     undo=NONE, example='let mut session = session::create(Root::default().folder("My Show"), SampleRate::HZ_48K, 256)?;   // ~/aura/My Show/',
+     undo=NONE, example='let mut session = session::create(Root::default().folder("My Show"), SampleRate::HZ_48K, 256)?;   // ~/superb/My Show/',
      folder="where the session lives, usually `Root::folder(name)`; created now with `audio/`, `bounces/` and `stems/` inside; the session is named after it",
      sample_rate="the one sample rate everything in the session runs at", block_size="frames per engine block, the largest block any node sees")
 note("session::open", returns="the `Session` as saved: memory, routing, tempo, and the audio its clips refer to, read from `audio/`; state comes back only once `state_file` is named",
@@ -370,7 +370,7 @@ for flow, paths in FLOWS:
         types += t
     doc_path = ROOT / "docs" / "flows" / f"{flow}.md"
     text = doc_path.read_text()
-    ref = ["## Reference", "", f"Every function of the `{flow}` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.", ""]
+    ref = ["## Reference", "", f"Every function of the `{flow}` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.", ""]
     for v in verbs: ref.append(render_verb(flow, *v))
     ref_text = "\n".join(ref) + "\n" + render_types(types)
     # drop an older reference, then insert before "## Usage" (or append)

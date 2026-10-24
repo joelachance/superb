@@ -12,7 +12,7 @@
 //!   stems/<name>/   stem sets from export::stems, each with a manifest.json
 //! ```
 //!
-//! and sessions live side by side under a [`Root`]: `~/aura` unless the
+//! and sessions live side by side under a [`Root`]: `~/superb` unless the
 //! application keeps them elsewhere. A clip's audio key is a path relative
 //! to the session folder (`audio/vox 1.wav`). Recordings stream into
 //! `audio/` as they run, `save` writes whatever a clip refers to that is
@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 use crate::primitives::buffers::PlanarBuffer;
 use crate::primitives::io::wav::{self, WavFormat};
 use crate::primitives::session::ClipSource;
-use crate::primitives::{AuraError, Result, SampleRate};
+use crate::primitives::{Result, SampleRate, SuperbError};
 use crate::session::Session;
 
 /// The memory's file inside the session folder.
@@ -38,9 +38,9 @@ pub(crate) const BOUNCES_DIR: &str = "bounces";
 /// Where stem sets go, one folder each.
 pub(crate) const STEMS_DIR: &str = "stems";
 /// The folder in the user's home folder that sessions live in by default.
-pub(crate) const DEFAULT_ROOT: &str = "aura";
+pub(crate) const DEFAULT_ROOT: &str = "superb";
 
-/// Where sessions live: one folder per session, side by side. `~/aura` by
+/// Where sessions live: one folder per session, side by side. `~/superb` by
 /// default ([`Root::default`]); an application that keeps sessions
 /// elsewhere (another disk, a folder the user picked) names its own with
 /// [`Root::new`]. A root is only a path: nothing is made until a session
@@ -79,7 +79,7 @@ impl Root {
             Ok(entries) => entries,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
             Err(e) => {
-                return Err(AuraError::Message(format!(
+                return Err(SuperbError::Message(format!(
                     "cannot read {}: {e}",
                     self.path.display()
                 )))
@@ -95,7 +95,7 @@ impl Root {
 }
 
 impl Default for Root {
-    /// `aura` in the user's home folder (`$HOME`, or `%USERPROFILE%` on
+    /// `superb` in the user's home folder (`$HOME`, or `%USERPROFILE%` on
     /// Windows), or in the current folder when neither is set.
     fn default() -> Self {
         let home = std::env::var_os("HOME")
@@ -195,8 +195,9 @@ pub(crate) fn write_audio(
 ) -> Result<()> {
     let path = folder.join(key);
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| AuraError::Message(format!("cannot create {}: {e}", parent.display())))?;
+        std::fs::create_dir_all(parent).map_err(|e| {
+            SuperbError::Message(format!("cannot create {}: {e}", parent.display()))
+        })?;
     }
     wav::write(&path, audio, rate, WavFormat::Float32)
 }
@@ -307,7 +308,7 @@ mod tests {
     fn a_root_holds_sessions_side_by_side() {
         let default = Root::default();
         assert!(
-            default.path().ends_with("aura"),
+            default.path().ends_with("superb"),
             "{}",
             default.path().display()
         );

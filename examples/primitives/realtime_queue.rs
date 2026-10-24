@@ -15,8 +15,8 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use aura::prelude::*;
-use aura::primitives::realtime::spsc;
+use superb::prelude::*;
+use superb::primitives::realtime::spsc;
 
 /// What the UI sends to the audio thread. Plain data, no heap.
 #[derive(Debug, Clone, Copy)]

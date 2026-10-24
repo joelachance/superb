@@ -11,7 +11,7 @@
 //! cargo run --example transport_tempo_map
 //! ```
 
-use aura::prelude::*;
+use superb::prelude::*;
 
 fn main() -> Result<()> {
     let rate = SampleRate::HZ_48K;

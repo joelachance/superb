@@ -1,9 +1,9 @@
-# Aura
+# Superb
 
 An open-source Rust toolkit for building a digital audio workstation (DAW).
-One crate, `aura`, dual-licensed Apache-2.0 OR MIT.
+One crate, `superb`, dual-licensed Apache-2.0 OR MIT.
 
-Aura is the engine side of a DAW: sample-accurate time, audio buffers, a
+Superb is the engine side of a DAW: sample-accurate time, audio buffers, a
 real-time-safe processing graph, a mixer with tracks, buses, sends and
 insert chains, MIDI, automation, the session's memory (tracks, clips,
 markers, routing, tempo) with undo, CLAP plugin hosting, recording, offline
@@ -24,7 +24,7 @@ with public fields. Every flow function documents the primitive calls it
 is *made of*, so when one does not do exactly what you want, you call
 those primitives yourself.
 
-**Primitives** live under `aura::primitives` and are the engine proper.
+**Primitives** live under `superb::primitives` and are the engine proper.
 They know nothing about flows or the `Session`.
 
 | flow | what it does | doc |
@@ -89,7 +89,7 @@ A few conventions hold on every page, so they are stated here once:
 * Tracks, clips, sends and markers are named by id (`TrackId`, `ClipId`,
   `SendId`, `MarkerId`). The id comes back from the function that made the
   thing, and the memory lists them (`session.memory.tracks()`).
-* A function that can fail returns `Result<T>`: `Ok(T)` or a `AuraError`,
+* A function that can fail returns `Result<T>`: `Ok(T)` or a `SuperbError`,
   so `?` works. Its *Errors* line lists the mistakes you can make; a device
   or a file can always fail besides.
 * Edits (adding, moving, levels) enter the undo history. State (mute, solo,
@@ -108,10 +108,10 @@ language models too (`/llms.txt`, `/llms-full.txt`).
 ## Quick start
 
 ```rust
-use aura::prelude::*;
-use aura::{clip, session, track, transport};
+use superb::prelude::*;
+use superb::{clip, session, track, transport};
 
-let mut session = session::create("demo.aura", SampleRate::HZ_48K, 256)?;   // a folder
+let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;   // a folder
 let lead = track::add(&mut session, "lead", TrackKind::Audio)?;
 
 // Audio lives in memory: a decoded file, or a buffer you made.
@@ -185,7 +185,7 @@ meter changes the engine and the click follow; audio import in every
 format the decoder reads, resampled once to the session's rate, with a
 report of what came in; clip split, trim, gain and fades; notes added,
 changed and removed in MIDI clips; an opinionated folder layout under a
-root (`~/aura` by default); bouncing to WAV, and stem sets with a
+root (`~/superb` by default); bouncing to WAV, and stem sets with a
 manifest; device output, output
 switching, and input on every channel the device has; recording audio and
 MIDI into clips, lined up by the device clock, streamed into the session
@@ -208,7 +208,7 @@ hosting, SysEx and Standard MIDI Files, and encoders other than WAV.
 ## Licence
 
 Apache-2.0 OR MIT, at your option. All code in this repository is original
-work written for Aura. Every dependency in the default build is
+work written for Superb. Every dependency in the default build is
 Apache-2.0, MIT or ISC. The one MPL-2.0 dependency, the symphonia decoder,
 is opt-in behind the `files` feature and confined to a single source file;
 a test fails if it leaks anywhere else. See

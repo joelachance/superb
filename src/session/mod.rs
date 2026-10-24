@@ -14,8 +14,8 @@
 //! beside an `audio/` folder of WAV files, which clips refer to by relative
 //! path. Recordings are written there as they stop.
 //!
-//! Made of `aura::primitives::session` (the memory and its commands),
-//! `aura::primitives::undo` (the history), `aura::primitives::io::wav`
+//! Made of `superb::primitives::session` (the memory and its commands),
+//! `superb::primitives::undo` (the history), `superb::primitives::io::wav`
 //! (the files) and the engine side in [`steps`]. Each function below lists
 //! the primitive calls it makes.
 
@@ -31,7 +31,7 @@ use crate::primitives::session::commands::{RemoveTempo, SetLoopRange, SetMeter, 
 use crate::primitives::session::Memory;
 use crate::primitives::transport::LoopRange;
 use crate::primitives::undo::Command;
-use crate::primitives::{AuraError, BeatPosition, Result, SampleRate, TimeSignature, TrackId};
+use crate::primitives::{BeatPosition, Result, SampleRate, SuperbError, TimeSignature, TrackId};
 
 use std::sync::Arc;
 
@@ -205,7 +205,7 @@ impl MixerHandles {
 /// `stems/`) and given its `memory.json` at once, so it can be opened from
 /// here on. The session is named after the folder. Under the default
 /// [`Root`] that is `session::create(Root::default().folder("My Show"),
-/// ..)`, which makes `~/aura/My Show/`.
+/// ..)`, which makes `~/superb/My Show/`.
 ///
 /// Made of: `create_dir_all` per folder of the [`Layout`] → `Memory::new` →
 /// `Session::new` → `Memory::save`.
@@ -222,7 +222,7 @@ pub fn create(
     let layout = Layout::new(folder);
     for dir in [layout.audio(), layout.bounces(), layout.stems()] {
         std::fs::create_dir_all(&dir)
-            .map_err(|e| AuraError::Message(format!("cannot create {}: {e}", dir.display())))?;
+            .map_err(|e| SuperbError::Message(format!("cannot create {}: {e}", dir.display())))?;
     }
     let session = Session::new(Memory::new(name, sample_rate), folder, block_size)?;
     session.memory.save(folder.join(folder::MEMORY_FILE))?;
@@ -285,7 +285,7 @@ pub fn layout(session: &Session) -> Layout {
 pub fn save(session: &mut Session) -> Result<()> {
     let folder = session.folder.clone();
     std::fs::create_dir_all(&folder)
-        .map_err(|e| AuraError::Message(format!("cannot create {}: {e}", folder.display())))?;
+        .map_err(|e| SuperbError::Message(format!("cannot create {}: {e}", folder.display())))?;
     folder::write_missing_audio(session, &folder)?;
     session.memory.save(folder.join(folder::MEMORY_FILE))?;
     session.history.mark_clean();
@@ -408,7 +408,7 @@ fn read_audio(
 )> {
     let (audio, file_rate, format) = crate::primitives::io::wav::read_with_format(file)?;
     if file_rate != rate {
-        return Err(AuraError::Message(format!(
+        return Err(SuperbError::Message(format!(
             "{} is at {} Hz and the session at {} Hz; the `files` feature resamples and reads other formats",
             file.display(),
             file_rate.hz(),
@@ -469,7 +469,7 @@ pub(crate) fn write_state(session: &mut Session) -> Result<()> {
 pub(crate) fn scratch(tag: &str) -> PathBuf {
     use std::sync::atomic::{AtomicUsize, Ordering};
     static N: AtomicUsize = AtomicUsize::new(0);
-    std::env::temp_dir().join("aura-tests").join(format!(
+    std::env::temp_dir().join("superb-tests").join(format!(
         "{tag}-{}-{}",
         std::process::id(),
         N.fetch_add(1, Ordering::Relaxed)

@@ -6,10 +6,10 @@
 //! bounce while listening. The metronome is never in a bounce.
 //!
 //! Made of [`session::steps::build_mixer`]
-//! (the mixer), `aura::primitives::io::offline` (the render loop),
-//! `aura::primitives::io::files` (resampling, feature `files`),
-//! `aura::primitives::io::wav` (the files) and
-//! `aura::primitives::analysis::meter` (what a stem set measures).
+//! (the mixer), `superb::primitives::io::offline` (the render loop),
+//! `superb::primitives::io::files` (resampling, feature `files`),
+//! `superb::primitives::io::wav` (the files) and
+//! `superb::primitives::analysis::meter` (what a stem set measures).
 
 use std::path::Path;
 
@@ -21,7 +21,7 @@ use crate::primitives::io::{offline, Engine};
 use crate::primitives::mixer::StripId;
 use crate::primitives::session::TrackKind;
 use crate::primitives::transport::Transport;
-use crate::primitives::{AuraError, NodeId, Result, SampleRate, TimeDuration, TimePosition};
+use crate::primitives::{NodeId, Result, SampleRate, SuperbError, TimeDuration, TimePosition};
 use crate::session;
 use crate::session::Session;
 
@@ -74,7 +74,7 @@ pub fn bounce(session: &mut Session, path: impl AsRef<Path>, what: Bounce) -> Re
         }
     };
     if length.samples() <= 0 {
-        return Err(AuraError::Message(
+        return Err(SuperbError::Message(
             "nothing to bounce: no clips after the start, and no length given".into(),
         ));
     }
@@ -93,7 +93,7 @@ pub fn bounce(session: &mut Session, path: impl AsRef<Path>, what: Bounce) -> Re
 fn make_parent(path: &Path) -> Result<()> {
     match path.parent() {
         Some(dir) if !dir.as_os_str().is_empty() => std::fs::create_dir_all(dir)
-            .map_err(|e| AuraError::Message(format!("cannot create {}: {e}", dir.display()))),
+            .map_err(|e| SuperbError::Message(format!("cannot create {}: {e}", dir.display()))),
         _ => Ok(()),
     }
 }
@@ -236,19 +236,19 @@ pub fn stems(session: &mut Session, name: &str, what: Stems) -> Result<StemSet> 
         ),
     };
     if length.samples() <= 0 {
-        return Err(AuraError::Message(
+        return Err(SuperbError::Message(
             "no stems to bounce: no clips after the start, and no length given".into(),
         ));
     }
     let folder = session::layout(session).stem_set(name);
     if folder.exists() {
-        return Err(AuraError::Message(format!(
+        return Err(SuperbError::Message(format!(
             "{} already exists; a stem set is never overwritten, so choose another name",
             folder.display()
         )));
     }
     std::fs::create_dir_all(&folder)
-        .map_err(|e| AuraError::Message(format!("cannot create {}: {e}", folder.display())))?;
+        .map_err(|e| SuperbError::Message(format!("cannot create {}: {e}", folder.display())))?;
     let written = write_stems(session, &folder, name, &what, length.samples() as u64);
     if written.is_err() {
         // The folder is this call's own: nothing else was in it.
@@ -437,10 +437,10 @@ fn write_stems(
         mix,
     };
     let json = serde_json::to_string_pretty(&set)
-        .map_err(|e| AuraError::Message(format!("cannot encode the stem manifest: {e}")))?;
+        .map_err(|e| SuperbError::Message(format!("cannot encode the stem manifest: {e}")))?;
     let manifest = folder.join("manifest.json");
     std::fs::write(&manifest, json)
-        .map_err(|e| AuraError::Message(format!("cannot write {}: {e}", manifest.display())))?;
+        .map_err(|e| SuperbError::Message(format!("cannot write {}: {e}", manifest.display())))?;
     Ok(set)
 }
 
@@ -464,7 +464,7 @@ fn resample(audio: &PlanarBuffer, from: SampleRate, to: SampleRate) -> Result<Pl
 
 #[cfg(not(feature = "files"))]
 fn resample(_audio: &PlanarBuffer, _from: SampleRate, _to: SampleRate) -> Result<PlanarBuffer> {
-    Err(AuraError::Message(
+    Err(SuperbError::Message(
         "converting a bounce to another sample rate needs the `files` feature".into(),
     ))
 }
@@ -494,7 +494,7 @@ mod tests {
     }
 
     fn temp_dir(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("aura-export-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("superb-export-{tag}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }

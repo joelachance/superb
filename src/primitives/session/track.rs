@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use super::insert::Insert;
 use crate::primitives::{
-    AuraError, ClipId, InsertId, Result, SendId, TimeDuration, TimePosition, TrackId,
+    ClipId, InsertId, Result, SendId, SuperbError, TimeDuration, TimePosition, TrackId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -210,7 +210,7 @@ impl Clip {
 
 fn check_length(length: TimeDuration) -> Result<()> {
     if length.samples() <= 0 {
-        return Err(AuraError::InvalidArgument {
+        return Err(SuperbError::InvalidArgument {
             what: "clip length (must be > 0)",
         });
     }

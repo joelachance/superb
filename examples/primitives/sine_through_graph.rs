@@ -11,9 +11,9 @@
 //! cargo run --example sine_through_graph
 //! ```
 
-use aura::prelude::*;
-use aura::primitives::io::offline;
-use aura::primitives::io::wav::{self, WavFormat};
+use superb::prelude::*;
+use superb::primitives::io::offline;
+use superb::primitives::io::wav::{self, WavFormat};
 
 fn main() -> Result<()> {
     let sample_rate = SampleRate::HZ_48K;

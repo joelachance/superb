@@ -1,6 +1,6 @@
 //! Planar (non-interleaved) audio block.
 
-use crate::primitives::{AuraError, Result};
+use crate::primitives::{Result, SuperbError};
 
 use crate::primitives::buffers::ChannelLayout;
 
@@ -42,7 +42,7 @@ impl PlanarBuffer {
         let mut buf = Self::new(channels, frames);
         for (ch, plane) in planes.iter().enumerate() {
             if plane.len() != frames {
-                return Err(AuraError::FrameMismatch {
+                return Err(SuperbError::FrameMismatch {
                     expected: frames,
                     actual: plane.len(),
                 });
@@ -80,7 +80,7 @@ impl PlanarBuffer {
     /// This never allocates and is safe to call on the audio thread.
     pub fn set_frames(&mut self, frames: usize) -> Result<()> {
         if frames > self.capacity {
-            return Err(AuraError::CapacityExceeded {
+            return Err(SuperbError::CapacityExceeded {
                 what: "PlanarBuffer frames",
                 capacity: self.capacity,
             });
@@ -250,7 +250,7 @@ impl PlanarBuffer {
         gain: f32,
     ) -> Result<()> {
         if src.frames != self.frames {
-            return Err(AuraError::FrameMismatch {
+            return Err(SuperbError::FrameMismatch {
                 expected: self.frames,
                 actual: src.frames,
             });
@@ -278,7 +278,7 @@ impl PlanarBuffer {
     ) -> Result<()> {
         if src.channels == 0 {
             if self.frames < dst_offset + len {
-                return Err(AuraError::FrameMismatch {
+                return Err(SuperbError::FrameMismatch {
                     expected: dst_offset + len,
                     actual: self.frames,
                 });
@@ -289,13 +289,13 @@ impl PlanarBuffer {
             return Ok(());
         }
         if src.frames < len {
-            return Err(AuraError::FrameMismatch {
+            return Err(SuperbError::FrameMismatch {
                 expected: len,
                 actual: src.frames,
             });
         }
         if self.frames < dst_offset + len {
-            return Err(AuraError::FrameMismatch {
+            return Err(SuperbError::FrameMismatch {
                 expected: dst_offset + len,
                 actual: self.frames,
             });
@@ -342,13 +342,13 @@ impl PlanarBuffer {
 
     fn check_compatible(&self, other: &PlanarBuffer) -> Result<()> {
         if other.channels != self.channels {
-            return Err(AuraError::ChannelMismatch {
+            return Err(SuperbError::ChannelMismatch {
                 expected: self.channels,
                 actual: other.channels,
             });
         }
         if other.frames != self.frames {
-            return Err(AuraError::FrameMismatch {
+            return Err(SuperbError::FrameMismatch {
                 expected: self.frames,
                 actual: other.frames,
             });
@@ -442,12 +442,12 @@ mod tests {
         let wrong_ch = PlanarBuffer::new(1, 4);
         assert!(matches!(
             b.add_from(&wrong_ch),
-            Err(AuraError::ChannelMismatch { .. })
+            Err(SuperbError::ChannelMismatch { .. })
         ));
         let wrong_frames = PlanarBuffer::new(2, 3);
         assert!(matches!(
             b.copy_from(&wrong_frames),
-            Err(AuraError::FrameMismatch { .. })
+            Err(SuperbError::FrameMismatch { .. })
         ));
     }
 

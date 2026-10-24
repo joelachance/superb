@@ -15,7 +15,7 @@ moment it is created: `memory.json` beside an `audio/` folder of WAV files.
 
 | verb | does | undo step |
 |---|---|---|
-| `create(folder, sample_rate, block_size) -> Session` | a new session in `folder` (usually `Root::default().folder(name)`, so `~/aura/<name>/`), created now with the folders of its layout and `memory.json`, named after the folder | — |
+| `create(folder, sample_rate, block_size) -> Session` | a new session in `folder` (usually `Root::default().folder(name)`, so `~/superb/<name>/`), created now with the folders of its layout and `memory.json`, named after the folder | — |
 | `layout(session) -> Layout` | where each part of the session lives inside its folder: `memory()`, `state()`, `audio()`, `bounces()`, `bounce(name)`, `stems()`, `stem_set(name)` | — |
 | `open(folder, block_size)` / `save(session)` | the folder in and out: `memory.json` plus the WAV files clips refer to; `save` also writes any audio a clip refers to that is not on disk yet and remembers where the playhead is, so `open` starts there; `session.history.is_clean()` says whether anything changed since (state changes count) | — |
 | `import_audio(session, file) -> Imported` | a file into the session: with `files`, WAV, AIFF, FLAC, ALAC, MP3, AAC (MP4/M4A), Ogg Vorbis, CAF and Matroska, resampled to the session's rate when they differ (a WAV at the session's rate without `files`); written as 32-bit float `audio/<name>.wav` (`<name> 2.wav` if taken) and kept in memory; `Imported` says the key, the file's rate and bit depth, channels, frames and whether it was resampled; `clip::add` places it | — (the placing is the edit) |
@@ -35,7 +35,7 @@ Every session is a folder with the same shape, and sessions live side by
 side under a root:
 
 ```text
-~/aura/                 Root::default(); Root::new(path) for anywhere else
+~/superb/                 Root::default(); Root::new(path) for anywhere else
   My Show/              Root::folder("My Show"), what create and open take
     memory.json         Layout::memory: the session's edits
     state.json          Layout::state: its state, once state_file names it
@@ -68,7 +68,7 @@ example builds a mixer this way without a `Session`.
 
 ## Reference
 
-Every function of the `session` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `AuraError`; the errors listed are the ones you can cause.
+Every function of the `session` flow: what it takes, what it returns, what it refuses, and how it undoes. A `Result<T>` is `Ok(T)` or a `SuperbError`; the errors listed are the ones you can cause.
 
 ### `create`
 
@@ -81,7 +81,7 @@ with the folders of its `Layout` (`audio/`, `bounces/`, `stems/`) and given
 its `memory.json` at once, so it can be opened from here on. The session is
 named after the folder. Under the default `Root` that is
 `session::create(Root::default().folder("My Show"), ..)`, which makes
-`~/aura/My Show/`.
+`~/superb/My Show/`.
 
 **Takes**
 - `folder: impl AsRef<Path>` — where the session lives, usually `Root::folder(name)`; created now with `audio/`, `bounces/` and `stems/` inside; the session is named after it
@@ -99,7 +99,7 @@ named after the folder. Under the default `Root` that is
 **Example**
 
 ```rust
-let mut session = session::create(Root::default().folder("My Show"), SampleRate::HZ_48K, 256)?;   // ~/aura/My Show/
+let mut session = session::create(Root::default().folder("My Show"), SampleRate::HZ_48K, 256)?;   // ~/superb/My Show/
 ```
 
 ### `open`
@@ -488,7 +488,7 @@ its own rate.
 
 ### `Root`
 
-Where sessions live: one folder per session, side by side. `~/aura` by
+Where sessions live: one folder per session, side by side. `~/superb` by
 default (`Root::default`); an application that keeps sessions elsewhere
 (another disk, a folder the user picked) names its own with `Root::new`. A
 root is only a path: nothing is made until a session is created in it.
@@ -519,10 +519,10 @@ the one for an open session.
 ## Usage
 
 ```rust
-use aura::prelude::*;
-use aura::{clip, marker, session, track};
+use superb::prelude::*;
+use superb::{clip, marker, session, track};
 
-let mut session = session::create("demo.aura", SampleRate::HZ_48K, 256)?;   // a folder
+let mut session = session::create("demo.superb", SampleRate::HZ_48K, 256)?;   // a folder
 let vox = track::add(&mut session, "vox", TrackKind::Audio)?;
 let take = session::import_audio(&mut session, "/music/take.wav")?;   // audio/take.wav
 clip::add(&mut session, vox, take, TimePosition::ZERO)?;
@@ -530,13 +530,13 @@ session::set_tempo(&mut session, 100.0)?;
 marker::add(&mut session, "verse", TimePosition::from_samples(48_000))?;
 session::undo(&mut session)?;   // the marker is gone
 session::save(&mut session)?;
-let again = session::open("demo.aura", 256)?;
+let again = session::open("demo.superb", 256)?;
 ```
 
 ## The session folder
 
 ```text
-demo.aura/
+demo.superb/
   memory.json        the Memory: tracks, clips, markers, routing, tempo
   audio/
     vox 1.wav        recordings, 32-bit float at the session's rate

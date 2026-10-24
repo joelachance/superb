@@ -1,6 +1,6 @@
 //! # primitives::realtime
 //!
-//! Real-time safety primitives for the Aura DAW SDK.
+//! Real-time safety primitives for the Superb DAW SDK.
 //!
 //! The audio thread must never block, allocate, or take a lock. This crate
 //! provides the building blocks that make that discipline practical:
@@ -17,7 +17,7 @@
 //!   non-RT code is not called from it.
 //!
 //! ```
-//! use aura::primitives::realtime::spsc;
+//! use superb::primitives::realtime::spsc;
 //!
 //! let (mut tx, mut rx) = spsc::channel::<u32>(4);
 //! tx.push(1).unwrap();

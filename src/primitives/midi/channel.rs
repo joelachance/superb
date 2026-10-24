@@ -2,7 +2,7 @@
 
 use core::fmt;
 
-use crate::primitives::{AuraError, Result};
+use crate::primitives::{Result, SuperbError};
 
 /// A MIDI channel, stored internally as a 0-based index (`0..=15`).
 ///
@@ -17,10 +17,10 @@ impl MidiChannel {
     /// Creates a channel from a 0-based index in `0..=15`.
     ///
     /// # Errors
-    /// Returns [`AuraError::InvalidArgument`] if `index > 15`.
+    /// Returns [`SuperbError::InvalidArgument`] if `index > 15`.
     pub const fn new(index: u8) -> Result<Self> {
         if index > 15 {
-            Err(AuraError::InvalidArgument {
+            Err(SuperbError::InvalidArgument {
                 what: "midi_channel",
             })
         } else {
@@ -64,7 +64,7 @@ mod tests {
     fn rejects_out_of_range() {
         assert_eq!(
             MidiChannel::new(16),
-            Err(AuraError::InvalidArgument {
+            Err(SuperbError::InvalidArgument {
                 what: "midi_channel"
             })
         );

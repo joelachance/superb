@@ -1,6 +1,6 @@
-# Aura
+# Superb
 
-Open-source Rust SDK for building a DAW: one crate, `aura`. Dual-licensed
+Open-source Rust SDK for building a DAW: one crate, `superb`. Dual-licensed
 Apache-2.0 OR MIT.
 
 Read `CONTRIBUTING.md` for the checks and rules, `docs/ARCHITECTURE.md`
@@ -53,6 +53,6 @@ cargo doc --no-deps
   `pub(crate)`.
 - Files go where `session::Layout` says (`memory.json`, `state.json`,
   `audio/`, `bounces/`, `stems/<name>/`); sessions live under a
-  `session::Root`, `~/aura` by default. No other code builds those paths.
+  `session::Root`, `~/superb` by default. No other code builds those paths.
 - Every public item is documented; update the doc note and the example
   when an API changes.
