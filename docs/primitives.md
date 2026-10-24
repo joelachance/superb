@@ -2,6 +2,11 @@
 
 Foundation types shared by every module of the crate. No dependencies, no I/O.
 
+Every public method is in rustdoc (`cargo doc --no-deps`). These pages are
+the contracts: which thread a call runs on, what is state and what is an
+edit, which feature flag it sits behind, and what is not built yet. Start
+at [quick-start.md](quick-start.md) to pick a function.
+
 ## Purpose
 
 The root of `superb::primitives` is the bottom of the engine: every other
@@ -22,7 +27,8 @@ no scheduling, buffering or I/O itself.
 * `TimeSignature` — validated `numerator/denominator` meter with `bar_length`
   and `beat_length` helpers.
 * `IdGenerator` / `TrackId`, `BusId`, `SendId`, `NodeId`, `PortId`, `ClipId`,
-  `ParamId`, `InsertId` — monotonic `u64` newtype IDs, `0` reserved as "invalid".
+  `MarkerId`, `ParamId`, `InsertId` — monotonic `u64` newtype IDs, `0`
+  reserved as "invalid". `RawId` is that `u64`.
 * `SuperbError` / `Result<T>` — the shared error enum used across the SDK.
 
 ## Usage

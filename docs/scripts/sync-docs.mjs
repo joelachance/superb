@@ -16,8 +16,10 @@ const PRIMITIVES = ['buffers', 'realtime', 'transport', 'midi', 'graph', 'dynami
 /** [source relative to the repository root, page path under /docs, title override] */
 const PAGES = [
   ['README.md', 'index', 'Superb'],
+  ['docs/quick-start.md', 'quick-start', 'Quick start'],
   ['docs/flows.md', 'flows/index', 'Flows'],
   ...FLOWS.map((f) => [`docs/flows/${f}.md`, `flows/${f}`]),
+  ...FLOWS.map((f) => [`docs/flows/${f}.ref.md`, `flows/${f}.ref`]),
   ['docs/primitives.md', 'primitives/index', 'Primitives'],
   ...PRIMITIVES.map((p) => [`docs/primitives/${p}.md`, `primitives/${p}`]),
   ['docs/ARCHITECTURE.md', 'architecture', 'Architecture'],
@@ -27,8 +29,12 @@ const PAGES = [
 ];
 
 const META = {
-  '': { title: 'Superb', pages: ['index', 'flows', 'primitives', 'architecture', 'terminology', 'examples', 'contributing'] },
-  flows: { title: 'Flows', defaultOpen: true, pages: ['index', ...FLOWS] },
+  '': { title: 'Superb', pages: ['index', 'quick-start', 'flows', 'primitives', 'architecture', 'terminology', 'examples', 'contributing'] },
+  flows: {
+    title: 'Flows',
+    defaultOpen: true,
+    pages: ['index', ...FLOWS, '---Reference---', ...FLOWS.map((f) => `${f}.ref`)],
+  },
   primitives: { title: 'Primitives', defaultOpen: true, pages: ['index', ...PRIMITIVES] },
 };
 

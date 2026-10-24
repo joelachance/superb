@@ -3,11 +3,16 @@
 Everything documentation lives here: the Markdown, and the site that
 serves it.
 
-The Markdown is the source. `flows.md` and `flows/<flow>.md` cover the
-flow tier, `primitives.md` and `primitives/<module>.md` the engine,
+The Markdown is the source. `quick-start.md` is the task index.
+`flows.md` and `flows/<flow>.md` are the short flow pages;
+`flows/<flow>.ref.md` is the generated reference (`scripts/reference.py`).
+`primitives.md` and `primitives/<module>.md` are the engine contracts,
 `ARCHITECTURE.md` the rules and `TERMINOLOGY.md` the words; the
 repository's `README.md`, `examples/README.md` and `CONTRIBUTING.md`
-complete the set. GitHub renders all of it as it is.
+complete the set. GitHub renders all of it as it is. `/llms.txt` and
+`/llms-full.txt` publish the agent pages (the task index, the generated
+references, the architecture, the terminology and the primitive contracts),
+not the short flow pages.
 
 The site is [Fumadocs](https://fumadocs.dev) on Next.js. `scripts/sync-docs.mjs`
 turns that Markdown into MDX under `content/docs/` with a sidebar;

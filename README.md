@@ -67,20 +67,15 @@ rules every module follows. If the DAW words are new to you, start with
 ## Reading the documentation
 
 Each flow has one page under `docs/flows/`, and every page has the same
-shape, so once you have read one you can find your way around all of them:
+shape:
 
-* **Purpose**: what the group of functions is for.
-* **Verbs**: a table of every function, what it does, and how it undoes.
-* **Reference**: every function in full. The signature as it is in the
-  source; what each argument is (*Takes*); what comes back (*Returns*);
-  what makes it fail (*Errors*); whether it is one undo step, a coalescing
-  edit, or state that never enters the history (*Undo*); the primitive
-  calls it is made of (*Made of*); and a short example.
-* **Types**: the structs and enums the flow defines, field by field, and
-  the methods on them.
-* **Usage**: a program that uses the whole group together.
-* **Made of** and **Notes**: the primitives behind the group, and the
-  things that surprise people.
+* **Example**: a full program using the flow. Start here.
+* **Verbs**: every function in one line each, with how it undoes.
+* **Notes**: the things that surprise people.
+
+Beside it, `docs/flows/<flow>.ref.md` is generated from the source: every
+signature, what each argument is, what comes back, what fails, how it
+undoes, the primitive calls it is made of, and the flow's types.
 
 A few conventions hold on every page, so they are stated here once:
 
@@ -102,8 +97,9 @@ A few conventions hold on every page, so they are stated here once:
 `cargo doc --no-deps --open` builds the same text as rustdoc, with every
 signature linked. The same pages make up the documentation site that
 lives beside them in [docs/](docs/README.md): `cd docs && pnpm install &&
-pnpm dev` serves it, and it publishes every page as plain text for
-language models too (`/llms.txt`, `/llms-full.txt`).
+pnpm dev` serves it. [docs/quick-start.md](docs/quick-start.md) is the task index.
+`/llms.txt` and `/llms-full.txt` publish that index, the generated flow
+references, the architecture, the terminology and the primitive contracts.
 
 ## Quick start
 

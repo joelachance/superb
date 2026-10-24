@@ -177,15 +177,17 @@ request that adds unsafe elsewhere needs a very good reason.
 * The crate has `#![warn(missing_docs)]`. Write docs for every public item, and
   write module docs that explain what the module is for and why it is
   shaped the way it is, not just what each function does.
-* Each primitive module has a usage note in `docs/primitives/<module>.md`
-  and each flow in `docs/flows/<flow>.md`. Update them when the public API
-  changes.
-* A flow page's `## Reference` and `## Types` sections are generated:
-  `python3 scripts/reference.py` from the repository root reads every
-  public function's signature, doc comment and "Made of:" line and the
-  notes in the script (what each argument means, what comes back, what
-  fails, how it undoes). When you add or change a verb, add or change its
-  note there and rerun the script; do not edit the generated text.
+* Each primitive module has a contract note in `docs/primitives/<module>.md`
+  (thread, state versus edit, feature flags, what is not built). Each flow
+  has a short page in `docs/flows/<flow>.md`. Update them when the public
+  API changes, and add a row to `docs/quick-start.md` when you add a task.
+* `docs/flows/<flow>.ref.md` is generated: `python3 scripts/reference.py`
+  from the repository root reads every public function's signature, doc
+  comment and "Made of:" line and the notes in the script (what each
+  argument means, what comes back, what fails, how it undoes). When you add
+  or change a verb, add or change its note there and rerun the script. Do
+  not edit the `.ref.md` files. The human page opens with a full example,
+  then a short verbs table and a link to the reference.
 * The documentation site (Fumadocs on Next.js) lives in `docs/` beside the
   Markdown and is built from it: `cd docs && pnpm install && pnpm dev`
   turns `README.md`, the Markdown in `docs/`, `examples/README.md` and
