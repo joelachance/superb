@@ -1,6 +1,6 @@
 //! # primitives::io
 //!
-//! Where audio leaves (and later enters) the Superb DAW SDK.
+//! Where audio leaves and enters the crate.
 //!
 //! * [`Engine`] — the block loop: advances a [`Transport`](crate::primitives::transport::Transport),
 //!   splits the block at loop points, runs a [`BlockProcessor`](crate::primitives::graph::BlockProcessor)
@@ -30,7 +30,7 @@
 //! * `device` module (feature `devices`) — cpal output streams that run an
 //!   [`Engine`] on the real-time callback thread, plus input/capture streams
 //!   that deliver planar blocks to a closure or a recycle SPSC
-//!   (`device::capture_queue` / `device::run_capture`).
+//!   (`capture::capture_queue` / `device::run_capture`).
 //!
 //! ```
 //! use superb::primitives::SampleRate;
@@ -76,7 +76,7 @@ pub use engine::{
 ///
 /// The `files` feature pulls in `symphonia` (MPL-2.0) and `rubato`
 /// (MIT OR Apache-2.0). symphonia's file-level copyleft is contained by
-/// importing it from exactly one source file, `src/files/decode.rs`; no
+/// importing it from exactly one source file, `src/primitives/io/files/decode.rs`; no
 /// other file in this crate names it, and
 /// `mpl_dependency_is_confined_to_decode_rs` below checks that on every default
 /// test run. Enable with `cargo test --features files`.

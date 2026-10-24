@@ -10,7 +10,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
 use super::{deinterleave_from_device, stream_instant_us, validate_io_config, DeviceInfo};
-use crate::primitives::io::capture::CaptureProducer;
+use crate::primitives::io::capture::{capture_queue, CaptureConsumer, CaptureProducer};
 
 /// Lists input devices of the default host.
 pub fn input_devices() -> Result<Vec<DeviceInfo>> {
@@ -344,15 +344,15 @@ where
 
 /// Opens a capture stream wired to a recycle SPSC of planar blocks.
 ///
-/// `capacity` is the number of pre-allocated [`super::CaptureBlock`]s in the
+/// `capacity` is the number of pre-allocated
+/// [`CaptureBlock`](crate::primitives::io::capture::CaptureBlock)s in the
 /// free/filled pair. Returns the running stream and the consumer end for the
 /// control / engine thread.
 pub fn run_capture(
     config: &InputConfig,
     capacity: usize,
-) -> Result<(InputStream, super::CaptureConsumer)> {
-    let (producer, consumer) =
-        super::capture_queue(config.channels, config.max_block_frames, capacity)?;
+) -> Result<(InputStream, CaptureConsumer)> {
+    let (producer, consumer) = capture_queue(config.channels, config.max_block_frames, capacity)?;
     let stream = InputStream::open_to_queue(config, producer)?;
     Ok((stream, consumer))
 }
@@ -360,7 +360,7 @@ pub fn run_capture(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::primitives::io::device::capture_queue;
+    use crate::primitives::io::capture::capture_queue;
     use std::sync::Mutex;
 
     #[test]

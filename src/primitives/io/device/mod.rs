@@ -2,9 +2,7 @@
 //!
 //! * [`output_devices`] / [`OutputStream`] / [`run_engine`] — playback.
 //! * [`input_devices`] / [`InputStream`] / [`run_capture`] — capture.
-//! * [`capture_queue`] — pre-allocated planar-block SPSC (free + filled)
-//!   so a capture callback can hand blocks to another thread without
-//!   allocating.
+//!   [`run_capture`] fills a queue from [`crate::primitives::io::capture`].
 //!
 //! The callback thread is marked real-time with `superb::primitives::realtime::thread::enter_rt`.
 //! Sample format conversion uses `cpal`'s `FromSample` (no allocation). Scratch
@@ -29,7 +27,6 @@ use cpal::{FromSample, Sample};
 mod input;
 mod output;
 
-pub use super::capture::{capture_queue, CaptureBlock, CaptureConsumer, CaptureProducer};
 pub use input::{input_devices, run_capture, InputConfig, InputStream};
 pub use output::{output_devices, run_engine, OutputConfig, OutputStream};
 

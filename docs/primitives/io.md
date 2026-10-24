@@ -69,8 +69,7 @@ resampling and bounce/export helpers.
 * `device` (feature `devices`) — `output_devices` / `input_devices`,
   `OutputConfig` / `InputConfig`, `OutputStream` (`open`, `open_timed`) /
   `InputStream` (`open`, `open_timed`, `open_to_queue`), `run_engine` /
-  `run_capture`, `capture_queue` (recycle SPSC of planar `CaptureBlock`s),
-  built on `cpal` 0.18 (Apache-2.0).
+  `run_capture`, built on `cpal` 0.18 (Apache-2.0).
 * `files` (feature `files`) — `AudioFile { buffer, sample_rate, bits_per_sample }`
   from WAV, AIFF, FLAC, ALAC, MP3, AAC (MP4/M4A), Ogg Vorbis, CAF and
   Matroska;
@@ -326,7 +325,8 @@ Mirror of the output API for microphones / line inputs:
 
 ```rust
 use superb::primitives::buffers::PlanarBuffer;
-use superb::primitives::io::device::{capture_queue, input_devices, run_capture, InputConfig, InputStream};
+use superb::primitives::io::capture::capture_queue;
+use superb::primitives::io::device::{input_devices, run_capture, InputConfig, InputStream};
 
 // List inputs (empty or Err without hardware — never panics).
 let _ = input_devices();
