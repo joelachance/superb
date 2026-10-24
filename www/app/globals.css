@@ -1,7 +1,265 @@
 @import "tailwindcss";
 
+:root {
+  --surface: #fff;
+  --panel: #f4f3f2;
+  --carbon: #000;
+  --muted: #767676;
+  --faint: #8a8a8a;
+  --rule: #c8c8c8;
+  --string: #0a3069;
+}
+
+html,
 body {
   margin: 0;
+  min-height: 100%;
+  background: var(--surface);
+  color: var(--carbon);
+}
+
+body {
+  font-family: var(--font-berkeley), ui-monospace, monospace;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--carbon);
+}
+
+::selection {
+  background-color: var(--carbon);
+  color: var(--surface);
+}
+
+:focus-visible {
+  outline: 1px solid var(--carbon);
+  outline-offset: 3px;
+}
+
+.page {
+  --pad-x: 28px;
+  position: relative;
   min-height: 100vh;
-  background: #fff;
+  padding: 28px var(--pad-x) 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: safe center;
+  background-color: var(--surface);
+  color: var(--carbon);
+}
+
+.wordmark {
+  position: absolute;
+  top: 22px;
+  left: 28px;
+  margin: 0;
+  font-family: var(--font-radwave), sans-serif;
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+}
+
+.wave {
+  display: block;
+  align-self: stretch;
+  width: auto;
+  height: 44px;
+  margin: 2px calc(var(--pad-x) * -1) 18px;
+}
+
+.stack {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tagline {
+  font-size: 14px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  text-align: center;
+  margin: 0 0 10px;
+}
+
+.subtitle {
+  font-size: 12px;
+  line-height: 1.7;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+  text-align: center;
+  margin: 0 0 28px;
+  max-width: 42ch;
+}
+
+.block {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 14px 16px;
+  margin-bottom: 4px;
+  background-color: var(--panel);
+}
+
+.result {
+  align-items: flex-start;
+  margin-bottom: 32px;
+}
+
+.line,
+.pre {
+  font-family: var(--font-berkeley), ui-monospace, monospace;
+  font-size: clamp(11px, 2.4vw, 13px);
+  letter-spacing: 0.01em;
+  min-width: 0;
+}
+
+.line {
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.pre {
+  margin: 0;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+
+.prompt,
+.answerMark {
+  color: var(--faint);
+}
+
+.str {
+  color: var(--string);
+}
+
+.answer {
+  color: var(--carbon);
+}
+
+.meta {
+  color: var(--muted);
+}
+
+.copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.copy:hover {
+  color: var(--carbon);
+}
+
+.copy svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.links {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.docs {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--carbon);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 3px;
+  transition: border-color 0.15s ease;
+}
+
+.docs:hover {
+  border-bottom-color: var(--carbon);
+}
+
+.arrow {
+  display: inline-block;
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.docs:hover .arrow {
+  transform: translate(3px, -3px);
+}
+
+.iconLink {
+  display: inline-flex;
+  align-items: center;
+  color: var(--faint);
+  transition: color 0.15s ease;
+}
+
+.iconLink:hover {
+  color: var(--carbon);
+}
+
+.iconLink svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.copyright {
+  position: fixed;
+  left: 28px;
+  bottom: 20px;
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrow {
+    transition: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .page {
+    --pad-x: 20px;
+    padding: 20px var(--pad-x) 28px;
+  }
+
+  .wordmark {
+    top: 16px;
+    left: 20px;
+    font-size: 18px;
+  }
+
+  .block {
+    gap: 10px;
+    padding: 14px 12px;
+  }
+
+  .copyright {
+    position: static;
+    margin-top: 40px;
+    align-self: flex-start;
+  }
 }
