@@ -16,7 +16,9 @@ for the engine, `docs/flows.md` for the flow tier, and
   Verbs take `&mut Session`; steps take primitives; every verb doc ends
   with "Made of:".
 - `examples/flows/`, `examples/primitives/`, registered in `Cargo.toml`.
-- `docs/primitives/<module>.md`, `docs/flows/<flow>.md`; the docs site
+- `docs/primitives/<module>.md`, `docs/flows/<flow>.md` (short, by hand),
+  `docs/flows/<flow>.ref.md` (generated: `python3 scripts/reference.py`,
+  never edited), `docs/quick-start.md` (task index); the docs site
   (Fumadocs) lives in `docs/` too and renders that Markdown: `cd docs && pnpm dev`.
 
 ## Commands
